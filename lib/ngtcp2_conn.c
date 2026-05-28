@@ -978,10 +978,10 @@ static int conn_call_handshake_confirmed(ngtcp2_conn *conn) {
 
 static int conn_call_recv_datagram(ngtcp2_conn *conn,
                                    const ngtcp2_datagram *fr) {
-  const uint8_t *data;
-  size_t datalen;
+  ngtcp2_buf data;
   int rv;
   uint32_t flags = NGTCP2_DATAGRAM_FLAG_NONE;
+  uint8_t empty = 0;
 
   if (!conn->callbacks.recv_datagram) {
     return 0;
@@ -990,19 +990,21 @@ static int conn_call_recv_datagram(ngtcp2_conn *conn,
   if (fr->datacnt) {
     assert(fr->datacnt == 1);
 
-    data = fr->data->base;
-    datalen = fr->data->len;
+    ngtcp2_buf_init(&data, fr->data->base, fr->data->len,
+                    NGTCP2_BUF_ORIGIN_BORROWED, NGTCP2_BUF_DIR_RX,
+                    NGTCP2_BUF_PURPOSE_PAYLOAD_RX, NULL, NULL, NULL);
   } else {
-    data = NULL;
-    datalen = 0;
+    ngtcp2_buf_init(&data, &empty, 0, NGTCP2_BUF_ORIGIN_BORROWED,
+                    NGTCP2_BUF_DIR_RX, NGTCP2_BUF_PURPOSE_PAYLOAD_RX, NULL,
+                    NULL, NULL);
   }
+  data.last = data.end;
 
   if (!conn_is_tls_handshake_completed(conn)) {
     flags |= NGTCP2_DATAGRAM_FLAG_0RTT;
   }
 
-  rv =
-    conn->callbacks.recv_datagram(conn, flags, data, datalen, conn->user_data);
+  rv = conn->callbacks.recv_datagram(conn, flags, &data, conn->user_data);
   if (rv != 0) {
     return NGTCP2_ERR_CALLBACK_FAILURE;
   }

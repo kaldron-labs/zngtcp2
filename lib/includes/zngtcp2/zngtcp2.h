@@ -3518,6 +3518,8 @@ typedef void (*ngtcp2_delete_crypto_cipher_ctx)(
  * :type:`ngtcp2_recv_datagram` is invoked when DATAGRAM frame is
  * received.  |flags| is bitwise-OR of zero or more of
  * :macro:`NGTCP2_DATAGRAM_FLAG_* <NGTCP2_DATAGRAM_FLAG_NONE>`.
+ * |data| is a borrowed :enum:`NGTCP2_BUF_DIR_RX` and
+ * :enum:`NGTCP2_BUF_PURPOSE_PAYLOAD_RX` buffer.
  *
  * If :macro:`NGTCP2_DATAGRAM_FLAG_0RTT` is set in |flags|, it
  * indicates that DATAGRAM frame was received in 0-RTT packet, and a
@@ -3528,8 +3530,7 @@ typedef void (*ngtcp2_delete_crypto_cipher_ctx)(
  * immediately.
  */
 typedef int (*ngtcp2_recv_datagram)(ngtcp2_conn *conn, uint32_t flags,
-                                    const uint8_t *data, size_t datalen,
-                                    void *user_data);
+                                    const ngtcp2_buf *data, void *user_data);
 
 /**
  * @functypedef

@@ -336,12 +336,11 @@ static void delete_crypto_cipher_ctx(ngtcp2_conn *conn,
   (void)user_data;
 }
 
-static int recv_datagram(ngtcp2_conn *conn, uint32_t flags, const uint8_t *data,
-                         size_t datalen, void *user_data) {
+static int recv_datagram(ngtcp2_conn *conn, uint32_t flags,
+                         const ngtcp2_buf *data, void *user_data) {
   (void)conn;
   (void)flags;
   (void)data;
-  (void)datalen;
   (void)user_data;
 
   return 0;

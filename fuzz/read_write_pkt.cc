@@ -380,9 +380,13 @@ void delete_crypto_cipher_ctx(ngtcp2_conn *conn,
 } // namespace
 
 namespace {
-int recv_datagram(ngtcp2_conn *conn, uint32_t flags, const uint8_t *data,
-                  size_t datalen, void *user_data) {
+int recv_datagram(ngtcp2_conn *conn, uint32_t flags, const ngtcp2_buf *data,
+                  void *user_data) {
   auto fuzzed_data_provider = static_cast<FuzzedDataProvider *>(user_data);
+
+  (void)conn;
+  (void)flags;
+  (void)data;
 
   return fuzzed_data_provider->ConsumeBool() ? NGTCP2_ERR_CALLBACK_FAILURE : 0;
 }

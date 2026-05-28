@@ -936,16 +936,19 @@ static void genrand(uint8_t *dest, size_t destlen,
   memset(dest, 0, destlen);
 }
 
-static int recv_datagram(ngtcp2_conn *conn, uint32_t flags, const uint8_t *data,
-                         size_t datalen, void *user_data) {
+static int recv_datagram(ngtcp2_conn *conn, uint32_t flags,
+                         const ngtcp2_buf *data, void *user_data) {
   my_user_data *ud = user_data;
   (void)conn;
   (void)flags;
 
   if (ud) {
+    assert_int(0, ==,
+               ngtcp2_buf_validate(data, NGTCP2_BUF_DIR_RX,
+                                   NGTCP2_BUF_PURPOSE_PAYLOAD_RX));
     ud->datagram.flags = flags;
-    ud->datagram.data = data;
-    ud->datagram.datalen = datalen;
+    ud->datagram.data = data->pos;
+    ud->datagram.datalen = ngtcp2_buf_len(data);
   }
 
   return 0;
