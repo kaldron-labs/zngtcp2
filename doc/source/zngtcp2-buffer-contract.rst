@@ -78,10 +78,11 @@ callbacks, zngtcp2 retains the packet owner for the callback and releases it
 after the callback returns.  Later STREAM frames in the same packet require the
 configured data-path allocator and are counted in ``rx_mixed_stream_copy``.
 
-Coalesced target receive currently fails closed if a long-header datagram has
-trailing bytes.  It counts the trailing length in ``rx_trailing_copy`` and
-returns ``NGTCP2_ERR_BUF_CONTRACT`` until the full copy-and-replay path is
-implemented.
+Coalesced target receive keeps the current packet in the caller-owned datagram
+buffer and copies trailing future packet bytes through the configured
+data-path allocator before callbacks can expose current-packet ownership.  The
+copied byte count is recorded in ``rx_trailing_copy``.  Missing allocator
+support or allocator policy rejection returns ``NGTCP2_ERR_BUF_CONTRACT``.
 
 Rebase Checklist
 ----------------
