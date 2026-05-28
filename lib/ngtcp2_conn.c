@@ -134,6 +134,14 @@ static int conn_buf_can_retain_owner(const ngtcp2_buf *buf) {
   return buf->owner && buf->retain && buf->release;
 }
 
+static uint64_t conn_stream_datalen(const ngtcp2_stream *fr) {
+  if (fr->txbuf_present) {
+    return ngtcp2_buf_len(&fr->txbuf);
+  }
+
+  return ngtcp2_vec_len(fr->data, fr->datacnt);
+}
+
 static void conn_call_rand(const ngtcp2_callbacks *callbacks, uint8_t *dest,
                            size_t destlen,
                            const ngtcp2_rand_ctx *rand_ctx) {
@@ -152,8 +160,7 @@ static ngtcp2_ssize conn_write_stream_core(
   ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
   ngtcp2_pkt_info *pi, uint8_t *dest, size_t destlen,
   ngtcp2_ssize *pdatalen, uint32_t flags, int64_t stream_id,
-  const ngtcp2_vec *datav, size_t datavcnt, const ngtcp2_buf *txbuf,
-  ngtcp2_tstamp ts);
+  const ngtcp2_buf *data, ngtcp2_tstamp ts);
 
 static int conn_require_crypto_ops(ngtcp2_conn *conn);
 
@@ -2338,8 +2345,7 @@ static uint64_t conn_retry_early_payloadlen(ngtcp2_conn *conn) {
 
     frc = ngtcp2_strm_streamfrq_top(strm);
 
-    len = ngtcp2_vec_len(frc->fr.stream.data, frc->fr.stream.datacnt) +
-          NGTCP2_STREAM_OVERHEAD;
+    len = conn_stream_datalen(&frc->fr.stream) + NGTCP2_STREAM_OVERHEAD;
 
     /* Take the min because in conn_should_pad_pkt we take max in
        order to deal with unbreakable DATAGRAM. */
@@ -3837,8 +3843,8 @@ static void conn_reset_ppe_pending(ngtcp2_conn *conn) {
  * data, specify the underlying stream and parameters to
  * |vmsg|->stream.  If |vmsg|->stream.fin is set to nonzero, it
  * signals that the given data is the final portion of the stream.
- * |vmsg|->stream.data vector of length |vmsg|->stream.datacnt
- * specifies stream data to send.  The number of bytes sent to the
+ * |vmsg|->stream.data specifies stream data to send.  The number of
+ * bytes sent to the
  * stream is assigned to *|vmsg|->stream.pdatalen.  If 0 length STREAM
  * data is sent, 0 is assigned to it.  The caller should initialize
  * *|vmsg|->stream.pdatalen to -1.
@@ -3880,8 +3886,6 @@ static ngtcp2_ssize conn_write_pkt(ngtcp2_conn *conn, ngtcp2_pkt_info *pi,
   ngtcp2_pktns *pktns = &conn->pktns;
   size_t left;
   uint64_t datalen = 0;
-  ngtcp2_vec data[NGTCP2_MAX_STREAM_DATACNT];
-  size_t datacnt;
   uint16_t rtb_entry_flags = NGTCP2_RTB_ENTRY_FLAG_NONE;
   int hd_logged = 0;
   ngtcp2_path_challenge_entry *pcent;
@@ -3911,7 +3915,7 @@ static ngtcp2_ssize conn_write_pkt(ngtcp2_conn *conn, ngtcp2_pkt_info *pi,
   if (vmsg) {
     switch (vmsg->type) {
     case NGTCP2_VMSG_TYPE_STREAM:
-      datalen = ngtcp2_vec_len(vmsg->stream.data, vmsg->stream.datacnt);
+      datalen = vmsg->stream.data ? ngtcp2_buf_len(vmsg->stream.data) : 0;
       ndatalen = conn_enforce_flow_control(conn, vmsg->stream.strm, datalen);
       /* 0 length STREAM frame is allowed */
       if (ndatalen || datalen == 0) {
@@ -4576,15 +4580,9 @@ static ngtcp2_ssize conn_write_pkt(ngtcp2_conn *conn, ngtcp2_pkt_info *pi,
       (wdatalen == ndatalen || wdatalen >= NGTCP2_MIN_STREAM_DATALEN) &&
       (wdatalen || datalen == 0)) {
     ndatalen = wdatalen;
-    datacnt = ngtcp2_vec_copy_at_most(data, NGTCP2_MAX_STREAM_DATACNT,
-                                      vmsg->stream.data, vmsg->stream.datacnt,
-                                      (size_t)ndatalen);
-    ndatalen = ngtcp2_vec_len(data, datacnt);
-
-    assert((datacnt == 0 && datalen == 0) || (datacnt && datalen));
 
     rv = ngtcp2_frame_chain_stream_datacnt_objalloc_new(
-      &nfrc, datacnt, &conn->frc_objalloc, conn->mem);
+      &nfrc, 0, &conn->frc_objalloc, conn->mem);
     if (rv != 0) {
       assert(ngtcp2_err_is_fatal(rv));
       return rv;
@@ -4595,14 +4593,13 @@ static ngtcp2_ssize conn_write_pkt(ngtcp2_conn *conn, ngtcp2_pkt_info *pi,
     nfrc->fr.stream.fin = 0;
     nfrc->fr.stream.stream_id = vmsg->stream.strm->stream_id;
     nfrc->fr.stream.offset = vmsg->stream.strm->tx.offset;
-    nfrc->fr.stream.datacnt = datacnt;
-    ngtcp2_vec_copy(nfrc->fr.stream.data, data, datacnt);
+    nfrc->fr.stream.datacnt = 0;
 
     nfrc->fr.stream.fin = (vmsg->stream.flags & NGTCP2_WRITE_STREAM_FLAG_FIN) &&
                           ndatalen == datalen;
 
-    if (vmsg->stream.txbuf && ndatalen) {
-      ngtcp2_buf txbuf = *vmsg->stream.txbuf;
+    if (vmsg->stream.data && ndatalen) {
+      ngtcp2_buf txbuf = *vmsg->stream.data;
 
       txbuf.last = txbuf.pos + ndatalen;
       rv = ngtcp2_stream_set_txbuf(&nfrc->fr.stream, &txbuf,
@@ -5739,8 +5736,7 @@ ngtcp2_ssize ngtcp2_conn_write_pkt_legacy_versioned(
   return conn_write_stream_core(
     conn, path, pkt_info_version, pi, dest, destlen,
     /* pdatalen = */ NULL, NGTCP2_WRITE_STREAM_FLAG_NONE,
-    /* stream_id = */ -1,
-    /* datav = */ NULL, /* datavcnt = */ 0, NULL, ts);
+    /* stream_id = */ -1, /* data = */ NULL, ts);
 }
 
 ngtcp2_ssize ngtcp2_conn_write_pkt_versioned(ngtcp2_conn *conn,
@@ -11270,10 +11266,9 @@ static ngtcp2_ssize conn_write_handshake(ngtcp2_conn *conn, ngtcp2_pkt_info *pi,
  * 0RTT packet.
  *
  * In order to send STREAM data in 0RTT packet, specify
- * |vmsg|->stream.  |vmsg|->stream.strm, |vmsg|->stream.fin,
- * |vmsg|->stream.data, and |vmsg|->stream.datacnt are stream to which
- * 0-RTT data is sent, whether it is a last data chunk in this stream,
- * a vector of 0-RTT data, and its number of elements respectively.
+ * |vmsg|->stream.  |vmsg|->stream.strm, |vmsg|->stream.flags, and
+ * |vmsg|->stream.data are stream to which 0-RTT data is sent, flags
+ * describing the write, and 0-RTT data respectively.
  * The amount of 0RTT data sent is assigned to
  * *|vmsg|->stream.pdatalen.  If no data is sent, -1 is assigned.
  * Note that 0 length STREAM frame is allowed in QUIC, so 0 might be
@@ -11306,7 +11301,7 @@ conn_client_write_handshake(ngtcp2_conn *conn, ngtcp2_pkt_info *pi,
   if (vmsg) {
     switch (vmsg->type) {
     case NGTCP2_VMSG_TYPE_STREAM:
-      datalen = ngtcp2_vec_len(vmsg->stream.data, vmsg->stream.datacnt);
+      datalen = vmsg->stream.data ? ngtcp2_buf_len(vmsg->stream.data) : 0;
       send_stream = conn_retry_early_payloadlen(conn) == 0;
       if (send_stream) {
         write_datalen = ngtcp2_min(datalen + NGTCP2_STREAM_OVERHEAD,
@@ -12560,8 +12555,6 @@ ngtcp2_ssize ngtcp2_conn_write_stream_versioned(
   int64_t stream_id, const ngtcp2_buf *data, ngtcp2_tstamp ts) {
   int rv;
   ngtcp2_ssize nwrite;
-  ngtcp2_vec datav, *v = NULL;
-  size_t datacnt = 0;
 
   rv =
     ngtcp2_buf_validate(dest, NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_PACKET_TX);
@@ -12589,11 +12582,6 @@ ngtcp2_ssize ngtcp2_conn_write_stream_versioned(
         ++conn->buf_stats.buf_contract_failure;
         return NGTCP2_ERR_BUF_CONTRACT;
       }
-
-      datav.base = data->pos;
-      datav.len = ngtcp2_buf_len(data);
-      v = &datav;
-      datacnt = 1;
     }
   }
 
@@ -12604,8 +12592,7 @@ ngtcp2_ssize ngtcp2_conn_write_stream_versioned(
 
   nwrite = conn_write_stream_core(
     conn, path, pkt_info_version, pi, dest->pos,
-    (size_t)(dest->end - dest->pos), pdatalen, flags, stream_id, v, datacnt,
-    data, ts);
+    (size_t)(dest->end - dest->pos), pdatalen, flags, stream_id, data, ts);
   if (nwrite > 0) {
     dest->last = dest->pos + nwrite;
   }
@@ -12649,11 +12636,11 @@ conn_write_vmsg_wrapper(ngtcp2_conn *conn, ngtcp2_path *path,
 static ngtcp2_ssize conn_write_stream_core(
   ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
   ngtcp2_pkt_info *pi, uint8_t *dest, size_t destlen, ngtcp2_ssize *pdatalen,
-  uint32_t flags, int64_t stream_id, const ngtcp2_vec *datav, size_t datavcnt,
-  const ngtcp2_buf *txbuf, ngtcp2_tstamp ts) {
+  uint32_t flags, int64_t stream_id, const ngtcp2_buf *data,
+  ngtcp2_tstamp ts) {
   ngtcp2_vmsg vmsg, *pvmsg;
   ngtcp2_strm *strm;
-  int64_t datalen;
+  uint64_t datalen;
   uint8_t wflags;
 
   if (pdatalen) {
@@ -12670,10 +12657,7 @@ static ngtcp2_ssize conn_write_stream_core(
       return NGTCP2_ERR_STREAM_SHUT_WR;
     }
 
-    datalen = ngtcp2_vec_len_varint(datav, datavcnt);
-    if (datalen == -1) {
-      return NGTCP2_ERR_INVALID_ARGUMENT;
-    }
+    datalen = data ? ngtcp2_buf_len(data) : 0;
 
     if (datalen == 0 && !(flags & NGTCP2_WRITE_STREAM_FLAG_FIN) &&
         (strm->flags & NGTCP2_STRM_FLAG_ANY_SENT)) {
@@ -12689,9 +12673,7 @@ static ngtcp2_ssize conn_write_stream_core(
         .stream =
           {
             .strm = strm,
-            .data = datav,
-            .datacnt = datavcnt,
-            .txbuf = txbuf,
+            .data = data,
             .pdatalen = pdatalen,
             .flags = flags,
           },

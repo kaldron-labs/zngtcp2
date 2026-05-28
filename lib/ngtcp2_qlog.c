@@ -42,6 +42,14 @@ void ngtcp2_qlog_init(ngtcp2_qlog *qlog, ngtcp2_qlog_write write,
 
 #define write_verbatim(DEST, S) ngtcp2_cpymem((DEST), (S), ngtcp2_strlen_lit(S))
 
+static uint64_t stream_datalen(const ngtcp2_stream *fr) {
+  if (fr->txbuf_present) {
+    return ngtcp2_buf_len(&fr->txbuf);
+  }
+
+  return ngtcp2_vec_len(fr->data, fr->datacnt);
+}
+
 static uint8_t *write_string_impl(uint8_t *p, const uint8_t *data,
                                   size_t datalen) {
   *p++ = '"';
@@ -421,7 +429,7 @@ static uint8_t *write_stream_frame(uint8_t *p, const ngtcp2_stream *fr) {
   *p++ = ',';
   p = write_pair_number(p, "offset", fr->offset);
   *p++ = ',';
-  p = write_pair_number(p, "length", ngtcp2_vec_len(fr->data, fr->datacnt));
+  p = write_pair_number(p, "length", stream_datalen(fr));
   if (fr->fin) {
     *p++ = ',';
     p = write_pair_bool(p, "fin", 1);

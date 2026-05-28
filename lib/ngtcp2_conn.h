@@ -722,14 +722,8 @@ typedef enum ngtcp2_vmsg_type {
 typedef struct ngtcp2_vmsg_stream {
   /* strm is a stream that data is sent to. */
   ngtcp2_strm *strm;
-  /* data is the pointer to ngtcp2_vec array which contains the stream
-     data to send. */
-  const ngtcp2_vec *data;
-  /* datacnt is the number of ngtcp2_vec pointed by data. */
-  size_t datacnt;
-  /* txbuf is the retained owner source for buffer-based public STREAM
-     data.  It is NULL for legacy/vector internal send paths. */
-  const ngtcp2_buf *txbuf;
+  /* data is a STREAM_TX buffer that contains stream data to send. */
+  const ngtcp2_buf *data;
   /* pdatalen is the pointer to the variable which the number of bytes
      written is assigned to if pdatalen is not NULL. */
   ngtcp2_ssize *pdatalen;

@@ -40,6 +40,14 @@
 
 ngtcp2_objalloc_def(rtb_entry, ngtcp2_rtb_entry, oplent)
 
+static uint64_t stream_datalen(const ngtcp2_stream *fr) {
+  if (fr->txbuf_present) {
+    return ngtcp2_buf_len(&fr->txbuf);
+  }
+
+  return ngtcp2_vec_len(fr->data, fr->datacnt);
+}
+
 static void rtb_entry_init(ngtcp2_rtb_entry *ent, const ngtcp2_pkt_hd *hd,
                            ngtcp2_frame_chain *frc, ngtcp2_tstamp ts,
                            size_t pktlen, uint16_t flags) {
@@ -218,6 +226,7 @@ static ngtcp2_ssize rtb_reclaim_frame(ngtcp2_rtb *rtb, uint8_t flags,
   ngtcp2_frame *fr;
   ngtcp2_strm *strm;
   ngtcp2_range gap, range;
+  uint64_t datalen;
   size_t num_reclaimed = 0;
   int rv;
 
@@ -242,9 +251,10 @@ static ngtcp2_ssize rtb_reclaim_frame(ngtcp2_rtb *rtb, uint8_t flags,
 
       gap = ngtcp2_strm_get_unacked_range_after(strm, fr->stream.offset);
 
+      datalen = stream_datalen(&fr->stream);
+
       range.begin = fr->stream.offset;
-      range.end =
-        fr->stream.offset + ngtcp2_vec_len(fr->stream.data, fr->stream.datacnt);
+      range.end = fr->stream.offset + datalen;
       range = ngtcp2_range_intersect(&range, &gap);
 
       if (ngtcp2_range_len(&range) == 0 && !fr->stream.fin &&
@@ -252,8 +262,7 @@ static ngtcp2_ssize rtb_reclaim_frame(ngtcp2_rtb *rtb, uint8_t flags,
              retransmitted if no non-empty data are sent to this
              stream, fin flag is not set, and no data in this stream
              are acknowledged. */
-          (fr->stream.offset != 0 || fr->stream.datacnt != 0 ||
-           strm->tx.offset ||
+          (fr->stream.offset != 0 || datalen != 0 || strm->tx.offset ||
            (strm->flags &
             (NGTCP2_STRM_FLAG_SHUT_WR | NGTCP2_STRM_FLAG_ANY_ACKED)))) {
         continue;
@@ -266,7 +275,8 @@ static ngtcp2_ssize rtb_reclaim_frame(ngtcp2_rtb *rtb, uint8_t flags,
       }
 
       rv = ngtcp2_frame_chain_stream_datacnt_objalloc_new(
-        &nfrc, fr->stream.datacnt, rtb->frc_objalloc, rtb->mem);
+        &nfrc, fr->stream.txbuf_present ? 0 : fr->stream.datacnt,
+        rtb->frc_objalloc, rtb->mem);
       if (rv != 0) {
         return rv;
       }
@@ -276,9 +286,11 @@ static ngtcp2_ssize rtb_reclaim_frame(ngtcp2_rtb *rtb, uint8_t flags,
       nfrc->fr.stream.fin = fr->stream.fin;
       nfrc->fr.stream.stream_id = fr->stream.stream_id;
       nfrc->fr.stream.offset = fr->stream.offset;
-      nfrc->fr.stream.datacnt = fr->stream.datacnt;
-      ngtcp2_vec_copy(nfrc->fr.stream.data, fr->stream.data,
-                      fr->stream.datacnt);
+      if (!fr->stream.txbuf_present) {
+        nfrc->fr.stream.datacnt = fr->stream.datacnt;
+        ngtcp2_vec_copy(nfrc->fr.stream.data, fr->stream.data,
+                        fr->stream.datacnt);
+      }
 
       rv = ngtcp2_stream_copy_txbuf(&nfrc->fr.stream, &fr->stream);
       if (rv != 0) {
@@ -311,8 +323,7 @@ static ngtcp2_ssize rtb_reclaim_frame(ngtcp2_rtb *rtb, uint8_t flags,
                                                 fr->stream.offset);
 
       range.begin = fr->stream.offset;
-      range.end =
-        fr->stream.offset + ngtcp2_vec_len(fr->stream.data, fr->stream.datacnt);
+      range.end = fr->stream.offset + stream_datalen(&fr->stream);
       range = ngtcp2_range_intersect(&range, &gap);
 
       if (ngtcp2_range_len(&range) == 0) {
@@ -634,8 +645,7 @@ static int process_acked_pkt(ngtcp2_rtb_entry *ent, ngtcp2_conn *conn,
       prev_stream_offset = ngtcp2_strm_get_acked_offset(strm);
 
       rv = ngtcp2_strm_ack_data(
-        strm, frc->fr.stream.offset,
-        ngtcp2_vec_len(frc->fr.stream.data, frc->fr.stream.datacnt));
+        strm, frc->fr.stream.offset, stream_datalen(&frc->fr.stream));
       if (rv != 0) {
         return rv;
       }
@@ -666,8 +676,7 @@ static int process_acked_pkt(ngtcp2_rtb_entry *ent, ngtcp2_conn *conn,
       prev_stream_offset = ngtcp2_strm_get_acked_offset(crypto);
 
       rv = ngtcp2_strm_ack_data(
-        crypto, frc->fr.stream.offset,
-        ngtcp2_vec_len(frc->fr.stream.data, frc->fr.stream.datacnt));
+        crypto, frc->fr.stream.offset, stream_datalen(&frc->fr.stream));
       if (rv != 0) {
         return rv;
       }

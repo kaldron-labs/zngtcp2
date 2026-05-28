@@ -175,13 +175,21 @@ static const char *strpkttype_type_flags(uint8_t type, uint8_t flags) {
   });
 }
 
+static uint64_t stream_datalen(const ngtcp2_stream *fr) {
+  if (fr->txbuf_present) {
+    return ngtcp2_buf_len(&fr->txbuf);
+  }
+
+  return ngtcp2_vec_len(fr->data, fr->datacnt);
+}
+
 static void log_fr_stream(ngtcp2_log *log, const ngtcp2_pkt_hd *hd,
                           const ngtcp2_stream *fr, const char *dir) {
   ngtcp2_log_infof_raw(
     log, NGTCP2_LOG_EVENT_FRM, NGTCP2_LOG_PKT(dir, hd), " STREAM(0x",
     hex(fr->type | fr->flags), ") id=0x", hex(fr->stream_id), " fin=", fr->fin,
-    " offset=", fr->offset, " len=", ngtcp2_vec_len(fr->data, fr->datacnt),
-    " uni=", (fr->stream_id & 0x2) != 0);
+    " offset=", fr->offset, " len=", stream_datalen(fr), " uni=",
+    (fr->stream_id & 0x2) != 0);
 }
 
 static void log_fr_ack(ngtcp2_log *log, const ngtcp2_pkt_hd *hd,

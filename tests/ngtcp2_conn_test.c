@@ -4792,8 +4792,9 @@ void test_ngtcp2_conn_recv_retry(void) {
 
   assert_uint64(NGTCP2_FRAME_STREAM, ==, frc->fr.hd.type);
   assert_uint64(0, ==, frc->fr.stream.offset);
-  assert_uint64(100, ==,
-                ngtcp2_vec_len(frc->fr.stream.data, frc->fr.stream.datacnt));
+  assert_size(0, ==, frc->fr.stream.datacnt);
+  assert_true(frc->fr.stream.txbuf_present);
+  assert_size(100, ==, ngtcp2_buf_len(&frc->fr.stream.txbuf));
   assert_null(frc->next);
 
   frc = ngtcp2_strm_streamfrq_top(&conn->in_pktns->crypto.strm);
@@ -5954,8 +5955,9 @@ void test_ngtcp2_conn_retransmit_protected(void) {
 
   assert_uint64(NGTCP2_FRAME_STREAM, ==, frc->fr.hd.type);
   assert_uint64(0, ==, frc->fr.stream.offset);
-  assert_size(1, ==, frc->fr.stream.datacnt);
-  assert_size(10, ==, frc->fr.stream.data[0].len);
+  assert_size(0, ==, frc->fr.stream.datacnt);
+  assert_true(frc->fr.stream.txbuf_present);
+  assert_size(10, ==, ngtcp2_buf_len(&frc->fr.stream.txbuf));
 
   ngtcp2_conn_del(conn);
 

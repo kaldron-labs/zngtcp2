@@ -1594,8 +1594,12 @@ ngtcp2_ssize ngtcp2_pkt_encode_stream_frame(uint8_t *out, size_t outlen,
 
   len += ngtcp2_put_uvarintlen((uint64_t)fr->stream_id);
 
-  for (i = 0; i < fr->datacnt; ++i) {
-    datalen += fr->data[i].len;
+  if (fr->txbuf_present) {
+    datalen = ngtcp2_buf_len(&fr->txbuf);
+  } else {
+    for (i = 0; i < fr->datacnt; ++i) {
+      datalen += fr->data[i].len;
+    }
   }
 
   len += ngtcp2_put_uvarintlen(datalen);
@@ -1619,10 +1623,15 @@ ngtcp2_ssize ngtcp2_pkt_encode_stream_frame(uint8_t *out, size_t outlen,
 
   p = ngtcp2_put_uvarint(p, datalen);
 
-  for (i = 0; i < fr->datacnt; ++i) {
-    assert(fr->data[i].len);
-    assert(fr->data[i].base);
-    p = ngtcp2_cpymem(p, fr->data[i].base, fr->data[i].len);
+  if (fr->txbuf_present) {
+    assert(fr->txbuf.pos);
+    p = ngtcp2_cpymem(p, fr->txbuf.pos, ngtcp2_buf_len(&fr->txbuf));
+  } else {
+    for (i = 0; i < fr->datacnt; ++i) {
+      assert(fr->data[i].len);
+      assert(fr->data[i].base);
+      p = ngtcp2_cpymem(p, fr->data[i].base, fr->data[i].len);
+    }
   }
 
   assert((size_t)(p - out) == len);
