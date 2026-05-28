@@ -12303,6 +12303,11 @@ ngtcp2_ssize ngtcp2_conn_write_stream_versioned(
     datalen = ngtcp2_buf_len(data);
   }
 
+  if (datalen) {
+    ++conn->buf_stats.buf_contract_failure;
+    return NGTCP2_ERR_BUF_CONTRACT;
+  }
+
   rv = conn_require_crypto_ops(conn);
   if (rv != 0) {
     return rv;

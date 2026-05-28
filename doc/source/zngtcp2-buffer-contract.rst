@@ -64,6 +64,9 @@ The installed packet receive, stream transmit, ``recv_crypto_data``, and
 STREAM send entry points are transitional internals used only while building
 library tests.
 
+Public STREAM transmit with non-empty data currently fails closed with
+``NGTCP2_ERR_BUF_CONTRACT`` until retained Tx frame/RTB ownership lands.
+
 The target receive path decrypts header protection and payloads in place when
 zpicotls packet crypto ops are installed.  Internal legacy tests without
 provider ops fall back to the legacy decrypt buffer and increment
