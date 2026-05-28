@@ -4344,13 +4344,6 @@ ngtcp2_conn_read_pkt_versioned(ngtcp2_conn *conn, const ngtcp2_path *path,
                                int pkt_info_version, const ngtcp2_pkt_info *pi,
                                ngtcp2_buf *pkt, ngtcp2_tstamp ts);
 
-#if defined(BUILDING_NGTCP2)
-NGTCP2_EXTERN int ngtcp2_conn_read_pkt_legacy_versioned(
-  ngtcp2_conn *conn, const ngtcp2_path *path, int pkt_info_version,
-  const ngtcp2_pkt_info *pi, const uint8_t *pkt, size_t pktlen,
-  ngtcp2_tstamp ts);
-#endif /* defined(BUILDING_NGTCP2) */
-
 /**
  * @function
  *
@@ -5215,16 +5208,6 @@ NGTCP2_EXTERN int ngtcp2_conn_shutdown_stream_read(ngtcp2_conn *conn,
  */
 #define NGTCP2_WRITE_STREAM_FLAG_NONE 0x00U
 
-#if defined(BUILDING_NGTCP2)
-/**
- * @macro
- *
- * :macro:`NGTCP2_WRITE_STREAM_FLAG_MORE` is an internal transitional
- * flag used by legacy tests.
- */
-#  define NGTCP2_WRITE_STREAM_FLAG_MORE 0x01U
-#endif /* defined(BUILDING_NGTCP2) */
-
 /**
  * @macro
  *
@@ -5258,173 +5241,6 @@ NGTCP2_EXTERN ngtcp2_ssize ngtcp2_conn_write_stream_versioned(
   ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
   ngtcp2_pkt_info *pi, ngtcp2_buf *dest, ngtcp2_ssize *pdatalen, uint32_t flags,
   int64_t stream_id, const ngtcp2_buf *data, ngtcp2_tstamp ts);
-
-#if defined(BUILDING_NGTCP2)
-NGTCP2_EXTERN ngtcp2_ssize ngtcp2_conn_write_stream_legacy_versioned(
-  ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
-  ngtcp2_pkt_info *pi, uint8_t *dest, size_t destlen, ngtcp2_ssize *pdatalen,
-  uint32_t flags, int64_t stream_id, const uint8_t *data, size_t datalen,
-  ngtcp2_tstamp ts);
-
-/**
- * @function
- *
- * `ngtcp2_conn_writev_stream` writes a packet containing stream data
- * of a stream denoted by |stream_id|.  The buffer of the packet is
- * pointed by |dest| of length |destlen|.  This function performs QUIC
- * handshake as well.
- *
- * |destlen| should be at least
- * :member:`ngtcp2_settings.max_tx_udp_payload_size`.  It must be at
- * least :macro:`NGTCP2_MAX_UDP_PAYLOAD_SIZE`.
- *
- * Specifying -1 to |stream_id| means no new stream data to send.
- *
- * If |path| is not ``NULL``, this function stores the network path
- * with which the packet should be sent.  Each addr field
- * (:member:`ngtcp2_path.local` and :member:`ngtcp2_path.remote`) must
- * point to the buffer which should be at least
- * sizeof(:type:`sockaddr_union`) bytes long.  The assignment might
- * not be done if nothing is written to |dest|.
- *
- * If |pi| is not ``NULL``, this function stores packet metadata in it
- * if it succeeds.  The metadata includes ECN markings.  When calling
- * this function again after it returns
- * :macro:`NGTCP2_ERR_WRITE_MORE`, caller must pass the same |pi| to
- * this function.
- *
- * Stream data is specified as vector of data |datav|.  |datavcnt|
- * specifies the number of :type:`ngtcp2_vec` that |datav| includes.
- *
- * If all given data is encoded as STREAM frame in |dest|, and if
- * |flags| & :macro:`NGTCP2_WRITE_STREAM_FLAG_FIN` is nonzero, fin
- * flag is set to outgoing STREAM frame.  Otherwise, fin flag in
- * STREAM frame is not set.
- *
- * This packet may contain frames other than STREAM frame.  The packet
- * might not contain STREAM frame if other frames occupy the packet.
- * In that case, |*pdatalen| would be -1 if |pdatalen| is not
- * ``NULL``.
- *
- * Empty data is treated specially, and it is only accepted if no
- * data, including the empty data, is submitted to a stream or
- * :macro:`NGTCP2_WRITE_STREAM_FLAG_FIN` is set in |flags|.  If 0
- * length STREAM frame is successfully serialized, |*pdatalen| would
- * be 0.
- *
- * The number of data encoded in STREAM frame is stored in |*pdatalen|
- * if it is not ``NULL``.  The caller must keep the portion of data
- * covered by |*pdatalen| bytes in tact until
- * :member:`ngtcp2_callbacks.acked_stream_data_offset` indicates that
- * they are acknowledged by a remote endpoint or the stream is closed.
- *
- * If the given stream data is small (e.g., few bytes), the packet
- * might be severely under filled.  Too many small packet might
- * increase overall packet processing costs.  Unless there are
- * retransmissions, by default, application can only send 1 STREAM
- * frame in one QUIC packet.  In order to include more than 1 STREAM
- * frame in one QUIC packet, specify
- * :macro:`NGTCP2_WRITE_STREAM_FLAG_MORE` in |flags|.  This is
- * analogous to ``MSG_MORE`` flag in :manpage:`send(2)`.  If the
- * :macro:`NGTCP2_WRITE_STREAM_FLAG_MORE` is used, there are 4
- * outcomes:
- *
- * - The function returns the written length of packet just like
- *   without :macro:`NGTCP2_WRITE_STREAM_FLAG_MORE`.  This is because
- *   packet is nearly full, and the library decided to make a complete
- *   packet.  |*pdatalen| might be -1 or >= 0.  It may return 0 which
- *   indicates that no packet transmission is possible at the moment
- *   for some reason.
- *
- * - The function returns :macro:`NGTCP2_ERR_WRITE_MORE`.  In this
- *   case, |*pdatalen| >= 0 is asserted.  It indicates that
- *   application can still call this function with different stream
- *   data (or `ngtcp2_conn_writev_datagram` if it has data to send in
- *   unreliable datagram) to pack them into the same packet.
- *   Application has to specify the same |conn|, |path|, |pi|, |dest|,
- *   |destlen|, and |ts| parameters, otherwise the behaviour is
- *   undefined.  The application can change |flags|.
- *
- * - The function returns one of the following negative error codes:
- *   :macro:`NGTCP2_ERR_STREAM_DATA_BLOCKED`,
- *   :macro:`NGTCP2_ERR_STREAM_NOT_FOUND`, or
- *   :macro:`NGTCP2_ERR_STREAM_SHUT_WR`.  In this case, |*pdatalen| ==
- *   -1 is asserted.  Application can still write the stream data of
- *   the other streams by calling this function (or
- *   `ngtcp2_conn_writev_datagram` if it has data to send in
- *   unreliable datagram) to pack them into the same packet.
- *   Application has to specify the same |conn|, |path|, |pi|, |dest|,
- *   |destlen|, and |ts| parameters, otherwise the behaviour is
- *   undefined.  The application can change |flags|.
- *
- * - The other negative error codes might be returned just like
- *   without :macro:`NGTCP2_WRITE_STREAM_FLAG_MORE`.  These errors
- *   should be treated as a connection error.
- *
- * When application uses :macro:`NGTCP2_WRITE_STREAM_FLAG_MORE` at
- * least once, it must not call other ngtcp2 API functions
- * (application can still call `ngtcp2_conn_write_connection_close` to
- * handle error from this function.  It can also call
- * `ngtcp2_conn_shutdown_stream_read`,
- * `ngtcp2_conn_shutdown_stream_write`, and
- * `ngtcp2_conn_shutdown_stream`), just keep calling this function (or
- * `ngtcp2_conn_writev_datagram`) until it returns 0, a positive
- * number (which indicates a complete packet is ready), or the error
- * codes other than :macro:`NGTCP2_ERR_WRITE_MORE`,
- * :macro:`NGTCP2_ERR_STREAM_DATA_BLOCKED`,
- * :macro:`NGTCP2_ERR_STREAM_NOT_FOUND`, and
- * :macro:`NGTCP2_ERR_STREAM_SHUT_WR`.  If there is no stream data to
- * include, call this function with |stream_id| as -1 to stop
- * coalescing and write a packet.
- *
- * If :macro:`NGTCP2_WRITE_STREAM_FLAG_PADDING` is set in |flags| when
- * finalizing a non-empty 0 RTT or 1 RTT ack-eliciting packet, the
- * packet is padded to the minimum length of a sending path MTU or a
- * given packet buffer.
- *
- * This function returns 0 if it cannot write any frame because buffer
- * is too small, or packet is congestion limited.  Application should
- * keep reading and wait for congestion window to grow.
- *
- * This function must not be called from inside the callback
- * functions.
- *
- * `ngtcp2_conn_update_pkt_tx_time` must be called after this
- * function.  Application may call this function multiple times before
- * calling `ngtcp2_conn_update_pkt_tx_time`.
- *
- * This function returns the number of bytes written in |dest| if it
- * succeeds, or one of the following negative error codes:
- *
- * :macro:`NGTCP2_ERR_NOMEM`
- *     Out of memory
- * :macro:`NGTCP2_ERR_STREAM_NOT_FOUND`
- *     Stream does not exist
- * :macro:`NGTCP2_ERR_STREAM_SHUT_WR`
- *     Stream is half closed (local); or stream is being reset.
- * :macro:`NGTCP2_ERR_PKT_NUM_EXHAUSTED`
- *     Packet number is exhausted, and cannot send any more packet.
- * :macro:`NGTCP2_ERR_CALLBACK_FAILURE`
- *     User callback failed
- * :macro:`NGTCP2_ERR_INVALID_ARGUMENT`
- *     The total length of stream data is too large.
- * :macro:`NGTCP2_ERR_STREAM_DATA_BLOCKED`
- *     Stream is blocked because of flow control.
- * :macro:`NGTCP2_ERR_WRITE_MORE`
- *     (Only when :macro:`NGTCP2_WRITE_STREAM_FLAG_MORE` is specified)
- *     Application can call this function to pack more stream data
- *     into the same packet.  See above to know how it works.
- *
- * If any other negative error is returned, call
- * `ngtcp2_conn_write_connection_close` to get terminal packet, and
- * sending it makes QUIC connection enter the closing state.
- */
-NGTCP2_EXTERN ngtcp2_ssize ngtcp2_conn_writev_stream_versioned(
-  ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
-  ngtcp2_pkt_info *pi, uint8_t *dest, size_t destlen, ngtcp2_ssize *pdatalen,
-  uint32_t flags, int64_t stream_id, const ngtcp2_vec *datav, size_t datavcnt,
-  ngtcp2_tstamp ts);
-#endif /* defined(BUILDING_NGTCP2) */
 
 /**
  * @macrosection
@@ -7388,15 +7204,9 @@ NGTCP2_EXTERN void ngtcp2_secure_clear(void *data, size_t len);
  * `ngtcp2_conn_read_pkt` is a wrapper around
  * `ngtcp2_conn_read_pkt_versioned` to set the correct struct version.
  */
-#if defined(BUILDING_NGTCP2)
-#  define ngtcp2_conn_read_pkt(CONN, PATH, PI, PKT, PKTLEN, TS)                \
-    ngtcp2_conn_read_pkt_legacy_versioned(                                     \
-      (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (PKT), (PKTLEN), (TS))
-#else /* !defined(BUILDING_NGTCP2) */
-#  define ngtcp2_conn_read_pkt(CONN, PATH, PI, PKT, TS)                        \
-    ngtcp2_conn_read_pkt_versioned((CONN), (PATH), NGTCP2_PKT_INFO_VERSION,    \
-                                   (PI), (PKT), (TS))
-#endif /* !defined(BUILDING_NGTCP2) */
+#define ngtcp2_conn_read_pkt(CONN, PATH, PI, PKT, TS)                          \
+  ngtcp2_conn_read_pkt_versioned((CONN), (PATH), NGTCP2_PKT_INFO_VERSION,      \
+                                 (PI), (PKT), (TS))
 
 /*
  * `ngtcp2_conn_write_pkt` is a wrapper around
@@ -7412,32 +7222,11 @@ NGTCP2_EXTERN void ngtcp2_secure_clear(void *data, size_t len);
  * `ngtcp2_conn_write_stream_versioned` to set the correct struct
  * version.
  */
-#if defined(BUILDING_NGTCP2)
-#  define ngtcp2_conn_write_stream(CONN, PATH, PI, DEST, DESTLEN, PDATALEN,    \
-                                   FLAGS, STREAM_ID, DATA, DATALEN, TS)        \
-    ngtcp2_conn_write_stream_legacy_versioned(                                 \
-      (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (DEST), (DESTLEN),        \
-      (PDATALEN), (FLAGS), (STREAM_ID), (DATA), (DATALEN), (TS))
-#else /* !defined(BUILDING_NGTCP2) */
-#  define ngtcp2_conn_write_stream(CONN, PATH, PI, DEST, PDATALEN, FLAGS,      \
-                                   STREAM_ID, DATA, TS)                        \
-    ngtcp2_conn_write_stream_versioned(                                        \
-      (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (DEST), (PDATALEN),       \
-      (FLAGS), (STREAM_ID), (DATA), (TS))
-#endif /* !defined(BUILDING_NGTCP2) */
-
-/*
- * `ngtcp2_conn_writev_stream` is a wrapper around
- * `ngtcp2_conn_writev_stream_versioned` to set the correct struct
- * version.
- */
-#if defined(BUILDING_NGTCP2)
-#  define ngtcp2_conn_writev_stream(CONN, PATH, PI, DEST, DESTLEN, PDATALEN,   \
-                                    FLAGS, STREAM_ID, DATAV, DATAVCNT, TS)     \
-    ngtcp2_conn_writev_stream_versioned(                                       \
-      (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (DEST), (DESTLEN),        \
-      (PDATALEN), (FLAGS), (STREAM_ID), (DATAV), (DATAVCNT), (TS))
-#endif /* defined(BUILDING_NGTCP2) */
+#define ngtcp2_conn_write_stream(CONN, PATH, PI, DEST, PDATALEN, FLAGS,        \
+                                 STREAM_ID, DATA, TS)                          \
+  ngtcp2_conn_write_stream_versioned(                                          \
+    (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (DEST), (PDATALEN),         \
+    (FLAGS), (STREAM_ID), (DATA), (TS))
 
 /*
  * `ngtcp2_conn_write_datagram` is a wrapper around

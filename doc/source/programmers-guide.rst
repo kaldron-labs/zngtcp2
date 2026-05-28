@@ -339,7 +339,7 @@ Read and write packets
 ----------------------
 
 `ngtcp2_conn_read_pkt()` processes the incoming QUIC packets.  In
-order to write QUIC packets, call `ngtcp2_conn_writev_stream()` or
+order to write QUIC packets, call `ngtcp2_conn_write_stream()` or
 `ngtcp2_conn_write_pkt()`.  The *destlen* parameter should be at least
 :member:`ngtcp2_settings.max_tx_udp_payload_size`, and must be at
 least 1200 bytes.
@@ -364,14 +364,13 @@ handshake completion.
 
 Use `ngtcp2_conn_open_bidi_stream()` to open bidirectional
 stream.  For unidirectional stream, call
-`ngtcp2_conn_open_uni_stream()`.  Call `ngtcp2_conn_writev_stream()`
+`ngtcp2_conn_open_uni_stream()`.  Call `ngtcp2_conn_write_stream()`
 to send stream data.
 
 An application should pace sending packets.
 `ngtcp2_conn_get_send_quantum2()` returns the number of bytes that can
 be sent without packet spacing.  After one or more calls of
-`ngtcp2_conn_writev_stream()` (it can be called multiple times to fill
-the buffer sized up to `ngtcp2_conn_get_send_quantum2()` bytes), call
+`ngtcp2_conn_write_stream()`, call
 `ngtcp2_conn_update_pkt_tx_time()` to set the timer when the next
 packet should be sent.  The timer is integrated into
 `ngtcp2_conn_get_expiry2()`.
@@ -385,7 +384,7 @@ platforms offer a function, like GSO in Linux, that accepts multiple
 UDP datagrams in 1 system call, and saves the overhead.
 
 To build such a train of packets, an application needs to make
-multiple calls to `ngtcp2_conn_writev_stream()` or its variants.  To
+multiple calls to `ngtcp2_conn_write_stream()` or packet-writing variants.  To
 make things simpler, ngtcp2 offers
 `ngtcp2_conn_write_aggregate_pkt()`, which conveniently aggregates
 packets suitable for sending in GSO.  It also enforces pacing
@@ -484,7 +483,7 @@ Closing streams
 ---------------
 
 The send-side stream is closed when you call
-`ngtcp2_conn_writev_stream` with :macro:`NGTCP2_WRITE_STREAM_FLAG_FIN`
+`ngtcp2_conn_write_stream` with :macro:`NGTCP2_WRITE_STREAM_FLAG_FIN`
 flag set, and all data are acknowledged.  The receive-side stream is
 closed when a local endpoint receives fin from a remote endpoint, and
 all data are received.  And then
@@ -524,11 +523,11 @@ without calling `ngtcp2_conn_write_connection_close()`.  If it returns
 any of the other negative error codes, close the connection by sending
 the terminal packet produced by
 `ngtcp2_conn_write_connection_close()`.  Otherwise, schedule
-`ngtcp2_conn_writev_stream()` call.  An application may call any
+`ngtcp2_conn_write_stream()` call.  An application may call any
 number of additional `ngtcp2_conn_read_pkt()` and
 `ngtcp2_conn_handle_expiry()` before calling
-`ngtcp2_conn_writev_stream()`.  After calling
-`ngtcp2_conn_writev_stream()`, new expiry is set.  The application
+`ngtcp2_conn_write_stream()`.  After calling
+`ngtcp2_conn_write_stream()`, new expiry is set.  The application
 should call `ngtcp2_conn_get_expiry2()` to get a new deadline and set
 the timer.
 
@@ -560,7 +559,7 @@ After the successful call of `ngtcp2_conn_write_connection_close()`,
 the connection enters the closing state.  When
 `ngtcp2_conn_read_pkt()` returns :macro:`NGTCP2_ERR_DRAINING`, the
 connection has entered the draining state.  In these states,
-`ngtcp2_conn_writev_stream()` and `ngtcp2_conn_read_pkt()` return an
+`ngtcp2_conn_write_stream()` and `ngtcp2_conn_read_pkt()` return an
 error (either :macro:`NGTCP2_ERR_CLOSING` or
 :macro:`NGTCP2_ERR_DRAINING` depending on the state).
 `ngtcp2_conn_write_connection_close()` returns 0 in these states.  If
@@ -578,7 +577,7 @@ In general, when error is returned from the ngtcp2 library function,
 call `ngtcp2_conn_write_connection_close()` to get terminal packet.
 If the successful call of the function creates non-empty packet, the
 QUIC connection enters the closing state.  Calling
-`ngtcp2_conn_read_pkt` or `ngtcp2_conn_writev_stream` after getting a
+`ngtcp2_conn_read_pkt` or `ngtcp2_conn_write_stream` after getting a
 negative error code is undefined except for the errors that are
 defined as transitional.  See below and their documentation.
 
