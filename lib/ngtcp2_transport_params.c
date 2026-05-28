@@ -30,33 +30,18 @@
 #include "ngtcp2_conv.h"
 #include "ngtcp2_str.h"
 #include "ngtcp2_mem.h"
-#include "ngtcp2_unreachable.h"
 
 void ngtcp2_transport_params_default_versioned(
   int transport_params_version, ngtcp2_transport_params *params) {
-  size_t len;
+  assert(transport_params_version == NGTCP2_TRANSPORT_PARAMS_VERSION);
 
-  switch (transport_params_version) {
-  case NGTCP2_TRANSPORT_PARAMS_VERSION:
-    len = sizeof(*params);
+  memset(params, 0, sizeof(*params));
 
-    break;
-  default:
-    ngtcp2_unreachable();
-  }
-
-  memset(params, 0, len);
-
-  switch (transport_params_version) {
-  case NGTCP2_TRANSPORT_PARAMS_VERSION:
-    params->max_udp_payload_size = NGTCP2_DEFAULT_MAX_RECV_UDP_PAYLOAD_SIZE;
-    params->active_connection_id_limit =
-      NGTCP2_DEFAULT_ACTIVE_CONNECTION_ID_LIMIT;
-    params->ack_delay_exponent = NGTCP2_DEFAULT_ACK_DELAY_EXPONENT;
-    params->max_ack_delay = NGTCP2_DEFAULT_MAX_ACK_DELAY;
-
-    break;
-  }
+  params->max_udp_payload_size = NGTCP2_DEFAULT_MAX_RECV_UDP_PAYLOAD_SIZE;
+  params->active_connection_id_limit =
+    NGTCP2_DEFAULT_ACTIVE_CONNECTION_ID_LIMIT;
+  params->ack_delay_exponent = NGTCP2_DEFAULT_ACK_DELAY_EXPONENT;
+  params->max_ack_delay = NGTCP2_DEFAULT_MAX_ACK_DELAY;
 }
 
 /*
@@ -514,13 +499,9 @@ int ngtcp2_transport_params_decode_versioned(int transport_params_version,
   ngtcp2_sockaddr_in *sa_in;
   ngtcp2_sockaddr_in6 *sa_in6;
   uint32_t version;
-  ngtcp2_transport_params *params, paramsbuf;
+  ngtcp2_transport_params *params = dest;
 
-  if (transport_params_version == NGTCP2_TRANSPORT_PARAMS_VERSION) {
-    params = dest;
-  } else {
-    params = &paramsbuf;
-  }
+  assert(transport_params_version == NGTCP2_TRANSPORT_PARAMS_VERSION);
 
   /* Set default values */
   *params = (ngtcp2_transport_params){
@@ -774,11 +755,6 @@ int ngtcp2_transport_params_decode_versioned(int transport_params_version,
     return NGTCP2_ERR_MALFORMED_TRANSPORT_PARAM;
   }
 
-  if (transport_params_version != NGTCP2_TRANSPORT_PARAMS_VERSION) {
-    ngtcp2_transport_params_convert_to_old(transport_params_version, dest,
-                                           params);
-  }
-
   return 0;
 }
 
@@ -854,40 +830,13 @@ int ngtcp2_transport_params_copy_new(ngtcp2_transport_params **pdest,
   return transport_params_copy_new(pdest, src, mem);
 }
 
-static void transport_params_copy(ngtcp2_transport_params *dest,
-                                  const ngtcp2_transport_params *src,
-                                  int transport_params_version) {
-  assert(transport_params_version != NGTCP2_TRANSPORT_PARAMS_VERSION);
-
-  switch (transport_params_version) {
-  case NGTCP2_TRANSPORT_PARAMS_V1:
-    memcpy(dest, src,
-           offsetof(ngtcp2_transport_params, version_info_present) +
-             sizeof(src->version_info_present));
-
-    break;
-  }
-}
-
 const ngtcp2_transport_params *
 ngtcp2_transport_params_convert_to_latest(ngtcp2_transport_params *dest,
                                           int transport_params_version,
                                           const ngtcp2_transport_params *src) {
-  if (transport_params_version == NGTCP2_TRANSPORT_PARAMS_VERSION) {
-    return src;
-  }
+  (void)dest;
 
-  ngtcp2_transport_params_default(dest);
+  assert(transport_params_version == NGTCP2_TRANSPORT_PARAMS_VERSION);
 
-  transport_params_copy(dest, src, transport_params_version);
-
-  return dest;
-}
-
-void ngtcp2_transport_params_convert_to_old(
-  int transport_params_version, ngtcp2_transport_params *dest,
-  const ngtcp2_transport_params *src) {
-  assert(transport_params_version != NGTCP2_TRANSPORT_PARAMS_VERSION);
-
-  transport_params_copy(dest, src, transport_params_version);
+  return src;
 }

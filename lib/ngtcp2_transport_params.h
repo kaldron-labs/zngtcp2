@@ -79,40 +79,15 @@ int ngtcp2_transport_params_copy_new(ngtcp2_transport_params **pdest,
                                      const ngtcp2_mem *mem);
 
 /*
- * ngtcp2_transport_params_convert_to_latest converts |src| of version
- * |transport_params_version| to the latest version
- * NGTCP2_TRANSPORT_PARAMS_VERSION.
+ * ngtcp2_transport_params_convert_to_latest validates that |src| uses
+ * NGTCP2_TRANSPORT_PARAMS_VERSION and returns |src|.
  *
- * |dest| must point to the latest version.  |src| may be the older
- * version, and if so, it may have fewer fields.  Accessing those
- * fields causes undefined behavior.
- *
- * If |transport_params_version| == NGTCP2_TRANSPORT_PARAMS_VERSION,
- * no conversion is made, and |src| is returned.  Otherwise, first
- * |dest| is initialized via ngtcp2_transport_params_default, and then
- * all valid fields in |src| are copied into |dest|.  Finally, |dest|
- * is returned.
+ * |dest| is unused and exists only for the versioned constructor call
+ * path.
  */
 const ngtcp2_transport_params *
 ngtcp2_transport_params_convert_to_latest(ngtcp2_transport_params *dest,
                                           int transport_params_version,
                                           const ngtcp2_transport_params *src);
-
-/*
- * ngtcp2_transport_params_convert_to_old converts |src| of the latest
- * version to |dest| of version |transport_params_version|.
- *
- * |transport_params_version| must not be the latest version
- *  NGTCP2_TRANSPORT_PARAMS_VERSION.
- *
- * |dest| points to the older version, and it may have fewer fields.
- * Accessing those fields causes undefined behavior.
- *
- * This function copies all valid fields in version
- * |transport_params_version| from |src| to |dest|.
- */
-void ngtcp2_transport_params_convert_to_old(int transport_params_version,
-                                            ngtcp2_transport_params *dest,
-                                            const ngtcp2_transport_params *src);
 
 #endif /* !defined(NGTCP2_TRANSPORT_PARAMS_H) */

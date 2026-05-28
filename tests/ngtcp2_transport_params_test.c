@@ -37,7 +37,6 @@ static const MunitTest tests[] = {
   munit_void_test(test_ngtcp2_transport_params_decode),
   munit_void_test(test_ngtcp2_transport_params_decode_new),
   munit_void_test(test_ngtcp2_transport_params_convert_to_latest),
-  munit_void_test(test_ngtcp2_transport_params_convert_to_old),
   munit_test_end(),
 };
 
@@ -467,9 +466,8 @@ void test_ngtcp2_transport_params_decode_new(void) {
 }
 
 void test_ngtcp2_transport_params_convert_to_latest(void) {
-  ngtcp2_transport_params *src, srcbuf, paramsbuf;
+  ngtcp2_transport_params src, paramsbuf;
   const ngtcp2_transport_params *dest;
-  size_t v1len;
   uint8_t available_versions[sizeof(uint32_t) * 3];
   size_t i;
 
@@ -477,23 +475,22 @@ void test_ngtcp2_transport_params_convert_to_latest(void) {
     ngtcp2_put_uint32be(&available_versions[i], (uint32_t)(0xFF000000U + i));
   }
 
-  ngtcp2_transport_params_default_versioned(NGTCP2_TRANSPORT_PARAMS_V1,
-                                            &srcbuf);
+  ngtcp2_transport_params_default_versioned(NGTCP2_TRANSPORT_PARAMS_VERSION,
+                                            &src);
 
-  srcbuf.initial_max_stream_data_bidi_local = 1000000007;
-  srcbuf.initial_max_stream_data_bidi_remote = 961748941;
-  srcbuf.initial_max_stream_data_uni = 982451653;
-  srcbuf.initial_max_data = 1000000009;
-  srcbuf.initial_max_streams_bidi = 908;
-  srcbuf.initial_max_streams_uni = 16383;
-  srcbuf.max_idle_timeout = 16363 * NGTCP2_MILLISECONDS;
-  srcbuf.max_udp_payload_size = 1200;
-  srcbuf.stateless_reset_token_present = 1;
-  memset(srcbuf.stateless_reset_token, 0xF1,
-         sizeof(srcbuf.stateless_reset_token));
-  srcbuf.ack_delay_exponent = 20;
-  srcbuf.preferred_addr_present = 1;
-  srcbuf.preferred_addr = (ngtcp2_preferred_addr){
+  src.initial_max_stream_data_bidi_local = 1000000007;
+  src.initial_max_stream_data_bidi_remote = 961748941;
+  src.initial_max_stream_data_uni = 982451653;
+  src.initial_max_data = 1000000009;
+  src.initial_max_streams_bidi = 908;
+  src.initial_max_streams_uni = 16383;
+  src.max_idle_timeout = 16363 * NGTCP2_MILLISECONDS;
+  src.max_udp_payload_size = 1200;
+  src.stateless_reset_token_present = 1;
+  memset(src.stateless_reset_token, 0xF1, sizeof(src.stateless_reset_token));
+  src.ack_delay_exponent = 20;
+  src.preferred_addr_present = 1;
+  src.preferred_addr = (ngtcp2_preferred_addr){
     .cid = make_scid(),
     .ipv6 =
       {
@@ -504,82 +501,68 @@ void test_ngtcp2_transport_params_convert_to_latest(void) {
     .ipv6_present = 1,
     .stateless_reset_token = raw_paddr_stateless_reset_token(),
   };
-  srcbuf.disable_active_migration = 1;
-  srcbuf.max_ack_delay = 63 * NGTCP2_MILLISECONDS;
-  srcbuf.retry_scid_present = 1;
-  srcbuf.retry_scid = (ngtcp2_cid)make_rcid();
-  srcbuf.original_dcid = (ngtcp2_cid)make_dcid();
-  srcbuf.initial_scid = (ngtcp2_cid)make_scid();
-  srcbuf.active_connection_id_limit = 1073741824;
-  srcbuf.max_datagram_frame_size = 63;
-  srcbuf.grease_quic_bit = 1;
-  srcbuf.version_info.chosen_version = NGTCP2_PROTO_VER_V1;
-  srcbuf.version_info.available_versions = available_versions;
-  srcbuf.version_info.available_versionslen =
-    ngtcp2_arraylen(available_versions);
-  srcbuf.version_info_present = 1;
-
-  v1len = sizeof(srcbuf);
-
-  src = malloc(v1len);
-
-  memcpy(src, &srcbuf, v1len);
+  src.disable_active_migration = 1;
+  src.max_ack_delay = 63 * NGTCP2_MILLISECONDS;
+  src.retry_scid_present = 1;
+  src.retry_scid = (ngtcp2_cid)make_rcid();
+  src.original_dcid = (ngtcp2_cid)make_dcid();
+  src.initial_scid = (ngtcp2_cid)make_scid();
+  src.active_connection_id_limit = 1073741824;
+  src.max_datagram_frame_size = 63;
+  src.grease_quic_bit = 1;
+  src.version_info.chosen_version = NGTCP2_PROTO_VER_V1;
+  src.version_info.available_versions = available_versions;
+  src.version_info.available_versionslen = ngtcp2_arraylen(available_versions);
+  src.version_info_present = 1;
 
   dest = ngtcp2_transport_params_convert_to_latest(
-    &paramsbuf, NGTCP2_TRANSPORT_PARAMS_V1, src);
+    &paramsbuf, NGTCP2_TRANSPORT_PARAMS_VERSION, &src);
 
-  assert_ptr_equal(src, dest);
-  assert_uint64(srcbuf.initial_max_stream_data_bidi_local, ==,
+  assert_ptr_equal(&src, dest);
+  assert_uint64(src.initial_max_stream_data_bidi_local, ==,
                 dest->initial_max_stream_data_bidi_local);
-  assert_uint64(srcbuf.initial_max_stream_data_bidi_remote, ==,
+  assert_uint64(src.initial_max_stream_data_bidi_remote, ==,
                 dest->initial_max_stream_data_bidi_remote);
-  assert_uint64(srcbuf.initial_max_stream_data_uni, ==,
+  assert_uint64(src.initial_max_stream_data_uni, ==,
                 dest->initial_max_stream_data_uni);
-  assert_uint64(srcbuf.initial_max_data, ==, dest->initial_max_data);
-  assert_uint64(srcbuf.initial_max_streams_bidi, ==,
+  assert_uint64(src.initial_max_data, ==, dest->initial_max_data);
+  assert_uint64(src.initial_max_streams_bidi, ==,
                 dest->initial_max_streams_bidi);
-  assert_uint64(srcbuf.initial_max_streams_uni, ==,
-                dest->initial_max_streams_uni);
-  assert_uint64(srcbuf.max_idle_timeout, ==, dest->max_idle_timeout);
-  assert_uint64(srcbuf.max_udp_payload_size, ==, dest->max_udp_payload_size);
-  assert_memory_equal(sizeof(srcbuf.stateless_reset_token),
-                      srcbuf.stateless_reset_token,
-                      dest->stateless_reset_token);
-  assert_uint64(srcbuf.ack_delay_exponent, ==, dest->ack_delay_exponent);
-  assert_uint8(srcbuf.preferred_addr_present, ==, dest->preferred_addr_present);
-  assert_memory_equal(sizeof(srcbuf.preferred_addr.ipv4),
-                      &srcbuf.preferred_addr.ipv4, &dest->preferred_addr.ipv4);
-  assert_uint8(srcbuf.preferred_addr.ipv4_present, ==,
+  assert_uint64(src.initial_max_streams_uni, ==, dest->initial_max_streams_uni);
+  assert_uint64(src.max_idle_timeout, ==, dest->max_idle_timeout);
+  assert_uint64(src.max_udp_payload_size, ==, dest->max_udp_payload_size);
+  assert_memory_equal(sizeof(src.stateless_reset_token),
+                      src.stateless_reset_token, dest->stateless_reset_token);
+  assert_uint64(src.ack_delay_exponent, ==, dest->ack_delay_exponent);
+  assert_uint8(src.preferred_addr_present, ==, dest->preferred_addr_present);
+  assert_memory_equal(sizeof(src.preferred_addr.ipv4), &src.preferred_addr.ipv4,
+                      &dest->preferred_addr.ipv4);
+  assert_uint8(src.preferred_addr.ipv4_present, ==,
                dest->preferred_addr.ipv4_present);
-  assert_memory_equal(sizeof(srcbuf.preferred_addr.ipv6),
-                      &srcbuf.preferred_addr.ipv6, &dest->preferred_addr.ipv6);
-  assert_uint8(srcbuf.preferred_addr.ipv6_present, ==,
+  assert_memory_equal(sizeof(src.preferred_addr.ipv6), &src.preferred_addr.ipv6,
+                      &dest->preferred_addr.ipv6);
+  assert_uint8(src.preferred_addr.ipv6_present, ==,
                dest->preferred_addr.ipv6_present);
   assert_true(
-    ngtcp2_cid_eq(&srcbuf.preferred_addr.cid, &dest->preferred_addr.cid));
-  assert_memory_equal(sizeof(srcbuf.preferred_addr.stateless_reset_token),
-                      srcbuf.preferred_addr.stateless_reset_token,
+    ngtcp2_cid_eq(&src.preferred_addr.cid, &dest->preferred_addr.cid));
+  assert_memory_equal(sizeof(src.preferred_addr.stateless_reset_token),
+                      src.preferred_addr.stateless_reset_token,
                       dest->preferred_addr.stateless_reset_token);
-  assert_uint8(srcbuf.disable_active_migration, ==,
+  assert_uint8(src.disable_active_migration, ==,
                dest->disable_active_migration);
-  assert_uint64(srcbuf.max_ack_delay, ==, dest->max_ack_delay);
-  assert_uint8(srcbuf.retry_scid_present, ==, dest->retry_scid_present);
-  assert_true(ngtcp2_cid_eq(&srcbuf.retry_scid, &dest->retry_scid));
-  assert_true(ngtcp2_cid_eq(&srcbuf.initial_scid, &dest->initial_scid));
-  assert_true(ngtcp2_cid_eq(&srcbuf.original_dcid, &dest->original_dcid));
-  assert_uint64(srcbuf.active_connection_id_limit, ==,
+  assert_uint64(src.max_ack_delay, ==, dest->max_ack_delay);
+  assert_uint8(src.retry_scid_present, ==, dest->retry_scid_present);
+  assert_true(ngtcp2_cid_eq(&src.retry_scid, &dest->retry_scid));
+  assert_true(ngtcp2_cid_eq(&src.initial_scid, &dest->initial_scid));
+  assert_true(ngtcp2_cid_eq(&src.original_dcid, &dest->original_dcid));
+  assert_uint64(src.active_connection_id_limit, ==,
                 dest->active_connection_id_limit);
-  assert_uint64(srcbuf.max_datagram_frame_size, ==,
-                dest->max_datagram_frame_size);
-  assert_uint8(srcbuf.grease_quic_bit, ==, dest->grease_quic_bit);
-  assert_uint8(srcbuf.version_info_present, ==, dest->version_info_present);
-  assert_uint32(srcbuf.version_info.chosen_version, ==,
+  assert_uint64(src.max_datagram_frame_size, ==, dest->max_datagram_frame_size);
+  assert_uint8(src.grease_quic_bit, ==, dest->grease_quic_bit);
+  assert_uint8(src.version_info_present, ==, dest->version_info_present);
+  assert_uint32(src.version_info.chosen_version, ==,
                 dest->version_info.chosen_version);
-  assert_memory_equal(srcbuf.version_info.available_versionslen,
-                      srcbuf.version_info.available_versions,
+  assert_memory_equal(src.version_info.available_versionslen,
+                      src.version_info.available_versions,
                       dest->version_info.available_versions);
-
-  free(src);
 }
-
-void test_ngtcp2_transport_params_convert_to_old(void) {}

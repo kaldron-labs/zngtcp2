@@ -1615,8 +1615,7 @@ typedef struct ngtcp2_version_info {
   size_t available_versionslen;
 } ngtcp2_version_info;
 
-#define NGTCP2_TRANSPORT_PARAMS_V1 1
-#define NGTCP2_TRANSPORT_PARAMS_VERSION NGTCP2_TRANSPORT_PARAMS_V1
+#define NGTCP2_TRANSPORT_PARAMS_VERSION 1
 
 /**
  * @struct
