@@ -351,7 +351,7 @@ static void log_fr_crypto(ngtcp2_log *log, const ngtcp2_pkt_hd *hd,
                           const ngtcp2_stream *fr, const char *dir) {
   ngtcp2_log_infof_raw(log, NGTCP2_LOG_EVENT_FRM, NGTCP2_LOG_PKT(dir, hd),
                        " CRYPTO(0x", hex(fr->type), ") offset=", fr->offset,
-                       " len=", ngtcp2_vec_len(fr->data, fr->datacnt));
+                       " len=", stream_datalen(fr));
 }
 
 #define NGTCP2_LOG_MAX_TOKENLEN 64

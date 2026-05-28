@@ -331,7 +331,8 @@ static ngtcp2_ssize rtb_reclaim_frame(ngtcp2_rtb *rtb, uint8_t flags,
       }
 
       rv = ngtcp2_frame_chain_stream_datacnt_objalloc_new(
-        &nfrc, fr->stream.datacnt, rtb->frc_objalloc, rtb->mem);
+        &nfrc, fr->stream.txbuf_present ? 0 : fr->stream.datacnt,
+        rtb->frc_objalloc, rtb->mem);
       if (rv != 0) {
         return rv;
       }
@@ -341,9 +342,18 @@ static ngtcp2_ssize rtb_reclaim_frame(ngtcp2_rtb *rtb, uint8_t flags,
       nfrc->fr.stream.fin = 0;
       nfrc->fr.stream.stream_id = 0;
       nfrc->fr.stream.offset = fr->stream.offset;
-      nfrc->fr.stream.datacnt = fr->stream.datacnt;
-      ngtcp2_vec_copy(nfrc->fr.stream.data, fr->stream.data,
-                      fr->stream.datacnt);
+      if (fr->stream.txbuf_present) {
+        nfrc->fr.stream.datacnt = 0;
+        rv = ngtcp2_stream_copy_txbuf(&nfrc->fr.stream, &fr->stream);
+        if (rv != 0) {
+          ngtcp2_frame_chain_objalloc_del(nfrc, rtb->frc_objalloc, rtb->mem);
+          return rv;
+        }
+      } else {
+        nfrc->fr.stream.datacnt = fr->stream.datacnt;
+        ngtcp2_vec_copy(nfrc->fr.stream.data, fr->stream.data,
+                        fr->stream.datacnt);
+      }
 
       rv = ngtcp2_strm_streamfrq_push(&pktns->crypto.strm, nfrc);
       if (rv != 0) {

@@ -27,6 +27,7 @@
 #endif /* defined(HAVE_CONFIG_H) */
 
 #include <assert.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <zngtcp2/ngtcp2_crypto.h>
@@ -43,6 +44,51 @@ static void *(*zpicotls_default_buffer_alloc)(ptls_buffer_t *buf,
                                               uint8_t align_bits, int tx);
 static void (*zpicotls_default_buffer_free)(ptls_buffer_t *buf, int tx);
 static int zpicotls_buffer_hooks_installed;
+
+#define NGTCP2_ZPICOTLS_CRYPTO_TX_BUFLEN (64 * 1024)
+
+typedef struct zpicotls_crypto_buf {
+  uint8_t *base;
+  size_t capacity;
+  size_t refcount;
+} zpicotls_crypto_buf;
+
+static int zpicotls_crypto_buf_retain(void *owner) {
+  zpicotls_crypto_buf *buf = owner;
+
+  ++buf->refcount;
+
+  return 0;
+}
+
+static void zpicotls_crypto_buf_release(void *owner) {
+  zpicotls_crypto_buf *buf = owner;
+
+  assert(buf->refcount);
+
+  if (--buf->refcount) {
+    return;
+  }
+
+  ptls_clear_memory(buf->base, buf->capacity);
+  free(buf);
+}
+
+static zpicotls_crypto_buf *zpicotls_crypto_buf_new(size_t capacity) {
+  zpicotls_crypto_buf *buf = malloc(sizeof(*buf) + capacity);
+
+  if (buf == NULL) {
+    return NULL;
+  }
+
+  *buf = (zpicotls_crypto_buf){
+    .base = (uint8_t *)(void *)(buf + 1),
+    .capacity = capacity,
+    .refcount = 1,
+  };
+
+  return buf;
+}
 
 static void *zpicotls_buffer_alloc(ptls_buffer_t *buf, size_t capacity,
                                    uint8_t align_bits, int tx) {
@@ -664,6 +710,7 @@ int ngtcp2_crypto_read_write_crypto_data(
   ngtcp2_conn *conn, ngtcp2_encryption_level encryption_level,
   const ngtcp2_buf *data) {
   ngtcp2_crypto_zpicotls_ctx *cptls = ngtcp2_conn_get_tls_native_handle2(conn);
+  zpicotls_crypto_buf *sendbuf_owner;
   ptls_buffer_t sendbuf;
   size_t epoch_offsets[5] = {0};
   size_t epoch =
@@ -680,12 +727,23 @@ int ngtcp2_crypto_read_write_crypto_data(
     return rv;
   }
 
-  ptls_buffer_init_tx(&sendbuf, (void *)"", 0);
+  sendbuf_owner = zpicotls_crypto_buf_new(NGTCP2_ZPICOTLS_CRYPTO_TX_BUFLEN);
+  if (sendbuf_owner == NULL) {
+    return NGTCP2_ERR_NOMEM;
+  }
+
+  ptls_buffer_init_tx(&sendbuf, sendbuf_owner->base, sendbuf_owner->capacity);
+  sendbuf.origin = sendbuf_owner;
 
   assert(datalen == 0 || epoch == ptls_get_read_epoch(cptls->ptls));
 
   rv = ptls_handle_message(cptls->ptls, &sendbuf, epoch_offsets, epoch, datap,
                            datalen, &cptls->handshake_properties);
+  if (rv == PTLS_ERROR_NO_MEMORY) {
+    ngtcp2_conn_record_zpicotls_crypto_staging_copy(conn);
+    rv = NGTCP2_ERR_BUF_CONTRACT;
+    goto fin;
+  }
   if (rv != 0 && rv != PTLS_ERROR_IN_PROGRESS) {
     if (PTLS_ERROR_GET_CLASS(rv) == PTLS_ERROR_CLASS_SELF_ALERT) {
       ngtcp2_conn_set_tls_alert(conn, (uint8_t)PTLS_ERROR_TO_ALERT(rv));
@@ -715,7 +773,8 @@ int ngtcp2_crypto_read_write_crypto_data(
 
     ngtcp2_buf_init(&crypto_tx, sendbuf.base + epoch_offsets[i], epoch_datalen,
                     NGTCP2_BUF_ORIGIN_LIBRARY, NGTCP2_BUF_DIR_TX,
-                    NGTCP2_BUF_PURPOSE_CRYPTO_TX, NULL, NULL, NULL);
+                    NGTCP2_BUF_PURPOSE_CRYPTO_TX, sendbuf_owner,
+                    zpicotls_crypto_buf_retain, zpicotls_crypto_buf_release);
     crypto_tx.last = crypto_tx.end;
 
     if (ngtcp2_conn_submit_crypto_data(
@@ -732,7 +791,7 @@ int ngtcp2_crypto_read_write_crypto_data(
   rv = 0;
 
 fin:
-  ptls_buffer_dispose(&sendbuf);
+  zpicotls_crypto_buf_release(sendbuf_owner);
 
   return rv;
 }

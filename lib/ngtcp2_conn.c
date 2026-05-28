@@ -2762,8 +2762,16 @@ conn_crumble_initial_crypto(ngtcp2_conn *conn, ngtcp2_frame_chain **pfrc,
 
   assert(crypto_offset == (*pfrc)->fr.stream.offset);
 
-  ngtcp2_vec_copy(data, (*pfrc)->fr.stream.data, (*pfrc)->fr.stream.datacnt);
-  datacnt = (*pfrc)->fr.stream.datacnt;
+  if ((*pfrc)->fr.stream.txbuf_present) {
+    data[0] = (ngtcp2_vec){
+      .base = (*pfrc)->fr.stream.txbuf.pos,
+      .len = ngtcp2_buf_len(&(*pfrc)->fr.stream.txbuf),
+    };
+    datacnt = 1;
+  } else {
+    ngtcp2_vec_copy(data, (*pfrc)->fr.stream.data, (*pfrc)->fr.stream.datacnt);
+    datacnt = (*pfrc)->fr.stream.datacnt;
+  }
 
   offsets[0] = (*pfrc)->fr.stream.offset;
 
@@ -2771,7 +2779,8 @@ conn_crumble_initial_crypto(ngtcp2_conn *conn, ngtcp2_frame_chain **pfrc,
     offsets[i] = offsets[i - 1] + data[i - 1].len;
   }
 
-  if (datacnt < NGTCP2_MAX_STREAM_DATACNT &&
+  if (!(*pfrc)->fr.stream.txbuf_present &&
+      datacnt < NGTCP2_MAX_STREAM_DATACNT &&
       ngtcp2_pkt_find_server_name(&server_name, data) && server_name.len > 1) {
     if (ngtcp2_strm_streamfrq_empty(crypto_strm) ||
         ngtcp2_strm_streamfrq_unacked_offset(crypto_strm) == (uint64_t)-1) {
@@ -13887,6 +13896,11 @@ void ngtcp2_conn_reset_buf_stats(ngtcp2_conn *conn) {
   conn->buf_stats = (ngtcp2_conn_buf_stats){0};
 }
 
+void ngtcp2_conn_record_zpicotls_crypto_staging_copy(ngtcp2_conn *conn) {
+  ++conn->buf_stats.zpicotls_crypto_staging_copy;
+  ++conn->buf_stats.buf_contract_failure;
+}
+
 static void conn_get_loss_time_and_pktns(ngtcp2_conn *conn,
                                          ngtcp2_tstamp *ploss_time,
                                          ngtcp2_pktns **ppktns) {
@@ -14110,6 +14124,7 @@ int ngtcp2_conn_submit_crypto_data(ngtcp2_conn *conn,
   ngtcp2_frame_chain *frc;
   const uint8_t *datap;
   size_t datalen;
+  int retained;
   int rv;
 
   if (data == NULL) {
@@ -14146,13 +14161,18 @@ int ngtcp2_conn_submit_crypto_data(ngtcp2_conn *conn,
     return NGTCP2_ERR_INVALID_ARGUMENT;
   }
 
-  rv = conn_buffer_crypto_data(conn, &datap, pktns, datap, datalen);
-  if (rv != 0) {
-    return rv;
+  retained = data->origin != NGTCP2_BUF_ORIGIN_BORROWED && data->owner &&
+             data->retain && data->release;
+
+  if (!retained) {
+    rv = conn_buffer_crypto_data(conn, &datap, pktns, datap, datalen);
+    if (rv != 0) {
+      return rv;
+    }
   }
 
   rv = ngtcp2_frame_chain_stream_datacnt_objalloc_new(
-    &frc, 1, &conn->frc_objalloc, conn->mem);
+    &frc, retained ? 0 : 1, &conn->frc_objalloc, conn->mem);
   if (rv != 0) {
     return rv;
   }
@@ -14162,11 +14182,21 @@ int ngtcp2_conn_submit_crypto_data(ngtcp2_conn *conn,
   frc->fr.stream.fin = 0;
   frc->fr.stream.stream_id = 0;
   frc->fr.stream.offset = pktns->crypto.tx.offset;
-  frc->fr.stream.datacnt = 1;
-  frc->fr.stream.data[0] = (ngtcp2_vec){
-    .base = (uint8_t *)datap,
-    .len = datalen,
-  };
+  if (retained) {
+    frc->fr.stream.datacnt = 0;
+    rv = ngtcp2_stream_set_txbuf(&frc->fr.stream, data, &conn->buf_stats);
+    if (rv != 0) {
+      ngtcp2_frame_chain_objalloc_del(frc, &conn->frc_objalloc, conn->mem);
+      ++conn->buf_stats.buf_contract_failure;
+      return rv;
+    }
+  } else {
+    frc->fr.stream.datacnt = 1;
+    frc->fr.stream.data[0] = (ngtcp2_vec){
+      .base = (uint8_t *)datap,
+      .len = datalen,
+    };
+  }
 
   rv = ngtcp2_strm_streamfrq_push(&pktns->crypto.strm, frc);
   if (rv != 0) {

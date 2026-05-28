@@ -17277,6 +17277,8 @@ void test_ngtcp2_conn_submit_crypto_data(void) {
   ngtcp2_rtb_entry *ent;
   ngtcp2_frame_chain *frc;
   ngtcp2_conn_buf_stats stats;
+  buf_owner owner = {0};
+  uint8_t owned_crypto[32] = {0};
   int rv;
 
   /* Send CRYPTO in 1RTT packet */
@@ -17324,6 +17326,58 @@ void test_ngtcp2_conn_submit_crypto_data(void) {
                 ngtcp2_vec_len(frc->fr.stream.data, frc->fr.stream.datacnt));
 
   ngtcp2_conn_del(conn);
+
+  /* Retained CRYPTO data is queued without copying into a buf_chain. */
+  setup_default_server(&conn);
+
+  spktlen = ngtcp2_conn_write_pkt(conn, NULL, NULL, buf, sizeof(buf), 0);
+
+  assert_ptrdiff(0, <, spktlen);
+
+  ngtcp2_buf_init(&crypto_tx, owned_crypto, sizeof(owned_crypto),
+                  NGTCP2_BUF_ORIGIN_APPLICATION, NGTCP2_BUF_DIR_TX,
+                  NGTCP2_BUF_PURPOSE_CRYPTO_TX, &owner, retain_buf_owner,
+                  release_buf_owner);
+  crypto_tx.last = crypto_tx.end;
+
+  rv =
+    ngtcp2_conn_submit_crypto_data(conn, NGTCP2_ENCRYPTION_LEVEL_1RTT,
+                                   &crypto_tx);
+
+  assert_int(0, ==, rv);
+  assert_int(1, ==, owner.retaincnt);
+  assert_int(0, ==, owner.releasecnt);
+
+  frc = ngtcp2_strm_streamfrq_top(&conn->pktns.crypto.strm);
+
+  assert_uint64(NGTCP2_FRAME_CRYPTO, ==, frc->fr.hd.type);
+  assert_size(0, ==, frc->fr.stream.datacnt);
+  assert_true(frc->fr.stream.txbuf_present);
+  assert_ptr_equal(owned_crypto, frc->fr.stream.txbuf.pos);
+  assert_size(sizeof(owned_crypto), ==, ngtcp2_buf_len(&frc->fr.stream.txbuf));
+
+  ngtcp2_conn_get_buf_stats(conn, &stats);
+
+  assert_uint64(1, ==, stats.app_retain);
+
+  spktlen = ngtcp2_conn_write_pkt(conn, NULL, NULL, buf, sizeof(buf), 0);
+
+  assert_ptrdiff(0, <, spktlen);
+
+  it = ngtcp2_rtb_head(&conn->pktns.rtb);
+
+  assert_false(ngtcp2_ksl_it_end(&it));
+
+  ent = ngtcp2_ksl_it_get(&it);
+  frc = ent->frc;
+
+  assert_uint64(NGTCP2_FRAME_CRYPTO, ==, frc->fr.hd.type);
+  assert_size(0, ==, frc->fr.stream.datacnt);
+  assert_true(frc->fr.stream.txbuf_present);
+
+  ngtcp2_conn_del(conn);
+
+  assert_int(owner.retaincnt, ==, owner.releasecnt);
 }
 
 void test_ngtcp2_conn_submit_new_token(void) {

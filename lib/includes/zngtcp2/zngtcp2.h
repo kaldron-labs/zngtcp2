@@ -5502,6 +5502,9 @@ NGTCP2_EXTERN void ngtcp2_conn_get_buf_stats(ngtcp2_conn *conn,
 
 NGTCP2_EXTERN void ngtcp2_conn_reset_buf_stats(ngtcp2_conn *conn);
 
+NGTCP2_EXTERN void
+ngtcp2_conn_record_zpicotls_crypto_staging_copy(ngtcp2_conn *conn);
+
 /**
  * @function
  *

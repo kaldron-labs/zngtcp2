@@ -396,7 +396,7 @@ static uint8_t *write_crypto_frame(uint8_t *p, const ngtcp2_stream *fr) {
   p = write_verbatim(p, "{\"frame_type\":\"crypto\",");
   p = write_pair_number(p, "offset", fr->offset);
   *p++ = ',';
-  p = write_pair_number(p, "length", ngtcp2_vec_len(fr->data, fr->datacnt));
+  p = write_pair_number(p, "length", stream_datalen(fr));
   *p++ = '}';
 
   return p;
