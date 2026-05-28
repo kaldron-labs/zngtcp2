@@ -85,8 +85,8 @@ extern "C" {
  * Handshake and 1-RTT packets.  If it is unable to obtain necessary
  * data from |tls_native_handle|, this function returns NULL.
  *
- * If libzngtcp2_crypto_quictls is linked, |tls_native_handle| must be
- * a pointer to SSL object.
+ * With the zpicotls provider, |tls_native_handle| must be a pointer to
+ * :type:`ngtcp2_crypto_zpicotls_ctx`.
  */
 NGTCP2_EXTERN ngtcp2_crypto_ctx *ngtcp2_crypto_ctx_tls(ngtcp2_crypto_ctx *ctx,
                                                        void *tls_native_handle);
@@ -100,8 +100,8 @@ NGTCP2_EXTERN ngtcp2_crypto_ctx *ngtcp2_crypto_ctx_tls(ngtcp2_crypto_ctx *ctx,
  * packets.  If it is unable to obtain necessary data from
  * |tls_native_handle|, this function returns NULL.
  *
- * If libzngtcp2_crypto_quictls is linked, |tls_native_handle| must be
- * a pointer to SSL object.
+ * With the zpicotls provider, |tls_native_handle| must be a pointer to
+ * :type:`ngtcp2_crypto_zpicotls_ctx`.
  */
 NGTCP2_EXTERN ngtcp2_crypto_ctx *
 ngtcp2_crypto_ctx_tls_early(ngtcp2_crypto_ctx *ctx, void *tls_native_handle);
@@ -112,14 +112,8 @@ ngtcp2_crypto_ctx_tls_early(ngtcp2_crypto_ctx *ctx, void *tls_native_handle);
  * `ngtcp2_crypto_md_init` initializes |md| with the provided
  * |md_native_handle| which is an underlying message digest object.
  *
- * If libzngtcp2_crypto_quictls is linked, |md_native_handle| must be a
- * pointer to EVP_MD.
- *
- * If libzngtcp2_crypto_gnutls is linked, |md_native_handle| must be
- * gnutls_mac_algorithm_t casted to ``void *``.
- *
- * If libzngtcp2_crypto_boringssl is linked, |md_native_handle| must be
- * a pointer to EVP_MD.
+ * With the zpicotls provider, |md_native_handle| must identify the negotiated
+ * zpicotls message digest.
  */
 NGTCP2_EXTERN ngtcp2_crypto_md *ngtcp2_crypto_md_init(ngtcp2_crypto_md *md,
                                                       void *md_native_handle);
@@ -437,21 +431,14 @@ ngtcp2_crypto_read_write_crypto_data(ngtcp2_conn *conn,
  * `ngtcp2_crypto_read_write_crypto_data`.  It can be directly passed
  * to :member:`ngtcp2_callbacks.recv_crypto_data` field.
  *
- * For quictls and OpenSSL, the following error codes are treated as
- * success:
- *
- * - -10001 (e.g., :macro:`NGTCP2_CRYPTO_QUICTLS_ERR_TLS_WANT_X509_LOOKUP`)
- * - -10002 (e.g., :macro:`NGTCP2_CRYPTO_QUICTLS_ERR_TLS_WANT_CLIENT_HELLO_CB`)
- *
  * To continue the interrupted handshake, call
  * `ngtcp2_conn_continue_handshake`.
  *
  * See :ref:`tls-integration` for more details.
  *
  * If this function is used, the TLS implementation specific error
- * codes described in `ngtcp2_crypto_read_write_crypto_data` are
- * treated as if it returns -1 except for those that are listed above.
- * Do not use this function if an application wishes to use the TLS
+ * codes described in `ngtcp2_crypto_read_write_crypto_data` are treated as if
+ * it returns -1. Do not use this function if an application wishes to use TLS
  * implementation specific error codes.
  */
 NGTCP2_EXTERN int ngtcp2_crypto_recv_crypto_data_cb(
@@ -923,8 +910,8 @@ typedef ngtcp2_conn *(*ngtcp2_crypto_get_conn)(
  * @struct
  *
  * :type:`ngtcp2_crypto_conn_ref` is a structure to get a pointer to
- * :type:`ngtcp2_conn`.  It is meant to be set to TLS native handle as
- * an application specific data (e.g. SSL_set_app_data in quictls).
+ * :type:`ngtcp2_conn`.  It is meant to be set to the zpicotls native handle as
+ * application specific data.
  */
 typedef struct ngtcp2_crypto_conn_ref {
   /**

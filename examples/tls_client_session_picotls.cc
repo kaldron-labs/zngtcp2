@@ -91,9 +91,9 @@ TLSClientSession::init(bool &early_data_enabled, TLSClientContext &tls_ctx,
     },
   };
 
-  if (ngtcp2_crypto_picotls_configure_client_session(&cptls_, conn) != 0) {
+  if (ngtcp2_crypto_zpicotls_configure_client_session(&cptls_, conn) != 0) {
     std::println(stderr,
-                 "ngtcp2_crypto_picotls_configure_client_session failed");
+                 "ngtcp2_crypto_zpicotls_configure_client_session failed");
     return std::unexpected{Error::CRYPTO};
   }
 

@@ -24,10 +24,10 @@
  */
 #include "tls_session_base_picotls.h"
 
-TLSSessionBase::TLSSessionBase() { ngtcp2_crypto_picotls_ctx_init(&cptls_); }
+TLSSessionBase::TLSSessionBase() { ngtcp2_crypto_zpicotls_ctx_init(&cptls_); }
 
 TLSSessionBase::~TLSSessionBase() {
-  ngtcp2_crypto_picotls_deconfigure_session(&cptls_);
+  ngtcp2_crypto_zpicotls_deconfigure_session(&cptls_);
 
   delete[] cptls_.handshake_properties.additional_extensions;
 
@@ -36,7 +36,7 @@ TLSSessionBase::~TLSSessionBase() {
   }
 }
 
-ngtcp2_crypto_picotls_ctx *TLSSessionBase::get_native_handle() {
+ngtcp2_crypto_zpicotls_ctx *TLSSessionBase::get_native_handle() {
   return &cptls_;
 }
 

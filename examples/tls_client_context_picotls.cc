@@ -113,9 +113,9 @@ ptls_context_t *TLSClientContext::get_native_handle() { return &ctx_; }
 
 std::expected<void, Error> TLSClientContext::init(const char *private_key_file,
                                                   const char *cert_file) {
-  if (ngtcp2_crypto_picotls_configure_client_context(&ctx_) != 0) {
+  if (ngtcp2_crypto_zpicotls_configure_client_context(&ctx_) != 0) {
     std::println(stderr,
-                 "ngtcp2_crypto_picotls_configure_client_context failed");
+                 "ngtcp2_crypto_zpicotls_configure_client_context failed");
     return std::unexpected{Error::CRYPTO};
   }
 

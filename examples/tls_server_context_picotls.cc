@@ -321,9 +321,9 @@ std::expected<void, Error> TLSServerContext::init(const char *private_key_file,
     break;
   }
 
-  if (ngtcp2_crypto_picotls_configure_server_context(&ctx_) != 0) {
+  if (ngtcp2_crypto_zpicotls_configure_server_context(&ctx_) != 0) {
     std::println(stderr,
-                 "ngtcp2_crypto_picotls_configure_server_context failed");
+                 "ngtcp2_crypto_zpicotls_configure_server_context failed");
     return std::unexpected{Error::CRYPTO};
   }
 

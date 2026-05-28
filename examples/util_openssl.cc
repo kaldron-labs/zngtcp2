@@ -44,11 +44,7 @@ namespace ngtcp2 {
 namespace util {
 
 std::expected<void, Error> generate_secure_random(std::span<uint8_t> data) {
-#ifdef WITH_EXAMPLE_BORINGSSL
-  using size_type = size_t;
-#else  // !defined(WITH_EXAMPLE_BORINGSSL)
   using size_type = int;
-#endif // !defined(WITH_EXAMPLE_BORINGSSL)
 
   if (RAND_bytes(data.data(), static_cast<size_type>(data.size())) != 1) {
     return std::unexpected{Error::CRYPTO};
@@ -151,26 +147,11 @@ std::expected<void, Error> write_pem(const std::filesystem::path &path,
 }
 
 const char *crypto_default_ciphers() {
-#if defined(WITH_EXAMPLE_QUICTLS) || defined(WITH_EXAMPLE_OSSL)
-  return "TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_"
-         "SHA256"
-#  ifndef LIBRESSL_VERSION_NUMBER
-         ":TLS_AES_128_CCM_SHA256"
-#  endif // !defined(LIBRESSL_VERSION_NUMBER)
-    ;
-#else  // !(defined(WITH_EXAMPLE_QUICTLS) && defined(WITH_EXAMPLE_OSSL))
   return "";
-#endif // !(defined(WITH_EXAMPLE_QUICTLS) && defined(WITH_EXAMPLE_OSSL))
 }
 
 const char *crypto_default_groups() {
-  return "X25519:P-256:P-384:P-521"
-#if defined(WITH_EXAMPLE_BORINGSSL) || defined(WITH_EXAMPLE_OSSL) ||           \
-  defined(LIBRESSL_VERSION_NUMBER)
-         ":X25519MLKEM768"
-#endif // defined(WITH_EXAMPLE_BORINGSSL) || defined(WITH_EXAMPLE_OSSL) ||
-       // defined(LIBRESSL_VERSION_NUMBER)
-    ;
+  return "X25519:P-256:P-384:P-521";
 }
 
 } // namespace util

@@ -56,9 +56,10 @@ std::expected<void, Error> TLSServerSession::init(TLSServerContext &tls_ctx,
       },
     };
 
-  if (ngtcp2_crypto_picotls_configure_server_session(&cptls_) != 0) {
+  if (ngtcp2_crypto_zpicotls_configure_server_session(&cptls_,
+                                                      handler->conn()) != 0) {
     std::println(stderr,
-                 "ngtcp2_crypto_picotls_configure_server_session failed");
+                 "ngtcp2_crypto_zpicotls_configure_server_session failed");
     return std::unexpected{Error::CRYPTO};
   }
 

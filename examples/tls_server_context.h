@@ -29,28 +29,8 @@
 #  include <config.h>
 #endif // defined(HAVE_CONFIG_H)
 
-#ifdef WITH_EXAMPLE_QUICTLS
-#  include "tls_server_context_quictls.h"
-#endif // defined(WITH_EXAMPLE_QUICTLS)
-
-#ifdef WITH_EXAMPLE_GNUTLS
-#  include "tls_server_context_gnutls.h"
-#endif // defined(WITH_EXAMPLE_GNUTLS)
-
-#ifdef WITH_EXAMPLE_BORINGSSL
-#  include "tls_server_context_boringssl.h"
-#endif // defined(WITH_EXAMPLE_BORINGSSL)
-
 #ifdef WITH_EXAMPLE_PICOTLS
 #  include "tls_server_context_picotls.h"
 #endif // defined(WITH_EXAMPLE_PICOTLS)
-
-#ifdef WITH_EXAMPLE_WOLFSSL
-#  include "tls_server_context_wolfssl.h"
-#endif // defined(WITH_EXAMPLE_WOLFSSL)
-
-#ifdef WITH_EXAMPLE_OSSL
-#  include "tls_server_context_ossl.h"
-#endif // defined(WITH_EXAMPLE_OSSL)
 
 #endif // !defined(TLS_SERVER_CONTEXT_H)

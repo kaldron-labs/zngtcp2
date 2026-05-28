@@ -41,7 +41,7 @@ public:
   TLSSessionBase();
   ~TLSSessionBase();
 
-  ngtcp2_crypto_picotls_ctx *get_native_handle();
+  ngtcp2_crypto_zpicotls_ctx *get_native_handle();
 
   std::string get_cipher_name() const;
   std::string_view get_negotiated_group() const {
@@ -54,7 +54,7 @@ public:
   void enable_keylog() {}
 
 protected:
-  ngtcp2_crypto_picotls_ctx cptls_;
+  ngtcp2_crypto_zpicotls_ctx cptls_;
 };
 
 #endif // !defined(TLS_SESSION_BASE_PICOTLS_H)
