@@ -29,6 +29,7 @@
 #include <cassert>
 #include <cstring>
 #include <array>
+#include <memory>
 #include <vector>
 
 #ifdef __cplusplus
@@ -50,14 +51,51 @@ const uint8_t null_secret[32]{};
 const uint8_t null_iv[16]{};
 const uint8_t null_data[2048]{};
 
+struct CryptoTxOwner {
+  std::vector<uint8_t> data;
+  size_t retaincnt;
+  size_t releasecnt;
+};
+
+int crypto_tx_retain(void *owner) {
+  ++static_cast<CryptoTxOwner *>(owner)->retaincnt;
+
+  return 0;
+}
+
+void crypto_tx_release(void *owner) {
+  ++static_cast<CryptoTxOwner *>(owner)->releasecnt;
+}
+
+void assert_crypto_tx_owners_balanced(
+  const std::vector<std::unique_ptr<CryptoTxOwner>> &owners) {
+  for (const auto &owner : owners) {
+    assert(owner->retaincnt == owner->releasecnt);
+  }
+}
+
 int submit_crypto_data(ngtcp2_conn *conn,
                        ngtcp2_encryption_level encryption_level,
+                       std::vector<std::unique_ptr<CryptoTxOwner>> &owners,
                        const uint8_t *data, size_t datalen) {
   ngtcp2_buf buf;
+  uint8_t empty = 0;
+  uint8_t *buf_data = &empty;
+  CryptoTxOwner *owner = nullptr;
 
-  ngtcp2_buf_init(&buf, const_cast<uint8_t *>(data), datalen,
-                  NGTCP2_BUF_ORIGIN_BORROWED, NGTCP2_BUF_DIR_TX,
-                  NGTCP2_BUF_PURPOSE_CRYPTO_TX, nullptr, nullptr, nullptr);
+  if (datalen) {
+    auto owner_storage = std::make_unique<CryptoTxOwner>();
+
+    owner_storage->data.assign(data, data + datalen);
+    owner = owner_storage.get();
+    buf_data = owner->data.data();
+    owners.push_back(std::move(owner_storage));
+  }
+
+  ngtcp2_buf_init(&buf, buf_data, datalen, NGTCP2_BUF_ORIGIN_LIBRARY,
+                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_CRYPTO_TX, owner,
+                  owner ? crypto_tx_retain : nullptr,
+                  owner ? crypto_tx_release : nullptr);
   buf.last = buf.end;
 
   return ngtcp2_conn_submit_crypto_data(conn, encryption_level, &buf);
@@ -67,6 +105,7 @@ int submit_crypto_data(ngtcp2_conn *conn,
 struct TLSState {
   bool keys_installed;
   bool handshake_completed;
+  std::vector<std::unique_ptr<CryptoTxOwner>> crypto_tx_owners;
 };
 
 namespace {
@@ -166,9 +205,10 @@ int recv_crypto_data(ngtcp2_conn *conn,
 
       ngtcp2_conn_set_remote_transport_params(conn, &remote_params);
 
-      submit_crypto_data(conn, NGTCP2_ENCRYPTION_LEVEL_INITIAL, null_data, 123);
-      submit_crypto_data(conn, NGTCP2_ENCRYPTION_LEVEL_HANDSHAKE, null_data,
-                         1999);
+      submit_crypto_data(conn, NGTCP2_ENCRYPTION_LEVEL_INITIAL,
+                         state->crypto_tx_owners, null_data, 123);
+      submit_crypto_data(conn, NGTCP2_ENCRYPTION_LEVEL_HANDSHAKE,
+                         state->crypto_tx_owners, null_data, 1999);
     }
 
     break;
@@ -459,6 +499,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
                                      pkt.size(), ccerr, ts);
 
   ngtcp2_conn_del(conn);
+
+  assert_crypto_tx_owners_balanced(state.crypto_tx_owners);
 
   return 0;
 }

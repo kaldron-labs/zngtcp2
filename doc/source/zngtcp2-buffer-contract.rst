@@ -30,6 +30,38 @@ If ownership escapes a call, zngtcp2 must retain the owner through the buffer
 callbacks and release it exactly once after the protocol no longer needs the
 bytes.
 
+Callback Signatures
+-------------------
+
+The fork replaces data-path callbacks in place.  Legacy raw-pointer callback
+compatibility is not a supported API goal.
+
+``recv_crypto_data`` and ``recv_stream_data`` receive ``ngtcp2_buf`` callback
+buffers.  Callback-visible receive buffers have receive direction and a purpose
+matching the delivered data, such as ``crypto_rx`` or ``stream_rx``.
+
+``ngtcp2_crypto_ops`` also uses buffer signatures.  Packet protection receives
+``ngtcp2_buf`` AAD and nonce arguments.  Header-protection fallback receives
+``ngtcp2_buf`` sample and destination mask buffers.  Retry protection receives
+``ngtcp2_buf`` plaintext, nonce, and AAD buffers.  Implementations must not
+stage raw-pointer compatibility shims that hide data-path copies.
+
+CRYPTO Transmit
+---------------
+
+``ngtcp2_conn_submit_crypto_data`` accepts ``crypto_tx`` buffers.  If a
+non-borrowed buffer has retain/release owner callbacks, zngtcp2 retains the
+owner and queues the referenced range directly.  Borrowed or ownerless buffers
+take the internal copy path and do not satisfy the target retained-provider
+invariant.
+
+zpicotls writes TLS handshake output into a pre-provisioned, provider-owned
+``crypto_tx`` buffer.  Each QUIC encryption-level span submitted from that
+buffer carries the same retained owner.  zpicotls-origin ``ptls_buffer_t``
+growth is a forbidden staging copy on the target path; it records
+``zpicotls_crypto_staging_copy`` and fails with
+``NGTCP2_ERR_BUF_CONTRACT``.
+
 Error Behavior
 --------------
 
@@ -46,6 +78,7 @@ Copy Counters
 Forbidden target-path counters:
 
 * ``rx_pkt_copy``
+* ``decrypt_buf_use``
 * ``zpicotls_full_pkt_copy_attempt``
 * ``zpicotls_crypto_staging_copy``
 
@@ -59,9 +92,10 @@ Current Phase Checkpoints
 -------------------------
 
 The installed packet receive, stream transmit, ``recv_crypto_data``, and
-``recv_stream_data`` surfaces use buffer signatures.  Raw pointer and vectored
-STREAM send entry points are transitional internals used only while building
-library tests.
+``recv_stream_data`` surfaces use buffer signatures.  ``ngtcp2_crypto_ops``
+packet protection, Retry protection, and header-protection callbacks use
+``ngtcp2_buf`` for data-path byte ranges.  Raw pointer and vectored STREAM send
+entry points are transitional internals used only while building library tests.
 
 Public STREAM transmit with non-empty data requires application-origin
 ``stream_tx`` buffers with retain/release owner callbacks.  zngtcp2 retains the
@@ -69,6 +103,10 @@ consumed range in the STREAM frame chain and releases it after ACK accounting,
 retransmission cleanup, stream teardown, or connection deletion.  Reclaimed and
 split STREAM frame chains take their own owner retain so every frame-chain
 lifetime has a matching release.
+
+Public STREAM transmit emits one semantic non-PADDING STREAM frame for one
+stream in a stream-data packet.  PADDING remains valid only where QUIC requires
+it or where the packet API explicitly requests it.
 
 The target receive path decrypts header protection and payloads in place when
 zpicotls packet crypto ops are installed.  Packet receive/write entry points
@@ -80,6 +118,11 @@ the caller-owned ``packet_tx`` buffer through ``ngtcp2_crypto_ops.encrypt_pkt``.
 Successful packet protection increments ``encrypt_inplace_success``; provider
 contract failures increment ``encrypt_inplace_failure`` and return
 ``NGTCP2_ERR_BUF_CONTRACT``.
+
+Provider CRYPTO transmit uses retained ``crypto_tx`` buffers.  zpicotls keeps
+handshake output in provider-owned storage and hands retained spans to the
+connection; queued CRYPTO frames release those spans when acknowledged,
+retransmitted and discarded, or deleted with the connection.
 
 The target public receive path exposes first STREAM frames and CRYPTO data as
 ``ngtcp2_buf`` callback buffers.  If the packet buffer has retain/release owner
@@ -108,7 +151,13 @@ Before rebasing on upstream ngtcp2:
 * verify installed headers stay under ``include/zngtcp2``;
 * verify pkg-config modules and installed libraries use ``libzngtcp2`` names;
 * verify zpicotls remains the only enabled provider build target;
+* verify ``ngtcp2_crypto_ops`` signatures remain ``ngtcp2_buf`` based for AAD,
+  nonce, HP sample/mask, and Retry inputs;
+* verify retained ``crypto_tx`` submission is still used for zpicotls handshake
+  output and retransmission;
 * run protocol tests and check buffer counters for forbidden target-path copies;
+* run packet and reorder fuzzers with receive/transmit buffer entry points and
+  retain/release balance assertions;
 * rerun public installed-header smoke tests for hidden raw STREAM vector APIs;
 * rerun zpicotls provider compile and packet crypto alias tests.
 

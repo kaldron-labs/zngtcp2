@@ -11,5 +11,5 @@ FUZZERS=(
 for fuzzer in "${FUZZERS[@]}"; do
     $CXX $CXXFLAGS -std=c++17 -Ilib/includes -Ilib -I. -DHAVE_CONFIG_H \
          fuzz/${fuzzer}.cc -o $OUT/${fuzzer} \
-         $LIB_FUZZING_ENGINE lib/.libs/libngtcp2.a
+         $LIB_FUZZING_ENGINE lib/.libs/libzngtcp2.a
 done

@@ -29,6 +29,8 @@
 #include <cassert>
 #include <cstring>
 #include <array>
+#include <memory>
+#include <vector>
 
 #include <fuzzer/FuzzedDataProvider.h>
 
@@ -49,6 +51,31 @@ constexpr size_t NGTCP2_FAKE_AEAD_OVERHEAD = NGTCP2_INITIAL_AEAD_OVERHEAD;
 
 const uint8_t null_secret[32]{};
 const uint8_t null_iv[16]{};
+} // namespace
+
+namespace {
+struct TxBufOwner {
+  std::vector<uint8_t> data;
+  size_t retaincnt;
+  size_t releasecnt;
+};
+
+int txbuf_retain(void *owner) {
+  ++static_cast<TxBufOwner *>(owner)->retaincnt;
+
+  return 0;
+}
+
+void txbuf_release(void *owner) {
+  ++static_cast<TxBufOwner *>(owner)->releasecnt;
+}
+
+void assert_txbuf_owners_balanced(
+  const std::vector<std::unique_ptr<TxBufOwner>> &owners) {
+  for (const auto &owner : owners) {
+    assert(owner->retaincnt == owner->releasecnt);
+  }
+}
 } // namespace
 
 namespace {
@@ -773,13 +800,13 @@ ngtcp2_conn *setup_conn(FuzzedDataProvider &fuzzed_data_provider,
 
 namespace {
 int read_write(ngtcp2_conn *conn, FuzzedDataProvider &fuzzed_data_provider,
-               const ngtcp2_path *path, ngtcp2_tstamp &ts) {
+               const ngtcp2_path *path, ngtcp2_tstamp &ts,
+               std::vector<std::unique_ptr<TxBufOwner>> &txbuf_owners) {
   auto pi = ngtcp2_pkt_info{
     .ecn = NGTCP2_ECN_ECT_1,
   };
 
   std::array<uint8_t, 1500> pkt;
-  std::vector<std::vector<uint8_t>> chunks;
 
   while (fuzzed_data_provider.remaining_bytes() > 0) {
     ts = fuzzed_data_provider.ConsumeIntegralInRange<ngtcp2_tstamp>(
@@ -881,12 +908,24 @@ int read_write(ngtcp2_conn *conn, FuzzedDataProvider &fuzzed_data_provider,
                         nullptr);
 
         uint8_t empty_stream = 0;
-        auto stream_data = chunk.empty() ? &empty_stream : chunk.data();
+        uint8_t *stream_data = &empty_stream;
+        TxBufOwner *owner = nullptr;
+
+        if (!chunk.empty()) {
+          auto owner_storage = std::make_unique<TxBufOwner>();
+
+          owner_storage->data = chunk;
+          owner = owner_storage.get();
+          stream_data = owner->data.data();
+          txbuf_owners.push_back(std::move(owner_storage));
+        }
+
         ngtcp2_buf streambuf;
         ngtcp2_buf_init(&streambuf, stream_data, chunk.size(),
                         NGTCP2_BUF_ORIGIN_APPLICATION, NGTCP2_BUF_DIR_TX,
-                        NGTCP2_BUF_PURPOSE_STREAM_TX, nullptr, nullptr,
-                        nullptr);
+                        NGTCP2_BUF_PURPOSE_STREAM_TX, owner,
+                        owner ? txbuf_retain : nullptr,
+                        owner ? txbuf_release : nullptr);
         streambuf.last = streambuf.end;
 
         auto spktlen = ngtcp2_conn_write_stream_versioned(
@@ -895,10 +934,6 @@ int read_write(ngtcp2_conn *conn, FuzzedDataProvider &fuzzed_data_provider,
         if (spktlen < 0) {
           switch (spktlen) {
           case NGTCP2_ERR_WRITE_MORE:
-            if (ndatalen > 0) {
-              chunks.push_back(std::move(chunk));
-            }
-
             if (ndatalen >= 0) {
               chunk_len = fuzzed_data_provider.ConsumeIntegral<size_t>();
               chunk = fuzzed_data_provider.ConsumeBytes<uint8_t>(chunk_len);
@@ -912,10 +947,6 @@ int read_write(ngtcp2_conn *conn, FuzzedDataProvider &fuzzed_data_provider,
           }
 
           return -1;
-        }
-
-        if (ndatalen > 0) {
-          chunks.push_back(std::move(chunk));
         }
       } else {
         int accepted;
@@ -965,8 +996,9 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
   }
 
   ngtcp2_tstamp ts{};
+  std::vector<std::unique_ptr<TxBufOwner>> txbuf_owners;
 
-  read_write(conn, fuzzed_data_provider, &ps.path, ts);
+  read_write(conn, fuzzed_data_provider, &ps.path, ts, txbuf_owners);
 
   auto ccerr = ngtcp2_conn_get_ccerr2(conn);
 
@@ -976,6 +1008,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
                                      pkt.size(), ccerr, ts);
 
   ngtcp2_conn_del(conn);
+
+  assert_txbuf_owners_balanced(txbuf_owners);
 
   return 0;
 }

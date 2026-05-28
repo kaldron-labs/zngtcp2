@@ -2439,6 +2439,14 @@ typedef struct ngtcp2_crypto_cipher_ctx {
   void *native_handle;
 } ngtcp2_crypto_cipher_ctx;
 
+/**
+ * @struct
+ *
+ * :type:`ngtcp2_crypto_ops` is the packet-protection operation table.
+ * zngtcp2 packet data-path arguments are represented as :type:`ngtcp2_buf`:
+ * packet buffers are mutated in place, AAD and nonce are read from buffer
+ * ranges, and header-protection samples and masks use buffer ranges.
+ */
 typedef struct ngtcp2_crypto_ops {
   uint32_t version;
   int (*encrypt_pkt)(ngtcp2_buf *pkt, size_t payload_offset,
@@ -5502,6 +5510,13 @@ NGTCP2_EXTERN void ngtcp2_conn_get_buf_stats(ngtcp2_conn *conn,
 
 NGTCP2_EXTERN void ngtcp2_conn_reset_buf_stats(ngtcp2_conn *conn);
 
+/**
+ * @function
+ *
+ * `ngtcp2_conn_record_zpicotls_crypto_staging_copy` records a forbidden
+ * zpicotls CRYPTO output staging-copy attempt.  It is a provider accounting
+ * hook for :type:`ngtcp2_crypto_zpicotls_ctx`.
+ */
 NGTCP2_EXTERN void
 ngtcp2_conn_record_zpicotls_crypto_staging_copy(ngtcp2_conn *conn);
 
@@ -5513,8 +5528,10 @@ ngtcp2_conn_record_zpicotls_crypto_staging_copy(ngtcp2_conn *conn);
  * :enum:`NGTCP2_BUF_PURPOSE_CRYPTO_TX` buffer.
  * |encryption_level| specifies the encryption level of data.
  *
- * The library makes a copy of the bytes referenced by |data|.
- * Application can discard |data|.
+ * If |data| is non-borrowed and has retain/release owner callbacks, the
+ * library retains the owner and queues the referenced range.  Otherwise, the
+ * library copies the bytes referenced by |data| into its internal CRYPTO send
+ * buffer and the caller can discard |data| after this function returns.
  */
 NGTCP2_EXTERN int
 ngtcp2_conn_submit_crypto_data(ngtcp2_conn *conn,
