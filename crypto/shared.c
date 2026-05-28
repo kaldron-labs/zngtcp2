@@ -1577,9 +1577,9 @@ ngtcp2_ssize ngtcp2_crypto_verify_regular_token2(
 static int shared_encrypt_pkt(
   ngtcp2_buf *pkt, size_t payload_offset, size_t plaintextlen,
   const ngtcp2_crypto_aead *aead, const ngtcp2_crypto_aead_ctx *aead_ctx,
-  const uint8_t *aad, size_t aadlen, const uint8_t *nonce, size_t noncelen,
+  const ngtcp2_buf *aad, const ngtcp2_buf *nonce,
   const ngtcp2_crypto_cipher *hp, const ngtcp2_crypto_cipher_ctx *hp_ctx,
-  size_t hp_sample_offset, uint8_t *hp_mask, void *ctx) {
+  size_t hp_sample_offset, ngtcp2_buf *hp_mask, void *ctx) {
   uint8_t *payload;
   int rv;
 
@@ -1587,6 +1587,10 @@ static int shared_encrypt_pkt(
 
   if (ngtcp2_buf_validate(pkt, NGTCP2_BUF_DIR_TX,
                           NGTCP2_BUF_PURPOSE_PACKET_TX) != 0 ||
+      ngtcp2_buf_validate(aad, NGTCP2_BUF_DIR_TX,
+                          NGTCP2_BUF_PURPOSE_PACKET_TX) != 0 ||
+      ngtcp2_buf_validate(nonce, NGTCP2_BUF_DIR_TX,
+                          NGTCP2_BUF_PURPOSE_SCRATCH) != 0 ||
       pkt->origin != NGTCP2_BUF_ORIGIN_APPLICATION ||
       payload_offset > (size_t)(pkt->end - pkt->pos) ||
       plaintextlen > (size_t)(pkt->end - pkt->pos) - payload_offset ||
@@ -1598,7 +1602,8 @@ static int shared_encrypt_pkt(
   payload = pkt->pos + payload_offset;
 
   rv = ngtcp2_crypto_encrypt(payload, aead, aead_ctx, payload, plaintextlen,
-                             nonce, noncelen, aad, aadlen);
+                             nonce->pos, ngtcp2_buf_len(nonce), aad->pos,
+                             ngtcp2_buf_len(aad));
   if (rv != 0) {
     return rv;
   }
@@ -1610,21 +1615,31 @@ static int shared_encrypt_pkt(
   }
 
   if (hp == NULL || hp_ctx == NULL ||
+      ngtcp2_buf_validate(hp_mask, NGTCP2_BUF_DIR_TX,
+                          NGTCP2_BUF_PURPOSE_SCRATCH) != 0 ||
+      ngtcp2_buf_cap(hp_mask) < NGTCP2_HP_SAMPLELEN ||
       hp_sample_offset > (size_t)(pkt->last - pkt->pos) ||
       NGTCP2_HP_SAMPLELEN >
         (size_t)(pkt->last - pkt->pos) - hp_sample_offset) {
     return NGTCP2_ERR_BUF_CONTRACT;
   }
 
-  return ngtcp2_crypto_hp_mask(hp_mask, hp, hp_ctx,
-                               pkt->pos + hp_sample_offset);
+  rv = ngtcp2_crypto_hp_mask(hp_mask->pos, hp, hp_ctx,
+                             pkt->pos + hp_sample_offset);
+  if (rv != 0) {
+    return rv;
+  }
+
+  hp_mask->last = hp_mask->pos + NGTCP2_HP_SAMPLELEN;
+
+  return 0;
 }
 
 static int shared_encrypt_retry(ngtcp2_buf *dest,
                                 const ngtcp2_crypto_aead *aead,
                                 const ngtcp2_crypto_aead_ctx *aead_ctx,
                                 const ngtcp2_buf *plaintext,
-                                const uint8_t *nonce, size_t noncelen,
+                                const ngtcp2_buf *nonce,
                                 const ngtcp2_buf *aad, void *ctx) {
   size_t plaintextlen;
   int rv;
@@ -1634,6 +1649,8 @@ static int shared_encrypt_retry(ngtcp2_buf *dest,
   if (ngtcp2_buf_validate(dest, NGTCP2_BUF_DIR_TX,
                           NGTCP2_BUF_PURPOSE_SCRATCH) != 0 ||
       ngtcp2_buf_validate(plaintext, NGTCP2_BUF_DIR_TX,
+                          NGTCP2_BUF_PURPOSE_SCRATCH) != 0 ||
+      ngtcp2_buf_validate(nonce, NGTCP2_BUF_DIR_TX,
                           NGTCP2_BUF_PURPOSE_SCRATCH) != 0 ||
       ngtcp2_buf_validate(aad, NGTCP2_BUF_DIR_TX,
                           NGTCP2_BUF_PURPOSE_PACKET_TX) != 0) {
@@ -1648,8 +1665,8 @@ static int shared_encrypt_retry(ngtcp2_buf *dest,
   }
 
   rv = ngtcp2_crypto_encrypt(dest->pos, aead, aead_ctx, plaintext->pos,
-                             plaintextlen, nonce, noncelen, aad->pos,
-                             ngtcp2_buf_len(aad));
+                             plaintextlen, nonce->pos, ngtcp2_buf_len(nonce),
+                             aad->pos, ngtcp2_buf_len(aad));
   if (rv != 0) {
     return rv;
   }

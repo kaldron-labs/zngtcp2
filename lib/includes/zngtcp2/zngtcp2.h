@@ -2443,23 +2443,22 @@ typedef struct ngtcp2_crypto_ops {
   uint32_t version;
   int (*encrypt_pkt)(ngtcp2_buf *pkt, size_t payload_offset,
                      size_t plaintextlen, const ngtcp2_crypto_aead *aead,
-                     const ngtcp2_crypto_aead_ctx *aead_ctx, const uint8_t *aad,
-                     size_t aadlen, const uint8_t *nonce, size_t noncelen,
+                     const ngtcp2_crypto_aead_ctx *aead_ctx,
+                     const ngtcp2_buf *aad, const ngtcp2_buf *nonce,
                      const ngtcp2_crypto_cipher *hp,
                      const ngtcp2_crypto_cipher_ctx *hp_ctx,
-                     size_t hp_sample_offset, uint8_t *hp_mask, void *ctx);
+                     size_t hp_sample_offset, ngtcp2_buf *hp_mask, void *ctx);
   int (*decrypt_pkt)(ngtcp2_buf *pkt, size_t payload_offset,
                      size_t ciphertextlen, const ngtcp2_crypto_aead *aead,
-                     const ngtcp2_crypto_aead_ctx *aead_ctx, const uint8_t *aad,
-                     size_t aadlen, const uint8_t *nonce, size_t noncelen,
-                     void *ctx);
+                     const ngtcp2_crypto_aead_ctx *aead_ctx,
+                     const ngtcp2_buf *aad, const ngtcp2_buf *nonce, void *ctx);
   int (*hp_mask)(ngtcp2_buf *dest, const ngtcp2_crypto_cipher *hp,
                  const ngtcp2_crypto_cipher_ctx *hp_ctx,
                  const ngtcp2_buf *sample, void *ctx);
   int (*encrypt_retry)(ngtcp2_buf *dest, const ngtcp2_crypto_aead *aead,
                        const ngtcp2_crypto_aead_ctx *aead_ctx,
-                       const ngtcp2_buf *plaintext, const uint8_t *nonce,
-                       size_t noncelen, const ngtcp2_buf *aad, void *ctx);
+                       const ngtcp2_buf *plaintext, const ngtcp2_buf *nonce,
+                       const ngtcp2_buf *aad, void *ctx);
 } ngtcp2_crypto_ops;
 
 /**

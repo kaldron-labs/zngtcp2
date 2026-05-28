@@ -6290,7 +6290,7 @@ conn_decrypt_pkt(ngtcp2_conn *conn, const ngtcp2_crypto_aead *aead,
                  size_t payload_offset, size_t payloadlen, size_t aadlen,
                  int64_t pkt_num, ngtcp2_crypto_km *ckm) {
   uint8_t nonce[64];
-  ngtcp2_buf pktbuf;
+  ngtcp2_buf pktbuf, aad, noncebuf;
   int rv;
   uint8_t *mpkt = (uint8_t *)pkt;
 
@@ -6307,10 +6307,18 @@ conn_decrypt_pkt(ngtcp2_conn *conn, const ngtcp2_crypto_aead *aead,
                   NGTCP2_BUF_DIR_RX, NGTCP2_BUF_PURPOSE_PACKET_RX, NULL, NULL,
                   NULL);
   pktbuf.last = mpkt + pktlen;
+  ngtcp2_buf_init(&aad, mpkt, aadlen, NGTCP2_BUF_ORIGIN_BORROWED,
+                  NGTCP2_BUF_DIR_RX, NGTCP2_BUF_PURPOSE_PACKET_RX, NULL, NULL,
+                  NULL);
+  aad.last = aad.end;
+  ngtcp2_buf_init(&noncebuf, nonce, ckm->iv.len, NGTCP2_BUF_ORIGIN_LIBRARY,
+                  NGTCP2_BUF_DIR_RX, NGTCP2_BUF_PURPOSE_SCRATCH, NULL, NULL,
+                  NULL);
+  noncebuf.last = noncebuf.end;
 
   rv = conn->crypto.ops.decrypt_pkt(&pktbuf, payload_offset, payloadlen, aead,
-                                    &ckm->aead_ctx, pkt, aadlen, nonce,
-                                    ckm->iv.len, conn->crypto.ops_ctx);
+                                    &ckm->aead_ctx, &aad, &noncebuf,
+                                    conn->crypto.ops_ctx);
   if (rv != 0) {
     ++conn->buf_stats.decrypt_inplace_failure;
     if (rv == -1) {

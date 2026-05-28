@@ -91,18 +91,17 @@ static int null_retry_encrypt(ngtcp2_buf *dest,
                               const ngtcp2_crypto_aead *aead,
                               const ngtcp2_crypto_aead_ctx *aead_ctx,
                               const ngtcp2_buf *plaintext,
-                              const uint8_t *nonce, size_t noncelen,
-                              const ngtcp2_buf *aad, void *ctx) {
+                              const ngtcp2_buf *nonce, const ngtcp2_buf *aad,
+                              void *ctx) {
   size_t plaintextlen;
 
   (void)aead;
   (void)aead_ctx;
   (void)nonce;
-  (void)noncelen;
   (void)aad;
   (void)ctx;
 
-  if (dest == NULL || plaintext == NULL || aad == NULL) {
+  if (dest == NULL || plaintext == NULL || nonce == NULL || aad == NULL) {
     return NGTCP2_ERR_BUF_CONTRACT;
   }
 

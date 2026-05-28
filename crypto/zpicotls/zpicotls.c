@@ -432,9 +432,9 @@ static int zpicotls_validate_pkt_buf(const ngtcp2_buf *pkt, ngtcp2_buf_dir dir,
 static int zpicotls_encrypt_pkt(
   ngtcp2_buf *pkt, size_t payload_offset, size_t plaintextlen,
   const ngtcp2_crypto_aead *aead, const ngtcp2_crypto_aead_ctx *aead_ctx,
-  const uint8_t *aad, size_t aadlen, const uint8_t *nonce, size_t noncelen,
+  const ngtcp2_buf *aad, const ngtcp2_buf *nonce,
   const ngtcp2_crypto_cipher *hp, const ngtcp2_crypto_cipher_ctx *hp_ctx,
-  size_t hp_sample_offset, uint8_t *mask, void *ctx) {
+  size_t hp_sample_offset, ngtcp2_buf *mask, void *ctx) {
   ptls_aead_context_t *actx = aead_ctx->native_handle;
   ptls_aead_supplementary_encryption_t supp;
   ptls_aead_supplementary_encryption_t *psupp = NULL;
@@ -452,7 +452,11 @@ static int zpicotls_encrypt_pkt(
     return rv;
   }
 
-  if (aead->max_overhead >
+  if (ngtcp2_buf_validate(aad, NGTCP2_BUF_DIR_TX,
+                          NGTCP2_BUF_PURPOSE_PACKET_TX) != 0 ||
+      ngtcp2_buf_validate(nonce, NGTCP2_BUF_DIR_TX,
+                          NGTCP2_BUF_PURPOSE_SCRATCH) != 0 ||
+      aead->max_overhead >
       (size_t)(pkt->end - pkt->pos) - payload_offset - plaintextlen) {
     return NGTCP2_ERR_BUF_CONTRACT;
   }
@@ -461,6 +465,9 @@ static int zpicotls_encrypt_pkt(
 
   if (mask) {
     if (hp == NULL || hp_ctx == NULL ||
+        ngtcp2_buf_validate(mask, NGTCP2_BUF_DIR_TX,
+                            NGTCP2_BUF_PURPOSE_SCRATCH) != 0 ||
+        ngtcp2_buf_cap(mask) < NGTCP2_HP_SAMPLELEN ||
         hp_sample_offset > payload_offset + plaintextlen + aead->max_overhead ||
         NGTCP2_HP_SAMPLELEN >
           payload_offset + plaintextlen + aead->max_overhead -
@@ -475,23 +482,25 @@ static int zpicotls_encrypt_pkt(
     psupp = &supp;
   }
 
-  ptls_aead_xor_iv(actx, nonce, noncelen);
+  ptls_aead_xor_iv(actx, nonce->pos, ngtcp2_buf_len(nonce));
   if (psupp) {
-    ptls_aead_encrypt_s(actx, payload, payload, plaintextlen, 0, aad, aadlen,
-                        psupp);
+    ptls_aead_encrypt_s(actx, payload, payload, plaintextlen, 0, aad->pos,
+                        ngtcp2_buf_len(aad), psupp);
     outlen = plaintextlen + aead->max_overhead;
   } else {
     outlen =
-      ptls_aead_encrypt(actx, payload, payload, plaintextlen, 0, aad, aadlen);
+      ptls_aead_encrypt(actx, payload, payload, plaintextlen, 0, aad->pos,
+                        ngtcp2_buf_len(aad));
   }
-  ptls_aead_xor_iv(actx, nonce, noncelen);
+  ptls_aead_xor_iv(actx, nonce->pos, ngtcp2_buf_len(nonce));
 
   if (pkt->last < payload + outlen) {
     pkt->last = payload + outlen;
   }
 
   if (mask) {
-    memcpy(mask, supp.output, sizeof(supp.output));
+    memcpy(mask->pos, supp.output, sizeof(supp.output));
+    mask->last = mask->pos + sizeof(supp.output);
   }
 
   return 0;
@@ -501,9 +510,8 @@ static int zpicotls_decrypt_pkt(ngtcp2_buf *pkt, size_t payload_offset,
                                 size_t ciphertextlen,
                                 const ngtcp2_crypto_aead *aead,
                                 const ngtcp2_crypto_aead_ctx *aead_ctx,
-                                const uint8_t *aad, size_t aadlen,
-                                const uint8_t *nonce, size_t noncelen,
-                                void *ctx) {
+                                const ngtcp2_buf *aad,
+                                const ngtcp2_buf *nonce, void *ctx) {
   ptls_aead_context_t *actx = aead_ctx->native_handle;
   uint8_t *payload;
   size_t nwrite;
@@ -519,12 +527,20 @@ static int zpicotls_decrypt_pkt(ngtcp2_buf *pkt, size_t payload_offset,
     return rv;
   }
 
+  if (ngtcp2_buf_validate(aad, NGTCP2_BUF_DIR_RX,
+                          NGTCP2_BUF_PURPOSE_PACKET_RX) != 0 ||
+      ngtcp2_buf_validate(nonce, NGTCP2_BUF_DIR_RX,
+                          NGTCP2_BUF_PURPOSE_SCRATCH) != 0) {
+    return NGTCP2_ERR_BUF_CONTRACT;
+  }
+
   payload = pkt->pos + payload_offset;
 
-  ptls_aead_xor_iv(actx, nonce, noncelen);
+  ptls_aead_xor_iv(actx, nonce->pos, ngtcp2_buf_len(nonce));
   nwrite =
-    ptls_aead_decrypt(actx, payload, payload, ciphertextlen, 0, aad, aadlen);
-  ptls_aead_xor_iv(actx, nonce, noncelen);
+    ptls_aead_decrypt(actx, payload, payload, ciphertextlen, 0, aad->pos,
+                      ngtcp2_buf_len(aad));
+  ptls_aead_xor_iv(actx, nonce->pos, ngtcp2_buf_len(nonce));
 
   if (nwrite == SIZE_MAX) {
     return -1;
@@ -574,7 +590,7 @@ static int zpicotls_encrypt_retry(ngtcp2_buf *dest,
                                   const ngtcp2_crypto_aead *aead,
                                   const ngtcp2_crypto_aead_ctx *aead_ctx,
                                   const ngtcp2_buf *plaintext,
-                                  const uint8_t *nonce, size_t noncelen,
+                                  const ngtcp2_buf *nonce,
                                   const ngtcp2_buf *aad, void *ctx) {
   size_t plaintextlen;
   int rv;
@@ -584,6 +600,8 @@ static int zpicotls_encrypt_retry(ngtcp2_buf *dest,
   if (ngtcp2_buf_validate(dest, NGTCP2_BUF_DIR_TX,
                           NGTCP2_BUF_PURPOSE_SCRATCH) != 0 ||
       ngtcp2_buf_validate(plaintext, NGTCP2_BUF_DIR_TX,
+                          NGTCP2_BUF_PURPOSE_SCRATCH) != 0 ||
+      ngtcp2_buf_validate(nonce, NGTCP2_BUF_DIR_TX,
                           NGTCP2_BUF_PURPOSE_SCRATCH) != 0 ||
       ngtcp2_buf_validate(aad, NGTCP2_BUF_DIR_TX,
                           NGTCP2_BUF_PURPOSE_PACKET_TX) != 0) {
@@ -598,8 +616,8 @@ static int zpicotls_encrypt_retry(ngtcp2_buf *dest,
   }
 
   rv = ngtcp2_crypto_encrypt(dest->pos, aead, aead_ctx, plaintext->pos,
-                             plaintextlen, nonce, noncelen, aad->pos,
-                             ngtcp2_buf_len(aad));
+                             plaintextlen, nonce->pos, ngtcp2_buf_len(nonce),
+                             aad->pos, ngtcp2_buf_len(aad));
   if (rv != 0) {
     return rv;
   }

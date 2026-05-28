@@ -124,6 +124,7 @@ ngtcp2_ssize ngtcp2_ppe_final(ngtcp2_ppe *ppe, const uint8_t **ppkt) {
   ngtcp2_crypto_cc *cc = ppe->cc;
   size_t payloadlen = ngtcp2_buf_len(buf) - ppe->hdlen;
   uint8_t mask[NGTCP2_HP_SAMPLELEN];
+  ngtcp2_buf aad, nonce, maskbuf;
   uint8_t *p;
   size_t i;
   int rv;
@@ -138,6 +139,17 @@ ngtcp2_ssize ngtcp2_ppe_final(ngtcp2_ppe *ppe, const uint8_t **ppkt) {
 
   ngtcp2_crypto_create_nonce(ppe->nonce, cc->ckm->iv.base, cc->ckm->iv.len,
                              ppe->pkt_num);
+  ngtcp2_buf_init(&aad, buf->begin, ppe->hdlen, NGTCP2_BUF_ORIGIN_BORROWED,
+                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_PACKET_TX, NULL, NULL,
+                  NULL);
+  aad.last = aad.end;
+  ngtcp2_buf_init(&nonce, ppe->nonce, cc->ckm->iv.len,
+                  NGTCP2_BUF_ORIGIN_LIBRARY, NGTCP2_BUF_DIR_TX,
+                  NGTCP2_BUF_PURPOSE_SCRATCH, NULL, NULL, NULL);
+  nonce.last = nonce.end;
+  ngtcp2_buf_init(&maskbuf, mask, sizeof(mask), NGTCP2_BUF_ORIGIN_LIBRARY,
+                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_SCRATCH, NULL, NULL,
+                  NULL);
 
   if (!cc->ops.encrypt_pkt) {
     if (cc->buf_stats) {
@@ -149,14 +161,21 @@ ngtcp2_ssize ngtcp2_ppe_final(ngtcp2_ppe *ppe, const uint8_t **ppkt) {
   }
 
   rv = cc->ops.encrypt_pkt(buf, ppe->hdlen, payloadlen, &cc->aead,
-                           &cc->ckm->aead_ctx, buf->begin, ppe->hdlen,
-                           ppe->nonce, cc->ckm->iv.len, &cc->hp, &cc->hp_ctx,
-                           ppe_sample_offset(ppe), mask, cc->ops_ctx);
+                           &cc->ckm->aead_ctx, &aad, &nonce, &cc->hp,
+                           &cc->hp_ctx, ppe_sample_offset(ppe), &maskbuf,
+                           cc->ops_ctx);
   if (rv != 0) {
     if (cc->buf_stats) {
       ++cc->buf_stats->encrypt_inplace_failure;
     }
     return rv == NGTCP2_ERR_BUF_CONTRACT ? rv : NGTCP2_ERR_CALLBACK_FAILURE;
+  }
+  if (ngtcp2_buf_len(&maskbuf) < NGTCP2_HP_MASKLEN) {
+    if (cc->buf_stats) {
+      ++cc->buf_stats->encrypt_inplace_failure;
+      ++cc->buf_stats->buf_contract_failure;
+    }
+    return NGTCP2_ERR_BUF_CONTRACT;
   }
 
   if (cc->buf_stats) {

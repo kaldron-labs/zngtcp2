@@ -2338,7 +2338,7 @@ ngtcp2_ssize ngtcp2_pkt_write_retry(
   uint8_t pseudo_retry[1500];
   ngtcp2_ssize pseudo_retrylen;
   uint8_t tag[NGTCP2_RETRY_TAGLEN];
-  ngtcp2_buf tagbuf, plaintext, aad;
+  ngtcp2_buf tagbuf, plaintext, aad, noncebuf;
   int rv;
   uint8_t *p;
   uint8_t *base;
@@ -2401,9 +2401,13 @@ ngtcp2_ssize ngtcp2_pkt_write_retry(
                   NGTCP2_BUF_ORIGIN_BORROWED, NGTCP2_BUF_DIR_TX,
                   NGTCP2_BUF_PURPOSE_PACKET_TX, NULL, NULL, NULL);
   aad.last = aad.end;
+  ngtcp2_buf_init(&noncebuf, (uint8_t *)nonce, noncelen,
+                  NGTCP2_BUF_ORIGIN_BORROWED, NGTCP2_BUF_DIR_TX,
+                  NGTCP2_BUF_PURPOSE_SCRATCH, NULL, NULL, NULL);
+  noncebuf.last = noncebuf.end;
 
-  rv = ops->encrypt_retry(&tagbuf, aead, aead_ctx, &plaintext, nonce, noncelen,
-                          &aad, ops_ctx);
+  rv = ops->encrypt_retry(&tagbuf, aead, aead_ctx, &plaintext, &noncebuf, &aad,
+                          ops_ctx);
   if (rv != 0) {
     return rv == NGTCP2_ERR_BUF_CONTRACT ? rv : NGTCP2_ERR_CALLBACK_FAILURE;
   }
@@ -2468,7 +2472,7 @@ int ngtcp2_pkt_verify_retry_tag(uint32_t version, const ngtcp2_pkt_retry *retry,
   uint8_t *p = pseudo_retry;
   int rv;
   uint8_t tag[NGTCP2_RETRY_TAGLEN];
-  ngtcp2_buf tagbuf, plaintext, aad;
+  ngtcp2_buf tagbuf, plaintext, aad, noncebuf;
   uint8_t empty = 0;
   const uint8_t *nonce;
   size_t noncelen;
@@ -2512,9 +2516,13 @@ int ngtcp2_pkt_verify_retry_tag(uint32_t version, const ngtcp2_pkt_retry *retry,
                   NGTCP2_BUF_ORIGIN_BORROWED, NGTCP2_BUF_DIR_TX,
                   NGTCP2_BUF_PURPOSE_PACKET_TX, NULL, NULL, NULL);
   aad.last = aad.end;
+  ngtcp2_buf_init(&noncebuf, (uint8_t *)nonce, noncelen,
+                  NGTCP2_BUF_ORIGIN_BORROWED, NGTCP2_BUF_DIR_TX,
+                  NGTCP2_BUF_PURPOSE_SCRATCH, NULL, NULL, NULL);
+  noncebuf.last = noncebuf.end;
 
-  rv = ops->encrypt_retry(&tagbuf, aead, aead_ctx, &plaintext, nonce, noncelen,
-                          &aad, ops_ctx);
+  rv = ops->encrypt_retry(&tagbuf, aead, aead_ctx, &plaintext, &noncebuf, &aad,
+                          ops_ctx);
   if (rv != 0) {
     return rv == NGTCP2_ERR_BUF_CONTRACT ? rv : NGTCP2_ERR_CALLBACK_FAILURE;
   }

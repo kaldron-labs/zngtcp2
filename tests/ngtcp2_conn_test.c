@@ -231,15 +231,15 @@ static int null_hp_mask(uint8_t *dest, const ngtcp2_crypto_cipher *hp,
 static int null_encrypt_pkt(
   ngtcp2_buf *pkt, size_t payload_offset, size_t plaintextlen,
   const ngtcp2_crypto_aead *aead, const ngtcp2_crypto_aead_ctx *aead_ctx,
-  const uint8_t *aad, size_t aadlen, const uint8_t *nonce, size_t noncelen,
+  const ngtcp2_buf *aad, const ngtcp2_buf *nonce,
   const ngtcp2_crypto_cipher *hp, const ngtcp2_crypto_cipher_ctx *hp_ctx,
-  size_t hp_sample_offset, uint8_t *hp_mask, void *ctx) {
+  size_t hp_sample_offset, ngtcp2_buf *hp_mask, void *ctx) {
   uint8_t *payload = pkt->begin + payload_offset;
   int rv;
   (void)ctx;
 
-  rv = null_encrypt(payload, aead, aead_ctx, payload, plaintextlen, nonce,
-                    noncelen, aad, aadlen);
+  rv = null_encrypt(payload, aead, aead_ctx, payload, plaintextlen, nonce->pos,
+                    ngtcp2_buf_len(nonce), aad->pos, ngtcp2_buf_len(aad));
   if (rv != 0) {
     return rv;
   }
@@ -250,21 +250,28 @@ static int null_encrypt_pkt(
     return 0;
   }
 
-  return null_hp_mask(hp_mask, hp, hp_ctx, pkt->begin + hp_sample_offset);
+  rv = null_hp_mask(hp_mask->pos, hp, hp_ctx, pkt->begin + hp_sample_offset);
+  if (rv != 0) {
+    return rv;
+  }
+
+  hp_mask->last = hp_mask->pos + NGTCP2_HP_SAMPLELEN;
+
+  return 0;
 }
 
 static int null_decrypt_pkt(ngtcp2_buf *pkt, size_t payload_offset,
                             size_t ciphertextlen,
                             const ngtcp2_crypto_aead *aead,
                             const ngtcp2_crypto_aead_ctx *aead_ctx,
-                            const uint8_t *aad, size_t aadlen,
-                            const uint8_t *nonce, size_t noncelen, void *ctx) {
+                            const ngtcp2_buf *aad, const ngtcp2_buf *nonce,
+                            void *ctx) {
   uint8_t *payload = pkt->begin + payload_offset;
   int rv;
   (void)ctx;
 
-  rv = null_decrypt(payload, aead, aead_ctx, payload, ciphertextlen, nonce,
-                    noncelen, aad, aadlen);
+  rv = null_decrypt(payload, aead, aead_ctx, payload, ciphertextlen, nonce->pos,
+                    ngtcp2_buf_len(nonce), aad->pos, ngtcp2_buf_len(aad));
   if (rv != 0) {
     return rv;
   }
@@ -278,17 +285,15 @@ static int fail_decrypt_pkt(ngtcp2_buf *pkt, size_t payload_offset,
                             size_t ciphertextlen,
                             const ngtcp2_crypto_aead *aead,
                             const ngtcp2_crypto_aead_ctx *aead_ctx,
-                            const uint8_t *aad, size_t aadlen,
-                            const uint8_t *nonce, size_t noncelen, void *ctx) {
+                            const ngtcp2_buf *aad, const ngtcp2_buf *nonce,
+                            void *ctx) {
   (void)pkt;
   (void)payload_offset;
   (void)ciphertextlen;
   (void)aead;
   (void)aead_ctx;
   (void)aad;
-  (void)aadlen;
   (void)nonce;
-  (void)noncelen;
   (void)ctx;
 
   return NGTCP2_ERR_DECRYPT;
@@ -321,14 +326,14 @@ static int null_encrypt_retry(ngtcp2_buf *dest,
                               const ngtcp2_crypto_aead *aead,
                               const ngtcp2_crypto_aead_ctx *aead_ctx,
                               const ngtcp2_buf *plaintext,
-                              const uint8_t *nonce, size_t noncelen,
-                              const ngtcp2_buf *aad, void *ctx) {
+                              const ngtcp2_buf *nonce, const ngtcp2_buf *aad,
+                              void *ctx) {
   size_t plaintextlen;
   int rv;
 
   (void)ctx;
 
-  if (dest == NULL || plaintext == NULL || aad == NULL) {
+  if (dest == NULL || plaintext == NULL || nonce == NULL || aad == NULL) {
     return NGTCP2_ERR_BUF_CONTRACT;
   }
 
@@ -340,7 +345,8 @@ static int null_encrypt_retry(ngtcp2_buf *dest,
   }
 
   rv = null_encrypt(dest->pos, aead, aead_ctx, plaintext->pos, plaintextlen,
-                    nonce, noncelen, aad->pos, ngtcp2_buf_len(aad));
+                    nonce->pos, ngtcp2_buf_len(nonce), aad->pos,
+                    ngtcp2_buf_len(aad));
   if (rv != 0) {
     return rv;
   }
