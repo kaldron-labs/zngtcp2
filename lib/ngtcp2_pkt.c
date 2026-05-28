@@ -648,6 +648,9 @@ ngtcp2_ssize ngtcp2_pkt_decode_stream_frame(ngtcp2_stream *dest,
   dest->type = NGTCP2_FRAME_STREAM;
   dest->flags = (uint8_t)(type & ~NGTCP2_FRAME_STREAM);
   dest->fin = (type & NGTCP2_STREAM_FIN_BIT) != 0;
+  dest->txbuf_present = 0;
+  dest->txbuf = (ngtcp2_buf){0};
+  dest->txbuf_stats = NULL;
   p = ngtcp2_get_varint(&dest->stream_id, p);
 
   if (type & NGTCP2_STREAM_OFF_BIT) {
@@ -1343,6 +1346,9 @@ ngtcp2_ssize ngtcp2_pkt_decode_crypto_frame(ngtcp2_stream *dest,
   dest->flags = 0;
   dest->fin = 0;
   dest->stream_id = 0;
+  dest->txbuf_present = 0;
+  dest->txbuf = (ngtcp2_buf){0};
+  dest->txbuf_stats = NULL;
   p = ngtcp2_get_uvarint(&dest->offset, p);
   dest->data[0].len = datalen;
   p += ndatalen;

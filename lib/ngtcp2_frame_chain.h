@@ -87,9 +87,6 @@ struct ngtcp2_frame_chain {
       ngtcp2_frame_chain *next;
       ngtcp2_frame_chain_binder *binder;
       uint32_t flags;
-      uint8_t txbuf_present;
-      ngtcp2_buf txbuf;
-      ngtcp2_conn_buf_stats *txbuf_stats;
       ngtcp2_frame fr;
       uint8_t buf[sizeof(ngtcp2_vec) * NGTCP2_FRAME_CHAIN_STREAM_DATACNT_THRES];
     };
@@ -169,14 +166,14 @@ void ngtcp2_frame_chain_objalloc_del(ngtcp2_frame_chain *frc,
  */
 void ngtcp2_frame_chain_init(ngtcp2_frame_chain *frc, uint32_t flags);
 
-int ngtcp2_frame_chain_set_txbuf(ngtcp2_frame_chain *frc,
-                                 const ngtcp2_buf *buf,
-                                 ngtcp2_conn_buf_stats *stats);
+int ngtcp2_stream_set_txbuf(ngtcp2_stream *fr, const ngtcp2_buf *buf,
+                            ngtcp2_conn_buf_stats *stats);
 
-int ngtcp2_frame_chain_copy_txbuf(ngtcp2_frame_chain *dest,
-                                  const ngtcp2_frame_chain *src);
+int ngtcp2_stream_copy_txbuf(ngtcp2_stream *dest, const ngtcp2_stream *src);
 
-void ngtcp2_frame_chain_release_txbuf(ngtcp2_frame_chain *frc);
+void ngtcp2_stream_sync_txbuf(ngtcp2_stream *fr);
+
+void ngtcp2_stream_release_txbuf(ngtcp2_stream *fr);
 
 /*
  * ngtcp2_frame_chain_list_objalloc_del adds all ngtcp2_frame_chain

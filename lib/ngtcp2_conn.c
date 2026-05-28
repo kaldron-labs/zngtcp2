@@ -4605,8 +4605,8 @@ static ngtcp2_ssize conn_write_pkt(ngtcp2_conn *conn, ngtcp2_pkt_info *pi,
       ngtcp2_buf txbuf = *vmsg->stream.txbuf;
 
       txbuf.last = txbuf.pos + ndatalen;
-      rv = ngtcp2_frame_chain_set_txbuf(nfrc, &txbuf,
-                                        &conn->buf_stats);
+      rv = ngtcp2_stream_set_txbuf(&nfrc->fr.stream, &txbuf,
+                                   &conn->buf_stats);
       if (rv != 0) {
         ngtcp2_frame_chain_objalloc_del(nfrc, &conn->frc_objalloc, conn->mem);
         if (rv == NGTCP2_ERR_BUF_CONTRACT) {

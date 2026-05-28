@@ -280,7 +280,7 @@ static ngtcp2_ssize rtb_reclaim_frame(ngtcp2_rtb *rtb, uint8_t flags,
       ngtcp2_vec_copy(nfrc->fr.stream.data, fr->stream.data,
                       fr->stream.datacnt);
 
-      rv = ngtcp2_frame_chain_copy_txbuf(nfrc, frc);
+      rv = ngtcp2_stream_copy_txbuf(&nfrc->fr.stream, &fr->stream);
       if (rv != 0) {
         ngtcp2_frame_chain_objalloc_del(nfrc, rtb->frc_objalloc, rtb->mem);
         return rv;

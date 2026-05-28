@@ -9192,9 +9192,9 @@ void test_ngtcp2_conn_write_stream_buf_retain_ack_release(void) {
 
   assert_int64(conn->pktns.tx.last_pkt_num, ==, ent->hd.pkt_num);
   assert_uint64(NGTCP2_FRAME_STREAM, ==, frc->fr.hd.type);
-  assert_true(frc->txbuf_present);
-  assert_ptr_equal(stream, frc->txbuf.pos);
-  assert_size(sizeof(stream), ==, ngtcp2_buf_len(&frc->txbuf));
+  assert_true(frc->fr.stream.txbuf_present);
+  assert_ptr_equal(stream, frc->fr.stream.txbuf.pos);
+  assert_size(sizeof(stream), ==, ngtcp2_buf_len(&frc->fr.stream.txbuf));
 
   spktlen = ngtcp2_rtb_reclaim_on_pto(&conn->pktns.rtb, conn, &conn->pktns, 1);
 

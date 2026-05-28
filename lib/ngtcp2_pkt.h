@@ -207,6 +207,11 @@ typedef struct ngtcp2_stream {
   /* data points to ngtcp2_vec array which references data.  If
      datacnt == 0, this field may be NULL. */
   ngtcp2_vec *data;
+  /* txbuf_present is nonzero if txbuf owns retained STREAM Tx data.
+     This is only used for locally generated STREAM/CRYPTO frames. */
+  uint8_t txbuf_present;
+  ngtcp2_buf txbuf;
+  ngtcp2_conn_buf_stats *txbuf_stats;
 } ngtcp2_stream;
 
 typedef struct ngtcp2_ack_range {

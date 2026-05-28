@@ -27,6 +27,8 @@
 #include <string.h>
 #include <assert.h>
 
+#include "ngtcp2_vec.h"
+
 ngtcp2_objalloc_def(frame_chain, ngtcp2_frame_chain, oplent)
 
 int ngtcp2_frame_chain_objalloc_new(ngtcp2_frame_chain **pfrc,
@@ -72,9 +74,10 @@ int ngtcp2_frame_chain_stream_datacnt_objalloc_new(ngtcp2_frame_chain **pfrc,
     return rv;
   }
 
-  (*pfrc)->fr.stream.data =
-    (ngtcp2_vec *)(void *)((uint8_t *)*pfrc +
-                           offsetof(ngtcp2_frame_chain, buf));
+  (*pfrc)->fr.stream = (ngtcp2_stream){
+    .data = (ngtcp2_vec *)(void *)((uint8_t *)*pfrc +
+                                   offsetof(ngtcp2_frame_chain, buf)),
+  };
 
   return 0;
 }
@@ -120,7 +123,12 @@ void ngtcp2_frame_chain_objalloc_del(ngtcp2_frame_chain *frc,
   }
 
   binder = frc->binder;
-  ngtcp2_frame_chain_release_txbuf(frc);
+  switch (frc->fr.hd.type) {
+  case NGTCP2_FRAME_STREAM:
+  case NGTCP2_FRAME_CRYPTO:
+    ngtcp2_stream_release_txbuf(&frc->fr.stream);
+    break;
+  }
 
   if (binder && --binder->refcount == 0) {
     ngtcp2_mem_free(mem, binder);
@@ -138,26 +146,23 @@ void ngtcp2_frame_chain_init(ngtcp2_frame_chain *frc, uint32_t flags) {
   frc->next = NULL;
   frc->binder = NULL;
   frc->flags = flags;
-  frc->txbuf_present = 0;
-  frc->txbuf = (ngtcp2_buf){0};
-  frc->txbuf_stats = NULL;
+  frc->fr = (ngtcp2_frame){0};
 }
 
-int ngtcp2_frame_chain_set_txbuf(ngtcp2_frame_chain *frc,
-                                 const ngtcp2_buf *buf,
-                                 ngtcp2_conn_buf_stats *stats) {
+int ngtcp2_stream_set_txbuf(ngtcp2_stream *fr, const ngtcp2_buf *buf,
+                            ngtcp2_conn_buf_stats *stats) {
   int rv;
 
-  assert(!frc->txbuf_present);
+  assert(!fr->txbuf_present);
 
   rv = ngtcp2_buf_retain_owner(buf);
   if (rv != 0) {
     return rv;
   }
 
-  frc->txbuf = *buf;
-  frc->txbuf_present = 1;
-  frc->txbuf_stats = stats;
+  fr->txbuf = *buf;
+  fr->txbuf_present = 1;
+  fr->txbuf_stats = stats;
   if (stats) {
     ++stats->app_retain;
   }
@@ -165,26 +170,42 @@ int ngtcp2_frame_chain_set_txbuf(ngtcp2_frame_chain *frc,
   return 0;
 }
 
-int ngtcp2_frame_chain_copy_txbuf(ngtcp2_frame_chain *dest,
-                                  const ngtcp2_frame_chain *src) {
+int ngtcp2_stream_copy_txbuf(ngtcp2_stream *dest, const ngtcp2_stream *src) {
   if (!src->txbuf_present) {
     return 0;
   }
 
-  return ngtcp2_frame_chain_set_txbuf(dest, &src->txbuf, src->txbuf_stats);
+  return ngtcp2_stream_set_txbuf(dest, &src->txbuf, src->txbuf_stats);
 }
 
-void ngtcp2_frame_chain_release_txbuf(ngtcp2_frame_chain *frc) {
-  if (!frc->txbuf_present) {
+void ngtcp2_stream_sync_txbuf(ngtcp2_stream *fr) {
+  size_t datalen;
+
+  if (!fr->txbuf_present) {
     return;
   }
 
-  ngtcp2_buf_release_owner(&frc->txbuf);
-  if (frc->txbuf_stats) {
-    ++frc->txbuf_stats->app_release;
+  datalen = (size_t)ngtcp2_vec_len(fr->data, fr->datacnt);
+  if (datalen == 0) {
+    ngtcp2_stream_release_txbuf(fr);
+    return;
   }
-  frc->txbuf_present = 0;
-  frc->txbuf_stats = NULL;
+
+  fr->txbuf.pos = fr->data[0].base;
+  fr->txbuf.last = fr->txbuf.pos + datalen;
+}
+
+void ngtcp2_stream_release_txbuf(ngtcp2_stream *fr) {
+  if (!fr->txbuf_present) {
+    return;
+  }
+
+  ngtcp2_buf_release_owner(&fr->txbuf);
+  if (fr->txbuf_stats) {
+    ++fr->txbuf_stats->app_release;
+  }
+  fr->txbuf_present = 0;
+  fr->txbuf_stats = NULL;
 }
 
 void ngtcp2_frame_chain_list_objalloc_del(ngtcp2_frame_chain *frc,
