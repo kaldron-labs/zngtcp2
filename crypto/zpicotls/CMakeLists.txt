@@ -57,6 +57,56 @@ if(ENABLE_STATIC_LIB)
   target_include_directories(ngtcp2_crypto_zpicotls_static PUBLIC
     ${ngtcp2_crypto_zpicotls_INCLUDE_DIRS})
 
+  set(ngtcp2_crypto_zpicotls_TEST_LIBRARIES ${ZPICOTLS_LIBRARIES})
+  if(NOT ngtcp2_crypto_zpicotls_TEST_LIBRARIES)
+    set(ngtcp2_crypto_zpicotls_LIBRARY_HINTS)
+    foreach(dir IN LISTS ZPICOTLS_INCLUDE_DIRS)
+      list(APPEND ngtcp2_crypto_zpicotls_LIBRARY_HINTS
+        "${dir}/.."
+        "${dir}/../build")
+    endforeach()
+    find_library(NGTCP2_ZPICOTLS_OPENSSL_LIBRARY
+      NAMES zpicotls-openssl picotls-openssl
+      HINTS ${ngtcp2_crypto_zpicotls_LIBRARY_HINTS})
+    find_library(NGTCP2_ZPICOTLS_CORE_LIBRARY
+      NAMES zpicotls-core picotls-core
+      HINTS ${ngtcp2_crypto_zpicotls_LIBRARY_HINTS})
+    if(NGTCP2_ZPICOTLS_OPENSSL_LIBRARY AND NGTCP2_ZPICOTLS_CORE_LIBRARY)
+      set(ngtcp2_crypto_zpicotls_TEST_LIBRARIES
+        ${NGTCP2_ZPICOTLS_OPENSSL_LIBRARY}
+        ${NGTCP2_ZPICOTLS_CORE_LIBRARY})
+    endif()
+  endif()
+
+  set(ngtcp2_crypto_zpicotls_TEST_OPENSSL_LIBRARIES
+    ${VANILLA_OPENSSL_LIBRARIES})
+  if(NOT ngtcp2_crypto_zpicotls_TEST_OPENSSL_LIBRARIES)
+    list(APPEND ngtcp2_crypto_zpicotls_TEST_OPENSSL_LIBRARIES
+      ${OPENSSL_SSL_LIBRARY}
+      ${OPENSSL_CRYPTO_LIBRARY})
+  endif()
+
+  if(BUILD_TESTING AND ngtcp2_crypto_zpicotls_TEST_LIBRARIES)
+    add_executable(zpicotls_test EXCLUDE_FROM_ALL
+      zpicotls_test.c
+      ../../tests/munit/munit.c
+    )
+    target_compile_definitions(zpicotls_test PRIVATE BUILDING_NGTCP2)
+    target_include_directories(zpicotls_test PRIVATE
+      ${ngtcp2_crypto_zpicotls_INCLUDE_DIRS}
+      "${CMAKE_CURRENT_SOURCE_DIR}/../../tests/munit")
+    target_link_libraries(zpicotls_test
+      ngtcp2_crypto_zpicotls_static
+      zngtcp2_static
+      ${ngtcp2_crypto_zpicotls_TEST_LIBRARIES}
+      ${ngtcp2_crypto_zpicotls_TEST_OPENSSL_LIBRARIES}
+      ${CMAKE_DL_LIBS})
+    add_test(NAME zpicotls COMMAND zpicotls_test)
+    add_dependencies(check zpicotls_test)
+  elseif(BUILD_TESTING)
+    message(STATUS "zpicotls provider tests disabled: zpicotls libraries not found")
+  endif()
+
   install(TARGETS ngtcp2_crypto_zpicotls_static
     DESTINATION "${CMAKE_INSTALL_LIBDIR}")
 endif()
