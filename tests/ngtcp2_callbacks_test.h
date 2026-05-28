@@ -36,6 +36,5 @@
 extern const MunitSuite callbacks_suite;
 
 munit_void_test_decl(test_ngtcp2_callbacks_convert_to_latest)
-munit_void_test_decl(test_ngtcp2_callbacks_convert_to_old)
 
 #endif /* !defined(NGTCP2_CALLBACKS_TEST_H) */

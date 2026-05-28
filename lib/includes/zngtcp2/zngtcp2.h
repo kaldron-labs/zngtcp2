@@ -3836,10 +3836,7 @@ typedef int (*ngtcp2_get_path_challenge_data2)(ngtcp2_conn *conn,
                                                ngtcp2_path_challenge_data *data,
                                                void *user_data);
 
-#define NGTCP2_CALLBACKS_V1 1
-#define NGTCP2_CALLBACKS_V2 2
-#define NGTCP2_CALLBACKS_V3 3
-#define NGTCP2_CALLBACKS_VERSION NGTCP2_CALLBACKS_V3
+#define NGTCP2_CALLBACKS_VERSION 1
 
 /**
  * @struct
@@ -4117,8 +4114,6 @@ typedef struct ngtcp2_callbacks {
    * is only used by client.
    */
   ngtcp2_tls_early_data_rejected tls_early_data_rejected;
-  /* The following fields have been added since
-     NGTCP2_CALLBACKS_V2. */
   /**
    * :member:`begin_path_validation` is a callback function which is
    * invoked when a path validation has started.
@@ -4126,8 +4121,6 @@ typedef struct ngtcp2_callbacks {
    * .. version-added:: 1.14.0
    */
   ngtcp2_begin_path_validation begin_path_validation;
-  /* The following fields have been added since
-     NGTCP2_CALLBACKS_V3. */
   /**
    * :member:`recv_stateless_reset2` is a callback function which is
    * invoked when Stateless Reset packet is received.  This callback

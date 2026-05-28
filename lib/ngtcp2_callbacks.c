@@ -24,52 +24,19 @@
  */
 #include "ngtcp2_callbacks.h"
 
-#include <string.h>
 #include <assert.h>
-
-#include "ngtcp2_unreachable.h"
-
-static void callbacks_copy(ngtcp2_callbacks *dest, const ngtcp2_callbacks *src,
-                           int callbacks_version) {
-  assert(callbacks_version != NGTCP2_CALLBACKS_VERSION);
-
-  memcpy(dest, src, ngtcp2_callbackslen_version(callbacks_version));
-}
 
 const ngtcp2_callbacks *ngtcp2_callbacks_convert_to_latest(
   ngtcp2_callbacks *dest, int callbacks_version, const ngtcp2_callbacks *src) {
-  if (callbacks_version == NGTCP2_CALLBACKS_VERSION) {
-    return src;
-  }
+  (void)dest;
 
-  *dest = (ngtcp2_callbacks){0};
+  assert(callbacks_version == NGTCP2_CALLBACKS_VERSION);
 
-  callbacks_copy(dest, src, callbacks_version);
-
-  return dest;
-}
-
-void ngtcp2_callbacks_convert_to_old(int callbacks_version,
-                                     ngtcp2_callbacks *dest,
-                                     const ngtcp2_callbacks *src) {
-  assert(callbacks_version != NGTCP2_CALLBACKS_VERSION);
-
-  callbacks_copy(dest, src, callbacks_version);
+  return src;
 }
 
 size_t ngtcp2_callbackslen_version(int callbacks_version) {
-  ngtcp2_callbacks callbacks;
+  assert(callbacks_version == NGTCP2_CALLBACKS_VERSION);
 
-  switch (callbacks_version) {
-  case NGTCP2_CALLBACKS_VERSION:
-    return sizeof(callbacks);
-  case NGTCP2_CALLBACKS_V2:
-    return offsetof(ngtcp2_callbacks, begin_path_validation) +
-           sizeof(callbacks.begin_path_validation);
-  case NGTCP2_CALLBACKS_V1:
-    return offsetof(ngtcp2_callbacks, tls_early_data_rejected) +
-           sizeof(callbacks.tls_early_data_rejected);
-  default:
-    ngtcp2_unreachable();
-  }
+  return sizeof(ngtcp2_callbacks);
 }

@@ -32,41 +32,17 @@
 #include <zngtcp2/zngtcp2.h>
 
 /*
- * ngtcp2_callbacks_convert_to_latest converts |src| of version
- * |callbacks_version| to the latest version NGTCP2_CALLBACKS_VERSION.
- *
- * |dest| must point to the latest version.  |src| may be the older
- * version, and if so, it may have fewer fields.  Accessing those
- * fields causes undefined behavior.
- *
- * If |callbacks_version| == NGTCP2_CALLBACKS_VERSION, no conversion
- * is made, and |src| is returned.  Otherwise, first |dest| is
- * zero-initialized, and then all valid fields in |src| are copied
- * into |dest|.  Finally, |dest| is returned.
+ * ngtcp2_callbacks_convert_to_latest validates that |src| uses the current
+ * private fork callback layout and returns |src|.  Older upstream callback
+ * layouts are intentionally unsupported.
  */
 const ngtcp2_callbacks *ngtcp2_callbacks_convert_to_latest(
   ngtcp2_callbacks *dest, int callbacks_version, const ngtcp2_callbacks *src);
 
 /*
- * ngtcp2_callbacks_convert_to_old converts |src| of the latest
- * version to |dest| of version |callbacks_version|.
- *
- * |callbacks_version| must not be the latest version
- *  NGTCP2_CALLBACKS_VERSION.
- *
- * |dest| points to the older version, and it may have fewer fields.
- * Accessing those fields causes undefined behavior.
- *
- * This function copies all valid fields in version
- * |callbacks_version| from |src| to |dest|.
- */
-void ngtcp2_callbacks_convert_to_old(int callbacks_version,
-                                     ngtcp2_callbacks *dest,
-                                     const ngtcp2_callbacks *src);
-
-/*
- * ngtcp2_callbackslen_version returns the effective length of
- * ngtcp2_callbacks at the version |callbacks_version|.
+ * ngtcp2_callbackslen_version returns sizeof(ngtcp2_callbacks) for the current
+ * private fork layout.  Older upstream callback layouts are intentionally
+ * unsupported.
  */
 size_t ngtcp2_callbackslen_version(int callbacks_version);
 
