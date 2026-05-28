@@ -30,6 +30,7 @@ OBJECTS = \
 	ngtcp2_pkt_test.c \
 	ngtcp2_range_test.c \
 	ngtcp2_rob_test.c \
+	ngtcp2_reorder_test.c \
 	ngtcp2_acktr_test.c \
 	ngtcp2_map_test.c \
 	ngtcp2_transport_params_test.c \
@@ -69,6 +70,7 @@ HFILES= \
 	ngtcp2_pkt_test.h \
 	ngtcp2_range_test.h \
 	ngtcp2_rob_test.h \
+	ngtcp2_reorder_test.h \
 	ngtcp2_acktr_test.h \
 	ngtcp2_map_test.h \
 	ngtcp2_transport_params_test.h \

@@ -37,6 +37,7 @@ set(ngtcp2_SOURCES
   ngtcp2_pq.c
   ngtcp2_map.c
   ngtcp2_rob.c
+  ngtcp2_reorder.c
   ngtcp2_ppe.c
   ngtcp2_crypto.c
   ngtcp2_err.c

@@ -33,6 +33,7 @@
 #include "ngtcp2_pkt_test.h"
 #include "ngtcp2_range_test.h"
 #include "ngtcp2_rob_test.h"
+#include "ngtcp2_reorder_test.h"
 #include "ngtcp2_rtb_test.h"
 #include "ngtcp2_acktr_test.h"
 #include "ngtcp2_transport_params_test.h"
@@ -71,6 +72,7 @@ int main(int argc, char *argv[]) {
     pkt_suite,
     range_suite,
     rob_suite,
+    reorder_suite,
     acktr_suite,
     map_suite,
     transport_params_suite,

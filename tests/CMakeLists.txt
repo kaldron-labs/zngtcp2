@@ -34,6 +34,7 @@ set(main_SOURCES
   ngtcp2_pkt_test.c
   ngtcp2_range_test.c
   ngtcp2_rob_test.c
+  ngtcp2_reorder_test.c
   ngtcp2_acktr_test.c
   ngtcp2_map_test.c
   ngtcp2_transport_params_test.c

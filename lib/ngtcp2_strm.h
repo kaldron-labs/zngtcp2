@@ -32,6 +32,7 @@
 #include <zngtcp2/zngtcp2.h>
 
 #include "ngtcp2_rob.h"
+#include "ngtcp2_reorder.h"
 #include "ngtcp2_map.h"
 #include "ngtcp2_gaptr.h"
 #include "ngtcp2_ksl.h"
@@ -150,6 +151,8 @@ struct ngtcp2_strm {
            received in out of order is buffered and sorted by its offset
            in this object. */
         ngtcp2_rob *rob;
+        /* reorder is the buffer-owned target reorder storage. */
+        ngtcp2_reorder *reorder;
         /* cont_offset is the largest offset of consecutive data.  It is
            used until the endpoint receives out-of-order data.  After
            that, rob is used to track the offset and data. */
@@ -216,6 +219,12 @@ uint64_t ngtcp2_strm_rx_offset(const ngtcp2_strm *strm);
  */
 ngtcp2_ssize ngtcp2_strm_recv_reordering(ngtcp2_strm *strm, const uint8_t *data,
                                          size_t datalen, uint64_t offset);
+
+int ngtcp2_strm_recv_reordering_buf(ngtcp2_strm *strm, ngtcp2_buf *buf,
+                                    uint64_t offset,
+                                    ngtcp2_reorder_release release,
+                                    void *release_user_data,
+                                    int allocator_owned, size_t *pnwrite);
 
 /*
  * ngtcp2_strm_update_rx_offset tells that data up to |offset| bytes

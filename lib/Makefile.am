@@ -45,6 +45,7 @@ OBJECTS = \
 	ngtcp2_pq.c \
 	ngtcp2_map.c \
 	ngtcp2_rob.c \
+	ngtcp2_reorder.c \
 	ngtcp2_ppe.c \
 	ngtcp2_crypto.c \
 	ngtcp2_err.c \
@@ -93,6 +94,7 @@ HFILES = \
 	ngtcp2_pq.h \
 	ngtcp2_map.h \
 	ngtcp2_rob.h \
+	ngtcp2_reorder.h \
 	ngtcp2_ppe.h \
 	ngtcp2_crypto.h \
 	ngtcp2_err.h \
