@@ -416,7 +416,11 @@ static int zpicotls_validate_pkt_buf(const ngtcp2_buf *pkt, ngtcp2_buf_dir dir,
     return rv;
   }
 
-  if (pkt->origin != NGTCP2_BUF_ORIGIN_APPLICATION ||
+  if ((dir == NGTCP2_BUF_DIR_TX &&
+       pkt->origin != NGTCP2_BUF_ORIGIN_APPLICATION) ||
+      (dir == NGTCP2_BUF_DIR_RX &&
+       pkt->origin != NGTCP2_BUF_ORIGIN_APPLICATION &&
+       pkt->origin != NGTCP2_BUF_ORIGIN_LIBRARY) ||
       payload_offset > (size_t)(pkt->end - pkt->pos) ||
       len > (size_t)(pkt->end - pkt->pos) - payload_offset) {
     return NGTCP2_ERR_BUF_CONTRACT;
