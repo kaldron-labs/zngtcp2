@@ -73,6 +73,7 @@ set(main_SOURCES
 add_executable(main EXCLUDE_FROM_ALL
   ${main_SOURCES}
 )
+target_compile_definitions(main PRIVATE BUILDING_NGTCP2)
 # FIXME enable and fix warnings
 #set_target_properties(main PROPERTIES COMPILE_FLAGS "${WARNCFLAGS}")
 target_link_libraries(main

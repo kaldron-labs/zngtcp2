@@ -71,6 +71,7 @@ static const MunitTest tests[] = {
   munit_void_test(test_ngtcp2_conn_cancel_retransmission),
   munit_void_test(test_ngtcp2_conn_send_max_stream_data),
   munit_void_test(test_ngtcp2_conn_recv_stream_data),
+  munit_void_test(test_ngtcp2_conn_recv_stream_data_buf),
   munit_void_test(test_ngtcp2_conn_recv_ping),
   munit_void_test(test_ngtcp2_conn_recv_max_stream_data),
   munit_void_test(test_ngtcp2_conn_send_early_data),
@@ -223,6 +224,96 @@ static int null_hp_mask(uint8_t *dest, const ngtcp2_crypto_cipher *hp,
   return 0;
 }
 
+static int null_encrypt_pkt(
+  ngtcp2_buf *pkt, size_t payload_offset, size_t plaintextlen,
+  const ngtcp2_crypto_aead *aead, const ngtcp2_crypto_aead_ctx *aead_ctx,
+  const uint8_t *aad, size_t aadlen, const uint8_t *nonce, size_t noncelen,
+  const ngtcp2_crypto_cipher *hp, const ngtcp2_crypto_cipher_ctx *hp_ctx,
+  size_t hp_sample_offset, uint8_t *hp_mask, void *ctx) {
+  uint8_t *payload = pkt->begin + payload_offset;
+  int rv;
+  (void)ctx;
+
+  rv = null_encrypt(payload, aead, aead_ctx, payload, plaintextlen, nonce,
+                    noncelen, aad, aadlen);
+  if (rv != 0) {
+    return rv;
+  }
+
+  pkt->last = payload + plaintextlen + aead->max_overhead;
+
+  if (hp_mask == NULL) {
+    return 0;
+  }
+
+  return null_hp_mask(hp_mask, hp, hp_ctx, pkt->begin + hp_sample_offset);
+}
+
+static int null_decrypt_pkt(ngtcp2_buf *pkt, size_t payload_offset,
+                            size_t ciphertextlen,
+                            const ngtcp2_crypto_aead *aead,
+                            const ngtcp2_crypto_aead_ctx *aead_ctx,
+                            const uint8_t *aad, size_t aadlen,
+                            const uint8_t *nonce, size_t noncelen, void *ctx) {
+  uint8_t *payload = pkt->begin + payload_offset;
+  int rv;
+  (void)ctx;
+
+  rv = null_decrypt(payload, aead, aead_ctx, payload, ciphertextlen, nonce,
+                    noncelen, aad, aadlen);
+  if (rv != 0) {
+    return rv;
+  }
+
+  pkt->last = payload + ciphertextlen - aead->max_overhead;
+
+  return 0;
+}
+
+static int fail_decrypt_pkt(ngtcp2_buf *pkt, size_t payload_offset,
+                            size_t ciphertextlen,
+                            const ngtcp2_crypto_aead *aead,
+                            const ngtcp2_crypto_aead_ctx *aead_ctx,
+                            const uint8_t *aad, size_t aadlen,
+                            const uint8_t *nonce, size_t noncelen, void *ctx) {
+  (void)pkt;
+  (void)payload_offset;
+  (void)ciphertextlen;
+  (void)aead;
+  (void)aead_ctx;
+  (void)aad;
+  (void)aadlen;
+  (void)nonce;
+  (void)noncelen;
+  (void)ctx;
+
+  return NGTCP2_ERR_DECRYPT;
+}
+
+static int null_ops_hp_mask(uint8_t *dest, const ngtcp2_crypto_cipher *hp,
+                            const ngtcp2_crypto_cipher_ctx *hp_ctx,
+                            const uint8_t *sample, void *ctx) {
+  (void)ctx;
+
+  return null_hp_mask(dest, hp, hp_ctx, sample);
+}
+
+static const ngtcp2_crypto_ops null_crypto_ops = {
+  .version = 1,
+  .encrypt_pkt = null_encrypt_pkt,
+  .decrypt_pkt = null_decrypt_pkt,
+  .hp_mask = null_ops_hp_mask,
+  .encrypt_retry = null_encrypt,
+};
+
+static const ngtcp2_crypto_ops fail_crypto_ops = {
+  .version = 1,
+  .encrypt_pkt = null_encrypt_pkt,
+  .decrypt_pkt = fail_decrypt_pkt,
+  .hp_mask = null_ops_hp_mask,
+  .encrypt_retry = null_encrypt,
+};
+
 static int get_new_connection_id(ngtcp2_conn *conn, ngtcp2_cid *cid,
                                  ngtcp2_stateless_reset_token *token,
                                  size_t cidlen, void *user_data) {
@@ -301,6 +392,13 @@ typedef struct {
     size_t datalen;
   } stream_data;
   struct {
+    ngtcp2_buf_origin origin;
+    ngtcp2_buf_dir dir;
+    ngtcp2_buf_purpose purpose;
+    void *owner;
+    size_t datalen;
+  } stream_buf;
+  struct {
     uint32_t flags;
     const uint8_t *data;
     size_t datalen;
@@ -325,6 +423,21 @@ typedef struct {
     size_t tokenlen;
   } new_token;
 } my_user_data;
+
+typedef struct {
+  int retaincnt;
+  int releasecnt;
+} buf_owner;
+
+static int retain_buf_owner(void *owner) {
+  ++((buf_owner *)owner)->retaincnt;
+
+  return 0;
+}
+
+static void release_buf_owner(void *owner) {
+  ++((buf_owner *)owner)->releasecnt;
+}
 
 static int client_initial(ngtcp2_conn *conn, void *user_data) {
   (void)user_data;
@@ -429,24 +542,22 @@ static int recv_client_initial_early(ngtcp2_conn *conn, const ngtcp2_cid *dcid,
 
 static int recv_crypto_data(ngtcp2_conn *conn,
                             ngtcp2_encryption_level encryption_level,
-                            uint64_t offset, const uint8_t *data,
-                            size_t datalen, void *user_data) {
+                            uint64_t offset, const ngtcp2_buf *data,
+                            void *user_data) {
   (void)conn;
   (void)encryption_level;
   (void)offset;
   (void)data;
-  (void)datalen;
   (void)user_data;
   return 0;
 }
 
 static int recv_crypto_data_server_early_data(
   ngtcp2_conn *conn, ngtcp2_encryption_level encryption_level, uint64_t offset,
-  const uint8_t *data, size_t datalen, void *user_data) {
+  const ngtcp2_buf *data, void *user_data) {
   (void)offset;
   (void)encryption_level;
   (void)data;
-  (void)datalen;
   (void)user_data;
 
   assert(conn->server);
@@ -465,13 +576,12 @@ static int recv_crypto_data_server_early_data(
 
 static int recv_crypto_data_client_handshake(
   ngtcp2_conn *conn, ngtcp2_encryption_level encryption_level, uint64_t offset,
-  const uint8_t *data, size_t datalen, void *user_data) {
+  const ngtcp2_buf *data, void *user_data) {
   int rv;
   ngtcp2_transport_params params;
   const ngtcp2_early_transport_params *early_params;
   (void)offset;
   (void)data;
-  (void)datalen;
   (void)user_data;
 
   switch (encryption_level) {
@@ -565,36 +675,33 @@ static int update_key(ngtcp2_conn *conn, uint8_t *rx_secret, uint8_t *tx_secret,
 
 static int recv_crypto_handshake_error(ngtcp2_conn *conn,
                                        ngtcp2_encryption_level encryption_level,
-                                       uint64_t offset, const uint8_t *data,
-                                       size_t datalen, void *user_data) {
+                                       uint64_t offset, const ngtcp2_buf *data,
+                                       void *user_data) {
   (void)conn;
   (void)encryption_level;
   (void)offset;
   (void)data;
-  (void)datalen;
   (void)user_data;
   return NGTCP2_ERR_CRYPTO;
 }
 
 static int recv_crypto_fatal_alert_generated(
   ngtcp2_conn *conn, ngtcp2_encryption_level encryption_level, uint64_t offset,
-  const uint8_t *data, size_t datalen, void *user_data) {
+  const ngtcp2_buf *data, void *user_data) {
   (void)conn;
   (void)encryption_level;
   (void)offset;
   (void)data;
-  (void)datalen;
   (void)user_data;
   return NGTCP2_ERR_CRYPTO;
 }
 
 static int recv_crypto_data_server(ngtcp2_conn *conn,
                                    ngtcp2_encryption_level encryption_level,
-                                   uint64_t offset, const uint8_t *data,
-                                   size_t datalen, void *user_data) {
+                                   uint64_t offset, const ngtcp2_buf *data,
+                                   void *user_data) {
   (void)offset;
   (void)data;
-  (void)datalen;
   (void)user_data;
 
   ngtcp2_conn_submit_crypto_data(conn,
@@ -609,8 +716,8 @@ static int recv_crypto_data_server(ngtcp2_conn *conn,
 
 static int recv_stream_data(ngtcp2_conn *conn, uint32_t flags,
                             int64_t stream_id, uint64_t offset,
-                            const uint8_t *data, size_t datalen,
-                            void *user_data, void *stream_user_data) {
+                            const ngtcp2_buf *data, void *user_data,
+                            void *stream_user_data) {
   my_user_data *ud = user_data;
   (void)conn;
   (void)data;
@@ -620,20 +727,38 @@ static int recv_stream_data(ngtcp2_conn *conn, uint32_t flags,
     ud->stream_data.stream_id = stream_id;
     ud->stream_data.flags = flags;
     ud->stream_data.offset = offset;
-    ud->stream_data.datalen = datalen;
+    ud->stream_data.datalen = ngtcp2_buf_len(data);
   }
 
   return 0;
 }
 
-static int
-recv_stream_data_shutdown_stream_read(ngtcp2_conn *conn, uint32_t flags,
-                                      int64_t stream_id, uint64_t offset,
-                                      const uint8_t *data, size_t datalen,
-                                      void *user_data, void *stream_user_data) {
+static int recv_stream_data_buf(ngtcp2_conn *conn, uint32_t flags,
+                                int64_t stream_id, uint64_t offset,
+                                const ngtcp2_buf *data, void *user_data,
+                                void *stream_user_data) {
+  my_user_data *ud = user_data;
+  (void)conn;
+  (void)flags;
+  (void)stream_id;
+  (void)offset;
+  (void)stream_user_data;
+
+  ud->stream_buf.origin = data->origin;
+  ud->stream_buf.dir = data->dir;
+  ud->stream_buf.purpose = data->purpose;
+  ud->stream_buf.owner = data->owner;
+  ud->stream_buf.datalen = ngtcp2_buf_len(data);
+
+  return 0;
+}
+
+static int recv_stream_data_shutdown_stream_read(
+  ngtcp2_conn *conn, uint32_t flags, int64_t stream_id, uint64_t offset,
+  const ngtcp2_buf *data, void *user_data, void *stream_user_data) {
   int rv;
 
-  recv_stream_data(conn, flags, stream_id, offset, data, datalen, user_data,
+  recv_stream_data(conn, flags, stream_id, offset, data, user_data,
                    stream_user_data);
 
   rv = ngtcp2_conn_shutdown_stream_read(conn, 0, stream_id, NGTCP2_APP_ERR01);
@@ -646,9 +771,8 @@ recv_stream_data_shutdown_stream_read(ngtcp2_conn *conn, uint32_t flags,
 
 static int recv_stream_data_deferred_shutdown_stream_read(
   ngtcp2_conn *conn, uint32_t flags, int64_t stream_id, uint64_t offset,
-  const uint8_t *data, size_t datalen, void *user_data,
-  void *stream_user_data) {
-  recv_stream_data(conn, flags, stream_id, offset, data, datalen, user_data,
+  const ngtcp2_buf *data, void *user_data, void *stream_user_data) {
+  recv_stream_data(conn, flags, stream_id, offset, data, user_data,
                    stream_user_data);
 
   conn->callbacks.recv_stream_data = recv_stream_data_shutdown_stream_read;
@@ -850,9 +974,6 @@ static void server_default_callbacks(ngtcp2_callbacks *cb) {
   *cb = (ngtcp2_callbacks){
     .recv_client_initial = recv_client_initial,
     .recv_crypto_data = recv_crypto_data_server,
-    .decrypt = null_decrypt,
-    .encrypt = null_encrypt,
-    .hp_mask = null_hp_mask,
     .rand = genrand,
     .update_key = update_key,
     .delete_crypto_aead_ctx = delete_crypto_aead_ctx,
@@ -925,9 +1046,6 @@ static void client_default_callbacks(ngtcp2_callbacks *cb) {
   *cb = (ngtcp2_callbacks){
     .client_initial = client_initial,
     .recv_crypto_data = recv_crypto_data,
-    .decrypt = null_decrypt,
-    .encrypt = null_encrypt,
-    .hp_mask = null_hp_mask,
     .recv_retry = recv_retry,
     .rand = genrand,
     .update_key = update_key,
@@ -1006,6 +1124,8 @@ typedef struct conn_options {
   const ngtcp2_transport_params *params;
   const ngtcp2_transport_params *remote_params;
   const ngtcp2_callbacks *callbacks;
+  const ngtcp2_crypto_ops *crypto_ops;
+  void *crypto_ops_ctx;
   const ngtcp2_mem *mem;
   uint32_t client_chosen_version;
   void *user_data;
@@ -1053,6 +1173,9 @@ static void conn_server_new(ngtcp2_conn **pconn, conn_options opts) {
   ngtcp2_conn_server_new(pconn, opts.dcid, opts.scid, opts.path,
                          opts.client_chosen_version, opts.callbacks,
                          opts.settings, opts.params, opts.mem, opts.user_data);
+  ngtcp2_conn_set_crypto_ops(
+    *pconn, opts.crypto_ops ? opts.crypto_ops : &null_crypto_ops,
+    opts.crypto_ops_ctx);
 
   if (!opts.skip_pkt_num) {
     (*pconn)->pktns.tx.skip_pkt.next_pkt_num = INT64_MAX;
@@ -1153,6 +1276,9 @@ static void conn_client_new(ngtcp2_conn **pconn, conn_options opts) {
   ngtcp2_conn_client_new(pconn, opts.dcid, opts.scid, opts.path,
                          opts.client_chosen_version, opts.callbacks,
                          opts.settings, opts.params, opts.mem, opts.user_data);
+  ngtcp2_conn_set_crypto_ops(
+    *pconn, opts.crypto_ops ? opts.crypto_ops : &null_crypto_ops,
+    opts.crypto_ops_ctx);
 
   if (!opts.skip_pkt_num) {
     (*pconn)->pktns.tx.skip_pkt.next_pkt_num = INT64_MAX;
@@ -3925,10 +4051,10 @@ void test_ngtcp2_conn_recv_stateless_reset(void) {
 
   /* server */
   server_default_callbacks(&callbacks);
-  callbacks.decrypt = fail_decrypt;
 
   opts = (conn_options){
     .callbacks = &callbacks,
+    .crypto_ops = &fail_crypto_ops,
   };
 
   setup_default_server_with_options(&conn, opts);
@@ -3951,10 +4077,10 @@ void test_ngtcp2_conn_recv_stateless_reset(void) {
 
   /* client */
   client_default_callbacks(&callbacks);
-  callbacks.decrypt = fail_decrypt;
 
   opts = (conn_options){
     .callbacks = &callbacks,
+    .crypto_ops = &fail_crypto_ops,
   };
 
   setup_default_client_with_options(&conn, opts);
@@ -3977,10 +4103,10 @@ void test_ngtcp2_conn_recv_stateless_reset(void) {
 
   /* stateless reset in long packet */
   server_default_callbacks(&callbacks);
-  callbacks.decrypt = fail_decrypt;
 
   opts = (conn_options){
     .callbacks = &callbacks,
+    .crypto_ops = &fail_crypto_ops,
   };
 
   setup_default_server_with_options(&conn, opts);
@@ -4006,10 +4132,10 @@ void test_ngtcp2_conn_recv_stateless_reset(void) {
 
   /* stateless reset in long packet; parsing long header fails */
   server_default_callbacks(&callbacks);
-  callbacks.decrypt = fail_decrypt;
 
   opts = (conn_options){
     .callbacks = &callbacks,
+    .crypto_ops = &fail_crypto_ops,
   };
 
   setup_default_server_with_options(&conn, opts);
@@ -4041,10 +4167,10 @@ void test_ngtcp2_conn_recv_stateless_reset(void) {
 
   /* token does not match */
   client_default_callbacks(&callbacks);
-  callbacks.decrypt = fail_decrypt;
 
   opts = (conn_options){
     .callbacks = &callbacks,
+    .crypto_ops = &fail_crypto_ops,
   };
 
   setup_default_client_with_options(&conn, opts);
@@ -7746,6 +7872,71 @@ void test_ngtcp2_conn_recv_stream_data(void) {
   rv = ngtcp2_conn_read_pkt(conn, &null_path.path, NULL, buf, pktlen, ++t);
 
   assert_int(NGTCP2_ERR_INTERNAL, ==, rv);
+
+  ngtcp2_conn_del(conn);
+}
+
+void test_ngtcp2_conn_recv_stream_data_buf(void) {
+  ngtcp2_conn *conn;
+  uint8_t rawbuf[2048];
+  ngtcp2_buf pkt;
+  ngtcp2_tpe tpe;
+  ngtcp2_frame fr;
+  ngtcp2_vec datav;
+  ngtcp2_callbacks callbacks;
+  conn_options opts;
+  my_user_data ud = {0};
+  buf_owner owner = {0};
+  ngtcp2_conn_buf_stats stats;
+  size_t pktlen;
+  ngtcp2_tstamp t = 0;
+  int rv;
+
+  server_default_callbacks(&callbacks);
+  callbacks.recv_stream_data = recv_stream_data_buf;
+
+  opts = (conn_options){
+    .callbacks = &callbacks,
+    .user_data = &ud,
+  };
+
+  setup_default_server_with_options(&conn, opts);
+  ngtcp2_tpe_init_conn(&tpe, conn);
+
+  fr.stream = (ngtcp2_stream){
+    .type = NGTCP2_FRAME_STREAM,
+    .stream_id = 4,
+    .datacnt = 1,
+    .data = &datav,
+  };
+  datav = (ngtcp2_vec){
+    .base = null_data,
+    .len = 911,
+  };
+
+  pktlen = ngtcp2_tpe_write_1rtt(&tpe, rawbuf, sizeof(rawbuf), &fr, 1);
+
+  ngtcp2_buf_init(&pkt, rawbuf, pktlen, NGTCP2_BUF_ORIGIN_APPLICATION,
+                  NGTCP2_BUF_DIR_RX, NGTCP2_BUF_PURPOSE_PACKET_RX, &owner,
+                  retain_buf_owner, release_buf_owner);
+  pkt.last = pkt.end;
+
+  rv = ngtcp2_conn_read_pkt_versioned(conn, &null_path.path,
+                                      NGTCP2_PKT_INFO_VERSION, NULL, &pkt, ++t);
+
+  assert_int(0, ==, rv);
+  assert_size(911, ==, ud.stream_buf.datalen);
+  assert_int(NGTCP2_BUF_ORIGIN_APPLICATION, ==, ud.stream_buf.origin);
+  assert_int(NGTCP2_BUF_DIR_RX, ==, ud.stream_buf.dir);
+  assert_int(NGTCP2_BUF_PURPOSE_STREAM_RX, ==, ud.stream_buf.purpose);
+  assert_ptr_equal(&owner, ud.stream_buf.owner);
+  assert_int(1, ==, owner.retaincnt);
+  assert_int(1, ==, owner.releasecnt);
+
+  ngtcp2_conn_get_buf_stats(conn, &stats);
+
+  assert_uint64(1, ==, stats.app_retain);
+  assert_uint64(1, ==, stats.app_release);
 
   ngtcp2_conn_del(conn);
 }

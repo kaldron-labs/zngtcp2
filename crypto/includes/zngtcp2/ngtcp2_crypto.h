@@ -225,8 +225,9 @@ NGTCP2_EXTERN int ngtcp2_crypto_encrypt(uint8_t *dest,
  * @function
  *
  * `ngtcp2_crypto_encrypt_cb` is a wrapper function around
- * `ngtcp2_crypto_encrypt`.  It can be directly passed to
- * :member:`ngtcp2_callbacks.encrypt` field.
+ * `ngtcp2_crypto_encrypt`.  Target connections use
+ * :type:`ngtcp2_crypto_ops` for packet protection; this wrapper remains for
+ * Retry helpers and provider migration code.
  *
  * This function returns 0 if it succeeds, or
  * :macro:`NGTCP2_ERR_CALLBACK_FAILURE`.
@@ -262,8 +263,9 @@ NGTCP2_EXTERN int ngtcp2_crypto_decrypt(uint8_t *dest,
  * @function
  *
  * `ngtcp2_crypto_decrypt_cb` is a wrapper function around
- * `ngtcp2_crypto_decrypt`.  It can be directly passed to
- * :member:`ngtcp2_callbacks.decrypt` field.
+ * `ngtcp2_crypto_decrypt`.  Target connections use
+ * :type:`ngtcp2_crypto_ops` for packet protection; this wrapper remains for
+ * provider migration code.
  *
  * This function returns 0 if it succeeds, or
  * :macro:`NGTCP2_ERR_TLS_DECRYPT`.
@@ -298,8 +300,9 @@ NGTCP2_EXTERN int ngtcp2_crypto_hp_mask(uint8_t *dest,
  * @function
  *
  * `ngtcp2_crypto_hp_mask_cb` is a wrapper function around
- * `ngtcp2_crypto_hp_mask`.  It can be directly passed to
- * :member:`ngtcp2_callbacks.hp_mask` field.
+ * `ngtcp2_crypto_hp_mask`.  Target connections use
+ * :type:`ngtcp2_crypto_ops` for header protection; this wrapper remains for
+ * provider migration code.
  *
  * This function returns 0 if it succeeds, or
  * :macro:`NGTCP2_ERR_CALLBACK_FAILURE`.
@@ -564,7 +567,7 @@ ngtcp2_crypto_read_write_crypto_data(ngtcp2_conn *conn,
  */
 NGTCP2_EXTERN int ngtcp2_crypto_recv_crypto_data_cb(
   ngtcp2_conn *conn, ngtcp2_encryption_level encryption_level, uint64_t offset,
-  const uint8_t *data, size_t datalen, void *user_data);
+  const ngtcp2_buf *data, void *user_data);
 
 /**
  * @function

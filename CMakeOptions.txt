@@ -2,18 +2,16 @@
 
 option(ENABLE_STATIC_LIB "Build as static libraries" ON)
 option(ENABLE_SHARED_LIB "Build as shared libraries" ON)
-option(ENABLE_LIB_ONLY   "Build libzngtcp2 only" OFF)
+option(ENABLE_LIB_ONLY   "Build libzngtcp2 only" ON)
 
 option(ENABLE_WERROR    "Make compiler warnings fatal" OFF)
 option(ENABLE_DEBUG     "Turn on debug output" OFF)
 option(ENABLE_ASAN      "Enable AddressSanitizer (ASAN)" OFF)
 option(ENABLE_JEMALLOC  "Enable Jemalloc" OFF)
 
-option(ENABLE_GNUTLS    "Enable GnuTLS crypto backend" OFF)
-option(ENABLE_OPENSSL   "Enable OpenSSL crypto backend (required for examples)" ON)
-option(ENABLE_BORINGSSL "Enable BoringSSL crypto backend" OFF)
-option(ENABLE_PICOTLS "Enable Picotls crypto backend" OFF)
-option(ENABLE_WOLFSSL   "Enable wolfSSL crypto backend" OFF)
+set(ZPICOTLS_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../zpicotls/include"
+    CACHE PATH "zpicotls include directory")
+set(ZPICOTLS_LIBRARIES "" CACHE STRING "zpicotls linker flags")
 cmake_dependent_option(BUILD_TESTING "Enable tests" ON "ENABLE_STATIC_LIB" OFF)
 
 # vim: ft=cmake:

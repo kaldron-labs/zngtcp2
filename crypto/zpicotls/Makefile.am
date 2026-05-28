@@ -1,6 +1,6 @@
 # ngtcp2
 
-# Copyright (c) 2019 ngtcp2 contributors
+# Copyright (c) 2022 ngtcp2 contributors
 
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -20,14 +20,34 @@
 # LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-SUBDIRS =
-
-if HAVE_CRYPTO
-SUBDIRS += includes
-endif
-
-if HAVE_ZPICOTLS
-SUBDIRS += zpicotls
-endif
-
 EXTRA_DIST = CMakeLists.txt
+
+AM_CFLAGS = $(WARNCFLAGS) $(DEBUGCFLAGS) $(EXTRACFLAG)
+AM_CPPFLAGS = -I$(top_srcdir)/lib/includes -I$(top_builddir)/lib/includes \
+	-I$(top_srcdir)/lib -DBUILDING_NGTCP2 \
+	-I$(top_srcdir)/crypto/includes -I$(top_builddir)/crypto/includes \
+	-I$(top_srcdir)/crypto -I$(top_builddir)/crypto \
+	@ZPICOTLS_CFLAGS@ @VANILLA_OPENSSL_CFLAGS@
+AM_LDFLAGS = ${LIBTOOL_LDFLAGS}
+
+pkgconfigdir = $(libdir)/pkgconfig
+pkgconfig_DATA = libzngtcp2_crypto_zpicotls.pc
+DISTCLEANFILES = $(pkgconfig_DATA)
+
+lib_LIBRARIES = libzngtcp2_crypto_zpicotls.a
+
+libzngtcp2_crypto_zpicotls_a_SOURCES = zpicotls.c ../shared.c ../shared.h
+
+check_PROGRAMS = cryptotest
+
+cryptotest_SOURCES = \
+	../cryptotest.c \
+	../shared_test.c ../shared_test.h \
+	$(top_srcdir)/tests/munit/munit.c $(top_srcdir)/tests/munit/munit.h
+cryptotest_CPPFLAGS = ${AM_CPPFLAGS} -I$(top_srcdir)/tests/munit
+cryptotest_LDADD = \
+	libzngtcp2_crypto_zpicotls.a \
+	$(top_builddir)/lib/libzngtcp2.la \
+	@ZPICOTLS_LIBS@ @VANILLA_OPENSSL_LIBS@
+
+TESTS = cryptotest

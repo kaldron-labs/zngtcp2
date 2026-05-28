@@ -56,6 +56,7 @@ static const MunitTest tests[] = {
   munit_void_test(test_ngtcp2_buf_move),
   munit_void_test(test_ngtcp2_buf_contract_error),
   munit_void_test(test_ngtcp2_conn_buf_stats),
+  munit_void_test(test_ngtcp2_conn_buffer_api_contract),
   munit_test_end(),
 };
 
@@ -74,23 +75,23 @@ void test_ngtcp2_buf_validate(void) {
                   retain_owner, release_owner);
   buf.last = raw + 8;
 
-  assert_int(0, ==,
-             ngtcp2_buf_validate(&buf, NGTCP2_BUF_DIR_RX,
-                                 NGTCP2_BUF_PURPOSE_PACKET_RX));
+  assert_int(
+    0, ==,
+    ngtcp2_buf_validate(&buf, NGTCP2_BUF_DIR_RX, NGTCP2_BUF_PURPOSE_PACKET_RX));
   assert_size(8, ==, ngtcp2_buf_len(&buf));
   assert_size(sizeof(raw), ==, ngtcp2_buf_cap(&buf));
-  assert_int(NGTCP2_ERR_BUF_CONTRACT, ==,
-             ngtcp2_buf_validate(&buf, NGTCP2_BUF_DIR_TX,
-                                 NGTCP2_BUF_PURPOSE_PACKET_RX));
-  assert_int(NGTCP2_ERR_BUF_CONTRACT, ==,
-             ngtcp2_buf_validate(&buf, NGTCP2_BUF_DIR_RX,
-                                 NGTCP2_BUF_PURPOSE_STREAM_RX));
+  assert_int(
+    NGTCP2_ERR_BUF_CONTRACT, ==,
+    ngtcp2_buf_validate(&buf, NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_PACKET_RX));
+  assert_int(
+    NGTCP2_ERR_BUF_CONTRACT, ==,
+    ngtcp2_buf_validate(&buf, NGTCP2_BUF_DIR_RX, NGTCP2_BUF_PURPOSE_STREAM_RX));
 
   buf.pos = raw + 9;
   buf.last = raw + 8;
-  assert_int(NGTCP2_ERR_BUF_CONTRACT, ==,
-             ngtcp2_buf_validate(&buf, NGTCP2_BUF_DIR_RX,
-                                 NGTCP2_BUF_PURPOSE_PACKET_RX));
+  assert_int(
+    NGTCP2_ERR_BUF_CONTRACT, ==,
+    ngtcp2_buf_validate(&buf, NGTCP2_BUF_DIR_RX, NGTCP2_BUF_PURPOSE_PACKET_RX));
 }
 
 void test_ngtcp2_buf_retain_release(void) {
@@ -115,8 +116,8 @@ void test_ngtcp2_buf_retain_release(void) {
   assert_int(NGTCP2_ERR_BUF_CONTRACT, ==, ngtcp2_buf_retain_owner(&buf));
 
   ngtcp2_buf_init(&buf, raw, sizeof(raw), NGTCP2_BUF_ORIGIN_APPLICATION,
-                  NGTCP2_BUF_DIR_RX, NGTCP2_BUF_PURPOSE_STREAM_RX, &owner,
-                  NULL, release_owner);
+                  NGTCP2_BUF_DIR_RX, NGTCP2_BUF_PURPOSE_STREAM_RX, &owner, NULL,
+                  release_owner);
   assert_int(NGTCP2_ERR_BUF_CONTRACT, ==, ngtcp2_buf_retain_owner(&buf));
 }
 
@@ -137,8 +138,7 @@ void test_ngtcp2_buf_slice(void) {
   };
 
   assert_int(0, ==,
-             ngtcp2_buf_slice(&dest, &src, 3, 4,
-                              NGTCP2_BUF_PURPOSE_STREAM_RX));
+             ngtcp2_buf_slice(&dest, &src, 3, 4, NGTCP2_BUF_PURPOSE_STREAM_RX));
   assert_size(1, ==, owner.nretain);
   assert_ptr_equal(raw, dest.begin);
   assert_ptr_equal(raw + 5, dest.pos);
@@ -153,8 +153,7 @@ void test_ngtcp2_buf_slice(void) {
     .begin = other,
   };
   assert_int(NGTCP2_ERR_BUF_CONTRACT, ==,
-             ngtcp2_buf_slice(&dest, &src, 0, 1,
-                              NGTCP2_BUF_PURPOSE_STREAM_RX));
+             ngtcp2_buf_slice(&dest, &src, 0, 1, NGTCP2_BUF_PURPOSE_STREAM_RX));
   assert_ptr_equal(other, dest.begin);
 }
 
@@ -184,9 +183,9 @@ void test_ngtcp2_buf_contract_error(void) {
   assert_string_equal("ERR_BUF_CONTRACT",
                       ngtcp2_strerror(NGTCP2_ERR_BUF_CONTRACT));
   assert_true(ngtcp2_err_is_fatal(NGTCP2_ERR_BUF_CONTRACT));
-  assert_uint64(NGTCP2_INTERNAL_ERROR, ==,
-                ngtcp2_err_infer_quic_transport_error_code(
-                  NGTCP2_ERR_BUF_CONTRACT));
+  assert_uint64(
+    NGTCP2_INTERNAL_ERROR, ==,
+    ngtcp2_err_infer_quic_transport_error_code(NGTCP2_ERR_BUF_CONTRACT));
 }
 
 void test_ngtcp2_conn_buf_stats(void) {
@@ -204,4 +203,49 @@ void test_ngtcp2_conn_buf_stats(void) {
   ngtcp2_conn_get_buf_stats(&conn, &stats);
   assert_uint64(0, ==, stats.rx_trailing_copy);
   assert_uint64(0, ==, stats.app_retain);
+}
+
+void test_ngtcp2_conn_buffer_api_contract(void) {
+  ngtcp2_conn conn = {0};
+  uint8_t raw[128];
+  uint8_t stream[16];
+  ngtcp2_buf pkt, dest, data;
+
+  ngtcp2_buf_init(&pkt, raw, sizeof(raw), NGTCP2_BUF_ORIGIN_BORROWED,
+                  NGTCP2_BUF_DIR_RX, NGTCP2_BUF_PURPOSE_PACKET_RX, NULL, NULL,
+                  NULL);
+  pkt.last = pkt.end;
+
+  assert_int(NGTCP2_ERR_BUF_CONTRACT, ==,
+             ngtcp2_conn_read_pkt_versioned(&conn, NULL, 0, NULL, &pkt, 0));
+  assert_uint64(1, ==, conn.buf_stats.buf_contract_failure);
+
+  ngtcp2_buf_init(&pkt, raw, sizeof(raw), NGTCP2_BUF_ORIGIN_APPLICATION,
+                  NGTCP2_BUF_DIR_RX, NGTCP2_BUF_PURPOSE_PACKET_RX, NULL, NULL,
+                  NULL);
+  pkt.last = pkt.end;
+
+  assert_int(NGTCP2_ERR_BUF_CONTRACT, ==,
+             ngtcp2_conn_read_pkt_versioned(&conn, NULL, 0, NULL, &pkt, 0));
+  assert_uint64(2, ==, conn.buf_stats.buf_contract_failure);
+
+  ngtcp2_buf_init(&dest, raw, sizeof(raw), NGTCP2_BUF_ORIGIN_APPLICATION,
+                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_PACKET_TX, NULL, NULL,
+                  NULL);
+  ngtcp2_buf_init(&data, stream, sizeof(stream), NGTCP2_BUF_ORIGIN_APPLICATION,
+                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_STREAM_TX, NULL, NULL,
+                  NULL);
+  data.last = data.end;
+
+  assert_int(NGTCP2_ERR_BUF_CONTRACT, ==,
+             ngtcp2_conn_write_stream_versioned(
+               &conn, NULL, 0, NULL, &dest, NULL, NGTCP2_WRITE_STREAM_FLAG_NONE,
+               -1, &data, 0));
+  assert_uint64(3, ==, conn.buf_stats.buf_contract_failure);
+
+  assert_int(NGTCP2_ERR_BUF_CONTRACT, ==,
+             ngtcp2_conn_write_stream_versioned(
+               &conn, NULL, 0, NULL, &dest, NULL, NGTCP2_WRITE_STREAM_FLAG_MORE,
+               -1, &data, 0));
+  assert_uint64(4, ==, conn.buf_stats.buf_contract_failure);
 }

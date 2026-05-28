@@ -421,41 +421,29 @@ std::expected<void, Error> Handler::handshake_completed() {
 }
 
 namespace {
-int do_hp_mask(uint8_t *dest, const ngtcp2_crypto_cipher *hp,
-               const ngtcp2_crypto_cipher_ctx *hp_ctx, const uint8_t *sample) {
-  if (ngtcp2_crypto_hp_mask(dest, hp, hp_ctx, sample) != 0) {
-    return NGTCP2_ERR_CALLBACK_FAILURE;
-  }
-
-  if (!config.quiet && config.show_secret) {
-    debug::print_hp_mask({dest, NGTCP2_HP_MASKLEN},
-                         {sample, NGTCP2_HP_SAMPLELEN});
-  }
-
-  return 0;
-}
-} // namespace
-
-namespace {
 int recv_crypto_data(ngtcp2_conn *conn,
                      ngtcp2_encryption_level encryption_level, uint64_t offset,
-                     const uint8_t *data, size_t datalen, void *user_data) {
+                     const ngtcp2_buf *data, void *user_data) {
+  auto datap = data ? data->pos : nullptr;
+  auto datalen = data ? ngtcp2_buf_len(data) : 0;
+
   if (!config.quiet && !config.no_quic_dump) {
-    debug::print_crypto_data(encryption_level, {data, datalen});
+    debug::print_crypto_data(encryption_level, {datap, datalen});
   }
 
   return ngtcp2_crypto_recv_crypto_data_cb(conn, encryption_level, offset, data,
-                                           datalen, user_data);
+                                           user_data);
 }
 } // namespace
 
 namespace {
 int recv_stream_data(ngtcp2_conn *conn, uint32_t flags, int64_t stream_id,
-                     uint64_t offset, const uint8_t *data, size_t datalen,
-                     void *user_data, void *stream_user_data) {
+                     uint64_t offset, const ngtcp2_buf *data, void *user_data,
+                     void *stream_user_data) {
   auto h = static_cast<Handler *>(user_data);
+  auto datalen = ngtcp2_buf_len(data);
 
-  if (!h->recv_stream_data(flags, stream_id, {data, datalen})) {
+  if (!h->recv_stream_data(flags, stream_id, {data->pos, datalen})) {
     return NGTCP2_ERR_CALLBACK_FAILURE;
   }
 
@@ -722,9 +710,6 @@ Handler::init(const Endpoint &ep, const Address &local_addr,
     .recv_client_initial = ngtcp2_crypto_recv_client_initial_cb,
     .recv_crypto_data = ::recv_crypto_data,
     .handshake_completed = ::handshake_completed,
-    .encrypt = ngtcp2_crypto_encrypt_cb,
-    .decrypt = ngtcp2_crypto_decrypt_cb,
-    .hp_mask = do_hp_mask,
     .recv_stream_data = ::recv_stream_data,
     .acked_stream_data_offset = ::acked_stream_data_offset,
     .stream_open = stream_open,

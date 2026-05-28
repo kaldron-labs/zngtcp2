@@ -102,8 +102,10 @@ const ngtcp2_cid odcid = {
 namespace {
 int recv_crypto_data(ngtcp2_conn *conn,
                      ngtcp2_encryption_level encryption_level, uint64_t offset,
-                     const uint8_t *data, size_t datalen, void *user_data) {
+                     const ngtcp2_buf *data, void *user_data) {
   auto state = static_cast<TLSState *>(user_data);
+  (void)offset;
+  (void)data;
 
   ngtcp2_crypto_ctx crypto_ctx{
     .aead =
@@ -322,9 +324,6 @@ ngtcp2_conn *setup_conn(TLSState *state) {
   ngtcp2_callbacks cb{
     .recv_client_initial = recv_client_initial,
     .recv_crypto_data = recv_crypto_data,
-    .encrypt = null_encrypt,
-    .decrypt = null_decrypt,
-    .hp_mask = null_hp_mask,
     .rand = genrand,
     .update_key = update_key,
     .delete_crypto_aead_ctx = delete_crypto_aead_ctx,

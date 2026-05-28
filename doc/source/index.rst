@@ -11,6 +11,7 @@ Welcome to ngtcp2's documentation!
    :caption: Contents:
 
    programmers-guide
+   zngtcp2-buffer-contract
    apiref
    crypto_apiref
 

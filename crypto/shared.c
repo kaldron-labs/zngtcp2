@@ -1775,14 +1775,15 @@ void ngtcp2_crypto_delete_crypto_cipher_ctx_cb(
 
 int ngtcp2_crypto_recv_crypto_data_cb(ngtcp2_conn *conn,
                                       ngtcp2_encryption_level encryption_level,
-                                      uint64_t offset, const uint8_t *data,
-                                      size_t datalen, void *user_data) {
+                                      uint64_t offset, const ngtcp2_buf *data,
+                                      void *user_data) {
   int rv;
   (void)offset;
   (void)user_data;
 
-  rv =
-    ngtcp2_crypto_read_write_crypto_data(conn, encryption_level, data, datalen);
+  rv = ngtcp2_crypto_read_write_crypto_data(conn, encryption_level,
+                                            data ? data->pos : NULL,
+                                            data ? ngtcp2_buf_len(data) : 0);
   if (rv != 0) {
     switch (rv) {
     case /* NGTCP2_CRYPTO_QUICTLS_ERR_TLS_WANT_CLIENT_HELLO_CB */ -10001:

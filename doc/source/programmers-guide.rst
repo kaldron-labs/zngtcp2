@@ -47,12 +47,6 @@ callback functions must be set:
   `ngtcp2_crypto_client_initial_cb()` can be passed directly.
 * :member:`recv_crypto_data <ngtcp2_callbacks.recv_crypto_data>`:
   `ngtcp2_crypto_recv_crypto_data_cb()` can be passed directly.
-* :member:`encrypt <ngtcp2_callbacks.encrypt>`:
-  `ngtcp2_crypto_encrypt_cb()` can be passed directly.
-* :member:`decrypt <ngtcp2_callbacks.decrypt>`:
-  `ngtcp2_crypto_decrypt_cb()` can be passed directly.
-* :member:`hp_mask <ngtcp2_callbacks.hp_mask>`:
-  `ngtcp2_crypto_hp_mask_cb()` can be passed directly.
 * :member:`recv_retry <ngtcp2_callbacks.recv_retry>`:
   `ngtcp2_crypto_recv_retry_cb()` can be passed directly.
 * :member:`rand <ngtcp2_callbacks.rand>`
@@ -81,12 +75,6 @@ For server application, the following callback functions must be set:
   `ngtcp2_crypto_recv_client_initial_cb()` can be passed directly.
 * :member:`recv_crypto_data <ngtcp2_callbacks.recv_crypto_data>`:
   `ngtcp2_crypto_recv_crypto_data_cb()` can be passed directly.
-* :member:`encrypt <ngtcp2_callbacks.encrypt>`:
-  `ngtcp2_crypto_encrypt_cb()` can be passed directly.
-* :member:`decrypt <ngtcp2_callbacks.decrypt>`:
-  `ngtcp2_crypto_decrypt_cb()` can be passed directly.
-* :member:`hp_mask <ngtcp2_callbacks.hp_mask>`:
-  `ngtcp2_crypto_hp_mask_cb()` can be passed directly.
 * :member:`rand <ngtcp2_callbacks.rand>`
 * :member:`get_new_connection_id2
   <ngtcp2_callbacks.get_new_connection_id2>`
@@ -239,27 +227,29 @@ the connection using `ngtcp2_conn_set_tls_native_handle`.
 :type:`ngtcp2_crypto_conn_ref` must be set as a user data in
 ``gnutls_session_t`` object via ``gnutls_session_set_ptr``.
 
-Picotls
-~~~~~~~
+zpicotls
+~~~~~~~~
 
 The ``ptls_context_t`` object should be configured with one of the
 following functions:
 
-* `ngtcp2_crypto_picotls_configure_client_context`
-* `ngtcp2_crypto_picotls_configure_server_context`
+* `ngtcp2_crypto_zpicotls_configure_client_context`
+* `ngtcp2_crypto_zpicotls_configure_server_context`
 
-For each TLS session, create :type:`ngtcp2_crypto_picotls_ctx` object.
-It should be initialized by `ngtcp2_crypto_picotls_ctx_init`, and
+For each TLS session, create :type:`ngtcp2_crypto_zpicotls_ctx` object.
+It should be initialized by `ngtcp2_crypto_zpicotls_ctx_init`, and
 configured with one of the following functions:
 
-* `ngtcp2_crypto_picotls_configure_client_session`
-* `ngtcp2_crypto_picotls_configure_server_session`
+* `ngtcp2_crypto_zpicotls_configure_client_session`
+* `ngtcp2_crypto_zpicotls_configure_server_session`
 
-The :type:`ngtcp2_crypto_picotls_ctx` should be set as the TLS native
-handle for the connection using `ngtcp2_conn_set_tls_native_handle`.
+The session configuration functions set the
+:type:`ngtcp2_crypto_zpicotls_ctx` as the TLS native handle and install
+mandatory packet crypto operations.  Applications that need to split setup can
+call `ngtcp2_crypto_zpicotls_configure_conn` directly.
 
 :type:`ngtcp2_crypto_conn_ref` must be set as a user data in
-``ptls_t`` object inside :type:`ngtcp2_crypto_picotls_ctx` via
+``ptls_t`` object inside :type:`ngtcp2_crypto_zpicotls_ctx` via
 ``ptls_get_data_ptr``.
 
 wolfSSL

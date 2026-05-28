@@ -1224,14 +1224,12 @@ typedef struct ngtcp2_buf {
 } ngtcp2_buf;
 
 NGTCP2_EXTERN void ngtcp2_buf_init(ngtcp2_buf *buf, uint8_t *begin, size_t len,
-                                   ngtcp2_buf_origin origin,
-                                   ngtcp2_buf_dir dir,
+                                   ngtcp2_buf_origin origin, ngtcp2_buf_dir dir,
                                    ngtcp2_buf_purpose purpose, void *owner,
                                    ngtcp2_buf_retain retain,
                                    ngtcp2_buf_release release);
 
-NGTCP2_EXTERN int ngtcp2_buf_validate(const ngtcp2_buf *buf,
-                                      ngtcp2_buf_dir dir,
+NGTCP2_EXTERN int ngtcp2_buf_validate(const ngtcp2_buf *buf, ngtcp2_buf_dir dir,
                                       ngtcp2_buf_purpose purpose);
 
 NGTCP2_EXTERN int ngtcp2_buf_retain_owner(const ngtcp2_buf *buf);
@@ -1263,8 +1261,8 @@ typedef struct ngtcp2_buf_allocator {
   void *user_data;
   int (*alloc)(ngtcp2_buf *out, const ngtcp2_buf_alloc_info *info,
                void *user_data);
-  int (*grow)(ngtcp2_buf *buf, size_t size,
-              const ngtcp2_buf_alloc_info *info, void *user_data);
+  int (*grow)(ngtcp2_buf *buf, size_t size, const ngtcp2_buf_alloc_info *info,
+              void *user_data);
   void (*release)(ngtcp2_buf *buf, void *user_data);
 } ngtcp2_buf_allocator;
 
@@ -1905,6 +1903,21 @@ typedef struct ngtcp2_conn_buf_stats {
   uint64_t buf_contract_failure;
 } ngtcp2_conn_buf_stats;
 
+typedef enum ngtcp2_pkt_buf_copy_kind {
+  NGTCP2_PKT_BUF_COPY_NONE,
+  NGTCP2_PKT_BUF_COPY_RX_TRAILING,
+  NGTCP2_PKT_BUF_COPY_RX_MIXED_STREAM,
+  NGTCP2_PKT_BUF_COPY_REORDER
+} ngtcp2_pkt_buf_copy_kind;
+
+typedef struct ngtcp2_pkt_buf_ctx {
+  ngtcp2_buf *packet;
+  ngtcp2_buf current;
+  ngtcp2_buf payload;
+  ngtcp2_pkt_buf_copy_kind copy_kind;
+  int first_stream_delivered;
+} ngtcp2_pkt_buf_ctx;
+
 /**
  * @enum
  *
@@ -2444,19 +2457,24 @@ typedef struct ngtcp2_crypto_ops {
   uint32_t version;
   int (*encrypt_pkt)(ngtcp2_buf *pkt, size_t payload_offset,
                      size_t plaintextlen, const ngtcp2_crypto_aead *aead,
-                     const ngtcp2_crypto_aead_ctx *aead_ctx,
-                     const uint8_t *aad, size_t aadlen, const uint8_t *nonce,
-                     size_t noncelen, const ngtcp2_crypto_cipher *hp,
+                     const ngtcp2_crypto_aead_ctx *aead_ctx, const uint8_t *aad,
+                     size_t aadlen, const uint8_t *nonce, size_t noncelen,
+                     const ngtcp2_crypto_cipher *hp,
                      const ngtcp2_crypto_cipher_ctx *hp_ctx,
                      size_t hp_sample_offset, uint8_t *hp_mask, void *ctx);
   int (*decrypt_pkt)(ngtcp2_buf *pkt, size_t payload_offset,
                      size_t ciphertextlen, const ngtcp2_crypto_aead *aead,
-                     const ngtcp2_crypto_aead_ctx *aead_ctx,
-                     const uint8_t *aad, size_t aadlen, const uint8_t *nonce,
-                     size_t noncelen, void *ctx);
+                     const ngtcp2_crypto_aead_ctx *aead_ctx, const uint8_t *aad,
+                     size_t aadlen, const uint8_t *nonce, size_t noncelen,
+                     void *ctx);
   int (*hp_mask)(uint8_t *dest, const ngtcp2_crypto_cipher *hp,
-                 const ngtcp2_crypto_cipher_ctx *hp_ctx,
-                 const uint8_t *sample, void *ctx);
+                 const ngtcp2_crypto_cipher_ctx *hp_ctx, const uint8_t *sample,
+                 void *ctx);
+  int (*encrypt_retry)(uint8_t *dest, const ngtcp2_crypto_aead *aead,
+                       const ngtcp2_crypto_aead_ctx *aead_ctx,
+                       const uint8_t *plaintext, size_t plaintextlen,
+                       const uint8_t *nonce, size_t noncelen,
+                       const uint8_t *aad, size_t aadlen);
 } ngtcp2_crypto_ops;
 
 /**
@@ -2891,14 +2909,17 @@ typedef enum ngtcp2_encryption_level {
  * @functypedef
  *
  * :type`ngtcp2_recv_crypto_data` is invoked when crypto data is
- * received.  The received data is pointed by |data|, and its length
- * is |datalen|.  The |offset| specifies the offset where |data| is
- * positioned.  |user_data| is the arbitrary pointer passed to
+ * received.  The received data is pointed by |data|.  The |offset|
+ * specifies the offset where |data| is positioned.  |user_data| is the
+ * arbitrary pointer passed to
  * `ngtcp2_conn_client_new` or `ngtcp2_conn_server_new`.  The ngtcp2
  * library ensures that the crypto data is passed to the application
- * in the increasing order of |offset|.  |datalen| is always strictly
- * greater than 0.  |encryption_level| indicates the encryption level
- * where this data is received.  Crypto data can never be received in
+ * in the increasing order of |offset|.  |data| is either NULL when the
+ * library asks the TLS stack to continue the handshake without new
+ * CRYPTO bytes, or it points to a readable buffer with
+ * `ngtcp2_buf_len(data)` greater than 0.  |encryption_level| indicates
+ * the encryption level where this data is received.  Crypto data can
+ * never be received in
  * :enum:`ngtcp2_encryption_level.NGTCP2_ENCRYPTION_LEVEL_0RTT`.
  *
  * The application should provide the given data to TLS stack.
@@ -2924,8 +2945,8 @@ typedef enum ngtcp2_encryption_level {
  */
 typedef int (*ngtcp2_recv_crypto_data)(ngtcp2_conn *conn,
                                        ngtcp2_encryption_level encryption_level,
-                                       uint64_t offset, const uint8_t *data,
-                                       size_t datalen, void *user_data);
+                                       uint64_t offset, const ngtcp2_buf *data,
+                                       void *user_data);
 
 /**
  * @functypedef
@@ -3116,8 +3137,8 @@ typedef int (*ngtcp2_hp_mask)(uint8_t *dest, const ngtcp2_crypto_cipher *hp,
  * the data is the last data in this stream.  |offset| is the offset
  * where this data begins.  The library ensures that data is passed to
  * the application in the non-decreasing order of |offset| without any
- * overlap.  The data is passed as |data| of length |datalen|.
- * |datalen| may be 0 if and only if |fin| is nonzero.
+ * overlap.  The data is passed as |data|.  `ngtcp2_buf_len(data)` may
+ * be 0 if and only if |fin| is nonzero.
  *
  * If :macro:`NGTCP2_STREAM_DATA_FLAG_0RTT` is set in |flags|, it
  * indicates that a part of or whole data was received in 0-RTT
@@ -3129,8 +3150,8 @@ typedef int (*ngtcp2_hp_mask)(uint8_t *dest, const ngtcp2_crypto_cipher *hp,
  */
 typedef int (*ngtcp2_recv_stream_data)(ngtcp2_conn *conn, uint32_t flags,
                                        int64_t stream_id, uint64_t offset,
-                                       const uint8_t *data, size_t datalen,
-                                       void *user_data, void *stream_user_data);
+                                       const ngtcp2_buf *data, void *user_data,
+                                       void *stream_user_data);
 
 /**
  * @functypedef
@@ -3860,22 +3881,6 @@ typedef struct ngtcp2_callbacks {
    */
   ngtcp2_recv_version_negotiation recv_version_negotiation;
   /**
-   * :member:`encrypt` is a callback function which is invoked to
-   * encrypt a QUIC packet.  This callback function must be specified.
-   */
-  ngtcp2_encrypt encrypt;
-  /**
-   * :member:`decrypt` is a callback function which is invoked to
-   * decrypt a QUIC packet.  This callback function must be specified.
-   */
-  ngtcp2_decrypt decrypt;
-  /**
-   * :member:`hp_mask` is a callback function which is invoked to get
-   * a mask to encrypt or decrypt QUIC packet header.  This callback
-   * function must be specified.
-   */
-  ngtcp2_hp_mask hp_mask;
-  /**
    * :member:`recv_stream_data` is a callback function which is
    * invoked when stream data, which includes application data, is
    * received.  This callback function is optional.
@@ -4357,8 +4362,14 @@ NGTCP2_EXTERN void ngtcp2_conn_del(ngtcp2_conn *conn);
 NGTCP2_EXTERN int
 ngtcp2_conn_read_pkt_versioned(ngtcp2_conn *conn, const ngtcp2_path *path,
                                int pkt_info_version, const ngtcp2_pkt_info *pi,
-                               const uint8_t *pkt, size_t pktlen,
-                               ngtcp2_tstamp ts);
+                               ngtcp2_buf *pkt, ngtcp2_tstamp ts);
+
+#if defined(BUILDING_NGTCP2)
+NGTCP2_EXTERN int ngtcp2_conn_read_pkt_legacy_versioned(
+  ngtcp2_conn *conn, const ngtcp2_path *path, int pkt_info_version,
+  const ngtcp2_pkt_info *pi, const uint8_t *pkt, size_t pktlen,
+  ngtcp2_tstamp ts);
+#endif /* defined(BUILDING_NGTCP2) */
 
 /**
  * @function
@@ -5261,6 +5272,12 @@ NGTCP2_EXTERN int ngtcp2_conn_shutdown_stream_read(ngtcp2_conn *conn,
  */
 NGTCP2_EXTERN ngtcp2_ssize ngtcp2_conn_write_stream_versioned(
   ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
+  ngtcp2_pkt_info *pi, ngtcp2_buf *dest, ngtcp2_ssize *pdatalen, uint32_t flags,
+  int64_t stream_id, const ngtcp2_buf *data, ngtcp2_tstamp ts);
+
+#if defined(BUILDING_NGTCP2)
+NGTCP2_EXTERN ngtcp2_ssize ngtcp2_conn_write_stream_legacy_versioned(
+  ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
   ngtcp2_pkt_info *pi, uint8_t *dest, size_t destlen, ngtcp2_ssize *pdatalen,
   uint32_t flags, int64_t stream_id, const uint8_t *data, size_t datalen,
   ngtcp2_tstamp ts);
@@ -5423,6 +5440,7 @@ NGTCP2_EXTERN ngtcp2_ssize ngtcp2_conn_writev_stream_versioned(
   ngtcp2_pkt_info *pi, uint8_t *dest, size_t destlen, ngtcp2_ssize *pdatalen,
   uint32_t flags, int64_t stream_id, const ngtcp2_vec *datav, size_t datavcnt,
   ngtcp2_tstamp ts);
+#endif /* defined(BUILDING_NGTCP2) */
 
 /**
  * @macrosection
@@ -6505,6 +6523,18 @@ NGTCP2_EXTERN void ngtcp2_conn_set_tls_native_handle(ngtcp2_conn *conn,
 /**
  * @function
  *
+ * `ngtcp2_conn_set_crypto_ops` installs provider packet crypto operations.
+ * zngtcp2 requires these operations to be installed by the zpicotls provider
+ * before packet processing uses the buffer-aware packet paths.  |ops| must
+ * remain valid only for the duration of this call; the structure is copied.
+ */
+NGTCP2_EXTERN void ngtcp2_conn_set_crypto_ops(ngtcp2_conn *conn,
+                                              const ngtcp2_crypto_ops *ops,
+                                              void *ops_ctx);
+
+/**
+ * @function
+ *
  * `ngtcp2_conn_set_retry_aead` sets |aead| and |aead_ctx| for Retry
  * integrity tag verification.  |aead| must be AEAD_AES_128_GCM.
  * |aead_ctx| must be initialized with :macro:`NGTCP2_RETRY_KEY` as
@@ -7374,9 +7404,15 @@ NGTCP2_EXTERN void ngtcp2_secure_clear(void *data, size_t len);
  * `ngtcp2_conn_read_pkt` is a wrapper around
  * `ngtcp2_conn_read_pkt_versioned` to set the correct struct version.
  */
-#define ngtcp2_conn_read_pkt(CONN, PATH, PI, PKT, PKTLEN, TS)                  \
-  ngtcp2_conn_read_pkt_versioned((CONN), (PATH), NGTCP2_PKT_INFO_VERSION,      \
-                                 (PI), (PKT), (PKTLEN), (TS))
+#if defined(BUILDING_NGTCP2)
+#  define ngtcp2_conn_read_pkt(CONN, PATH, PI, PKT, PKTLEN, TS)                \
+    ngtcp2_conn_read_pkt_legacy_versioned(                                     \
+      (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (PKT), (PKTLEN), (TS))
+#else /* !defined(BUILDING_NGTCP2) */
+#  define ngtcp2_conn_read_pkt(CONN, PATH, PI, PKT, TS)                        \
+    ngtcp2_conn_read_pkt_versioned((CONN), (PATH), NGTCP2_PKT_INFO_VERSION,    \
+                                   (PI), (PKT), (TS))
+#endif /* !defined(BUILDING_NGTCP2) */
 
 /*
  * `ngtcp2_conn_write_pkt` is a wrapper around
@@ -7392,22 +7428,32 @@ NGTCP2_EXTERN void ngtcp2_secure_clear(void *data, size_t len);
  * `ngtcp2_conn_write_stream_versioned` to set the correct struct
  * version.
  */
-#define ngtcp2_conn_write_stream(CONN, PATH, PI, DEST, DESTLEN, PDATALEN,      \
-                                 FLAGS, STREAM_ID, DATA, DATALEN, TS)          \
-  ngtcp2_conn_write_stream_versioned(                                          \
-    (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (DEST), (DESTLEN),          \
-    (PDATALEN), (FLAGS), (STREAM_ID), (DATA), (DATALEN), (TS))
+#if defined(BUILDING_NGTCP2)
+#  define ngtcp2_conn_write_stream(CONN, PATH, PI, DEST, DESTLEN, PDATALEN,    \
+                                   FLAGS, STREAM_ID, DATA, DATALEN, TS)        \
+    ngtcp2_conn_write_stream_legacy_versioned(                                 \
+      (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (DEST), (DESTLEN),        \
+      (PDATALEN), (FLAGS), (STREAM_ID), (DATA), (DATALEN), (TS))
+#else /* !defined(BUILDING_NGTCP2) */
+#  define ngtcp2_conn_write_stream(CONN, PATH, PI, DEST, PDATALEN, FLAGS,      \
+                                   STREAM_ID, DATA, TS)                        \
+    ngtcp2_conn_write_stream_versioned(                                        \
+      (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (DEST), (PDATALEN),       \
+      (FLAGS), (STREAM_ID), (DATA), (TS))
+#endif /* !defined(BUILDING_NGTCP2) */
 
 /*
  * `ngtcp2_conn_writev_stream` is a wrapper around
  * `ngtcp2_conn_writev_stream_versioned` to set the correct struct
  * version.
  */
-#define ngtcp2_conn_writev_stream(CONN, PATH, PI, DEST, DESTLEN, PDATALEN,     \
-                                  FLAGS, STREAM_ID, DATAV, DATAVCNT, TS)       \
-  ngtcp2_conn_writev_stream_versioned(                                         \
-    (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (DEST), (DESTLEN),          \
-    (PDATALEN), (FLAGS), (STREAM_ID), (DATAV), (DATAVCNT), (TS))
+#if defined(BUILDING_NGTCP2)
+#  define ngtcp2_conn_writev_stream(CONN, PATH, PI, DEST, DESTLEN, PDATALEN,   \
+                                    FLAGS, STREAM_ID, DATAV, DATAVCNT, TS)     \
+    ngtcp2_conn_writev_stream_versioned(                                       \
+      (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (DEST), (DESTLEN),        \
+      (PDATALEN), (FLAGS), (STREAM_ID), (DATAV), (DATAVCNT), (TS))
+#endif /* defined(BUILDING_NGTCP2) */
 
 /*
  * `ngtcp2_conn_write_datagram` is a wrapper around

@@ -97,8 +97,10 @@ uint64_t LinkConfig::compute_expected_goodput(Timestamp::duration rtt) const {
 
 namespace {
 int recv_stream_data(ngtcp2_conn *conn, uint32_t flags, int64_t stream_id,
-                     uint64_t offset, const uint8_t *data, size_t datalen,
-                     void *user_data, void *stream_user_data) {
+                     uint64_t offset, const ngtcp2_buf *data, void *user_data,
+                     void *stream_user_data) {
+  auto datalen = ngtcp2_buf_len(data);
+
   ngtcp2_conn_extend_max_stream_offset(conn, stream_id, datalen);
   ngtcp2_conn_extend_max_offset(conn, datalen);
 
@@ -110,9 +112,6 @@ ngtcp2_callbacks default_client_callbacks() {
   return ngtcp2_callbacks{
     .client_initial = ngtcp2_crypto_client_initial_cb,
     .recv_crypto_data = ngtcp2_crypto_recv_crypto_data_cb,
-    .encrypt = ngtcp2_crypto_encrypt_cb,
-    .decrypt = ngtcp2_crypto_decrypt_cb,
-    .hp_mask = ngtcp2_crypto_hp_mask_cb,
     .recv_stream_data = recv_stream_data,
     .recv_retry = ngtcp2_crypto_recv_retry_cb,
     .rand = rand_bytes,
@@ -129,9 +128,6 @@ ngtcp2_callbacks default_server_callbacks() {
   return ngtcp2_callbacks{
     .recv_client_initial = ngtcp2_crypto_recv_client_initial_cb,
     .recv_crypto_data = ngtcp2_crypto_recv_crypto_data_cb,
-    .encrypt = ngtcp2_crypto_encrypt_cb,
-    .decrypt = ngtcp2_crypto_decrypt_cb,
-    .hp_mask = ngtcp2_crypto_hp_mask_cb,
     .recv_stream_data = recv_stream_data,
     .rand = rand_bytes,
     .update_key = ngtcp2_crypto_update_key_cb,

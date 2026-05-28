@@ -94,6 +94,8 @@ typedef struct ngtcp2_crypto_cc {
   ngtcp2_encrypt encrypt;
   ngtcp2_decrypt decrypt;
   ngtcp2_hp_mask hp_mask;
+  ngtcp2_crypto_ops ops;
+  void *ops_ctx;
 } ngtcp2_crypto_cc;
 
 void ngtcp2_crypto_create_nonce(uint8_t *dest, const uint8_t *iv, size_t ivlen,

@@ -108,7 +108,7 @@ AC_ARG_ENABLE(asan,
 AC_ARG_ENABLE([lib-only],
     [AS_HELP_STRING([--enable-lib-only],
                     [Build libzngtcp2 and libzngtcp2_crypto only.])],
-    [lib_only=$enableval], [lib_only=no])
+    [lib_only=$enableval], [lib_only=yes])
 
 AC_ARG_WITH([jemalloc],
     [AS_HELP_STRING([--with-jemalloc],
@@ -140,11 +140,6 @@ AC_ARG_WITH([boringssl],
                     [Use boringssl [default=no]])],
     [request_boringssl=$withval], [request_boringssl=no])
 
-AC_ARG_WITH([picotls],
-    [AS_HELP_STRING([--with-picotls],
-                    [Use picotls [default=no]])],
-    [request_picotls=$withval], [request_picotls=no])
-
 AC_ARG_WITH([wolfssl],
     [AS_HELP_STRING([--with-wolfssl],
                     [Use wolfSSL [default=no]])],
@@ -165,8 +160,8 @@ AC_ARG_VAR([BORINGSSL_LIBS], [linker flags for BORINGSSL])
 AC_ARG_VAR([BORINGSSL_STDCXXLIB],
            [C++ standard library used to build BORINGSSL (e.g., -lstdc++)])
 
-AC_ARG_VAR([PICOTLS_CFLAGS], [C compiler flags for PICOTLS])
-AC_ARG_VAR([PICOTLS_LIBS], [linker flags for PICOTLS])
+AC_ARG_VAR([ZPICOTLS_CFLAGS], [C compiler flags for ZPICOTLS])
+AC_ARG_VAR([ZPICOTLS_LIBS], [linker flags for ZPICOTLS])
 
 AC_ARG_VAR([WOLFSSL_CFLAGS], [C compiler flags for WOLFSSL])
 AC_ARG_VAR([WOLFSSL_LIBS], [linker flags for WOLFSSL])
@@ -205,15 +200,13 @@ esac
 
 AM_CONDITIONAL([ENABLE_SHARED], [ test "x${enable_shared}" = "xyes" ])
 
-# OpenSSL (required for libzngtcp2_crypto_quictls, libzngtcp2_crypto_libressl
-# libzngtcp2_crypto_picotls, libzngtcp2_crypto_ossl and examples)
+# OpenSSL is required by zpicotls' OpenSSL-backed crypto primitives.
 have_openssl=no
 have_vanilla_openssl=no
 have_quictls=no
 have_libressl=no
 have_ossl=no
-if test "x${request_openssl}" != "xno" ||
-   test "x${request_picotls}" = "xyes"; then
+if :; then
   PKG_CHECK_MODULES([OPENSSL], [openssl >= 1.1.1],
                     [have_openssl=yes], [have_openssl=no])
   if test "x${have_openssl}" = "xno"; then
@@ -226,6 +219,9 @@ if test "x${request_openssl}" != "xno" ||
     AC_SUBST(VANILLA_OPENSSL_LIBS)
     AC_SUBST(VANILLA_OPENSSL_CFLAGS)
   fi
+fi
+if test "x${have_openssl}" != "xyes"; then
+  AC_MSG_ERROR([openssl >= 1.1.1 is required by zpicotls])
 fi
 
 if test "x${request_openssl}" != "xno" &&
@@ -368,34 +364,43 @@ fi
 
 AM_CONDITIONAL([HAVE_BORINGSSL], [ test "x${have_boringssl}" = "xyes" ])
 
-# Picotls openssl backend (required for libzngtcp2_crypto_picotls)
 have_picotls=no
-if test "x${request_picotls}" != "xno"; then
-  save_CFLAGS="$CFLAGS"
-  save_LIBS="$LIBS"
-  CFLAGS="$PICOTLS_CFLAGS $VANILLA_OPENSSL_CFLAGS $CFLAGS"
-  LIBS="$PICOTLS_LIBS $VANILLA_OPENSSL_LIBS $LIBS"
-
-  AC_MSG_CHECKING([for ptls_openssl_random_bytes])
-  AC_LINK_IFELSE([AC_LANG_PROGRAM([[
-    #include <picotls.h>
-    #include <picotls/openssl.h>
-  ]], [[
-    ptls_openssl_random_bytes(NULL, 0);
-  ]])],
-  [AC_MSG_RESULT([yes]); have_picotls=yes],
-  [AC_MSG_RESULT([no]); have_picotls=no])
-
-  CFLAGS="$save_CFLAGS"
-  LIBS="$save_LIBS"
-fi
-
-if test "x${request_picotls}" = "xyes" &&
-   test "x${have_picotls}" != "xyes"; then
-  AC_MSG_ERROR([picotls was requested (--with-picotls) but not found])
-fi
-
 AM_CONDITIONAL([HAVE_PICOTLS], [ test "x${have_picotls}" = "xyes" ])
+
+# zpicotls is the only supported crypto provider for zngtcp2.
+have_zpicotls=no
+if test "x${ZPICOTLS_CFLAGS}" = "x" &&
+   test -d "${srcdir}/../zpicotls/include"; then
+  ZPICOTLS_CFLAGS="-I${srcdir}/../zpicotls/include"
+fi
+
+save_CFLAGS="$CFLAGS"
+save_LIBS="$LIBS"
+CFLAGS="$ZPICOTLS_CFLAGS $VANILLA_OPENSSL_CFLAGS $CFLAGS"
+LIBS="$ZPICOTLS_LIBS $VANILLA_OPENSSL_LIBS $LIBS"
+
+AC_MSG_CHECKING([for zpicotls buffer hooks])
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+  #include <zpicotls.h>
+  #include <zpicotls/openssl.h>
+]], [[
+  ptls_buffer_t buf;
+  ptls_buffer_init_tx(&buf, (void *)"", 0);
+  ptls_openssl_random_bytes(NULL, 0);
+]])],
+[AC_MSG_RESULT([yes]); have_zpicotls=yes],
+[AC_MSG_RESULT([no]); have_zpicotls=no])
+
+CFLAGS="$save_CFLAGS"
+LIBS="$save_LIBS"
+
+if test "x${have_zpicotls}" != "xyes"; then
+  AC_MSG_ERROR([zpicotls with QUIC buffer hooks was not found; set ZPICOTLS_CFLAGS and ZPICOTLS_LIBS])
+fi
+
+AM_CONDITIONAL([HAVE_ZPICOTLS], [ test "x${have_zpicotls}" = "xyes" ])
+AC_SUBST([ZPICOTLS_CFLAGS])
+AC_SUBST([ZPICOTLS_LIBS])
 
 # wolfSSL (required for libzngtcp2_crypto_wolfssl)
 have_wolfssl=no
@@ -447,6 +452,7 @@ if test "x${have_quictls}" = "xyes" ||
    test "x${have_gnutls}" = "xyes" ||
    test "x${have_boringssl}" = "xyes" ||
    test "x${have_picotls}" = "xyes" ||
+   test "x${have_zpicotls}" = "xyes" ||
    test "x${have_wolfssl}" = "xyes" ||
    test "x${have_ossl}" = "xyes"; then
   have_crypto=yes
@@ -809,8 +815,8 @@ AC_CONFIG_FILES([
   crypto/gnutls/libzngtcp2_crypto_gnutls.pc
   crypto/boringssl/Makefile
   crypto/boringssl/libzngtcp2_crypto_boringssl.pc
-  crypto/picotls/Makefile
-  crypto/picotls/libzngtcp2_crypto_picotls.pc
+  crypto/zpicotls/Makefile
+  crypto/zpicotls/libzngtcp2_crypto_zpicotls.pc
   crypto/wolfssl/Makefile
   crypto/wolfssl/libzngtcp2_crypto_wolfssl.pc
   crypto/ossl/Makefile
@@ -854,7 +860,7 @@ AC_MSG_NOTICE([summary of build options:
       libzngtcp2_crypto_libressl:  ${have_libressl}
       libzngtcp2_crypto_gnutls:    ${have_gnutls}
       libzngtcp2_crypto_boringssl: ${have_boringssl}
-      libzngtcp2_crypto_picotls:   ${have_picotls}
+      libzngtcp2_crypto_zpicotls:  ${have_zpicotls}
       libzngtcp2_crypto_wolfssl:   ${have_wolfssl}
       libzngtcp2_crypto_ossl:      ${have_ossl}
     Debug:
@@ -866,7 +872,7 @@ AC_MSG_NOTICE([summary of build options:
       Jemalloc:       ${have_jemalloc} (CFLAGS='${JEMALLOC_CFLAGS}' LIBS='${JEMALLOC_LIBS}')
       GnuTLS:         ${have_gnutls} (CFLAGS='${GNUTLS_CFLAGS}' LIBS='${GNUTLS_LIBS}')
       BoringSSL:      ${have_boringssl} (CFLAGS='${BORINGSSL_CFLAGS}' LIBS='${BORINGSSL_LIBS}')
-      Picotls:        ${have_picotls} (CFLAGS='${PICOTLS_CFLAGS}' LIBS='${PICOTLS_LIBS}')
+      zpicotls:       ${have_zpicotls} (CFLAGS='${ZPICOTLS_CFLAGS}' LIBS='${ZPICOTLS_LIBS}')
       wolfSSL:        ${have_wolfssl} (CFLAGS='${WOLFSSL_CFLAGS}' LIBS='${WOLFSSL_LIBS}')
       Libbrotlienc:   ${have_libbrotlienc} (CFLAGS='${LIBBROTLIENC_CFLAGS}' LIBS='${LIBBROTLIENC_LIBS}')
       Libbrotlidec:   ${have_libbrotlidec} (CFLAGS='${LIBBROTLIDEC_CFLAGS}' LIBS='${LIBBROTLIDEC_LIBS}')

@@ -266,63 +266,19 @@ overwritten if it already exists when storing a token.
 Crypto helper library
 ---------------------
 
-In order to make TLS stack integration less painful, we provide a
-crypto helper library which offers the basic crypto operations.
+In order to make TLS stack integration less painful, zngtcp2 provides
+one supported crypto helper library:
 
-The header file exists under crypto/includes/zngtcp2 directory.
+- libzngtcp2_crypto_zpicotls: Use zpicotls as TLS backend.
 
-Each library file is built for a particular TLS backend.  The
-available crypto helper libraries are:
+The installed helper headers live under ``include/zngtcp2``.  The
+zpicotls provider installs mandatory packet crypto operations used by
+the buffer-oriented packet APIs.  Other upstream-style provider source
+directories are kept only as migration references and are not supported
+build targets.
 
-- libzngtcp2_crypto_quictls: Use quictls as TLS backend (deprecated)
-- libzngtcp2_crypto_libressl: Use libressl as TLS backend
-- libzngtcp2_crypto_gnutls: Use GnuTLS as TLS backend
-- libzngtcp2_crypto_boringssl: Use BoringSSL and aws-lc as TLS backend
-- libzngtcp2_crypto_picotls: Use Picotls as TLS backend
-- libzngtcp2_crypto_wolfssl: Use wolfSSL as TLS backend
-- libzngtcp2_crypto_ossl: Use OpenSSL as TLS backend (experimental)
-
-Because BoringSSL and Picotls are an unversioned product, we only
-tested their particular revision.  See Requirements section above.
-
-We use Picotls with OpenSSL as crypto backend.
-
-libzngtcp2_crypto_ossl has some restrictions for its use because
-OpenSSL QUIC TLS API requires us to keep crypto data in tact until it
-says that they are no longer used.  It also requires us to keep
-transport parameter buffer.  This extra book keeping is just done for
-a couple of TLS messages exchanged during handshake and a couple of
-session tickets after handshake.  If you absolutely need to use
-OpenSSL backend, your application must make sure that:
-
-- Keep `ngtcp2_conn` alive until ``SSL`` object is freed by
-  ``SSL_free``; or
-- Call ``SSL_set_app_data(ssl, NULL)`` before calling ``SSL_free``
-
-If you cannot make sure neither of them, it is a good time to migrate
-your application to the other alternative (e.g., wolfSSL, aws-lc).
-
-libzngtcp2_crypto_quictls, libzngtcp2_crypto_libressl and
-libzngtcp2_crypto_ossl cannot be built at the same time.
-
-Although libressl has its own library libzngtcp2_crypto_libressl, an
-application should include `zngtcp2/ngtcp2_crypto_quictls.h`.  There is
-no `zngtcp2/ngtcp2_crypto_libressl.h`.
-
-The examples directory contains client and server that are linked to
-those crypto helper libraries and TLS backends.  They are only built
-if their corresponding crypto helper library is built:
-
-- qtlsclient: quictls(libressl) client
-- qtlsserver: quictls(libressl) server
-- gtlsclient: GnuTLS client
-- gtlsserver: GnuTLS server
-- bsslclient: BoringSSL(aws-lc) client
-- bsslserver: BoringSSL(aws-lc) server
-- ptlsclient: Picotls client
-- ptlsserver: Picotls server
-- wsslclient: wolfSSL client
-- wsslserver: wolfSSL server
+The legacy examples still document upstream backend naming in places
+and are migration references until they are converted to zpicotls.
 - osslclient: OpenSSL client
 - osslserver: OpenSSL server
 

@@ -323,6 +323,7 @@ struct ngtcp2_conn {
   ngtcp2_callbacks callbacks;
   ngtcp2_buf_allocator buf_allocator;
   ngtcp2_conn_buf_stats buf_stats;
+  ngtcp2_pkt_buf_ctx *rx_pkt_buf_ctx;
   /* rcid is a connection ID present in Initial or 0-RTT packet from
      client as destination connection ID.  Server uses this field to
      check that duplicated Initial or 0-RTT packet are indeed sent to

@@ -33,7 +33,9 @@
 
 void ngtcp2_ppe_init(ngtcp2_ppe *ppe, uint8_t *out, size_t outlen,
                      size_t dgram_offset, ngtcp2_crypto_cc *cc) {
-  ngtcp2_buf_init_internal(&ppe->buf, out, outlen);
+  ngtcp2_buf_init(&ppe->buf, out, outlen, NGTCP2_BUF_ORIGIN_APPLICATION,
+                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_PACKET_TX, NULL, NULL,
+                  NULL);
 
   ppe->dgram_offset = dgram_offset;
   ppe->hdlen = 0;
@@ -127,8 +129,8 @@ ngtcp2_ssize ngtcp2_ppe_final(ngtcp2_ppe *ppe, const uint8_t **ppkt) {
   size_t i;
   int rv;
 
-  assert(cc->encrypt);
-  assert(cc->hp_mask);
+  assert(cc->encrypt || cc->ops.encrypt_pkt);
+  assert(cc->hp_mask || cc->ops.hp_mask);
 
   if (ppe->len_offset) {
     ngtcp2_put_uvarint30(
@@ -139,21 +141,29 @@ ngtcp2_ssize ngtcp2_ppe_final(ngtcp2_ppe *ppe, const uint8_t **ppkt) {
   ngtcp2_crypto_create_nonce(ppe->nonce, cc->ckm->iv.base, cc->ckm->iv.len,
                              ppe->pkt_num);
 
-  rv = cc->encrypt(payload, &cc->aead, &cc->ckm->aead_ctx, payload, payloadlen,
-                   ppe->nonce, cc->ckm->iv.len, buf->begin, ppe->hdlen);
-  if (rv != 0) {
-    return NGTCP2_ERR_CALLBACK_FAILURE;
+  if (cc->ops.encrypt_pkt) {
+    rv = cc->ops.encrypt_pkt(buf, ppe->hdlen, payloadlen, &cc->aead,
+                             &cc->ckm->aead_ctx, buf->begin, ppe->hdlen,
+                             ppe->nonce, cc->ckm->iv.len, &cc->hp, &cc->hp_ctx,
+                             ppe_sample_offset(ppe), mask, cc->ops_ctx);
+  } else {
+    rv =
+      cc->encrypt(payload, &cc->aead, &cc->ckm->aead_ctx, payload, payloadlen,
+                  ppe->nonce, cc->ckm->iv.len, buf->begin, ppe->hdlen);
+    if (rv != 0) {
+      return NGTCP2_ERR_CALLBACK_FAILURE;
+    }
+
+    buf->last = payload + payloadlen + cc->aead.max_overhead;
+
+    /* Make sure that we have enough space to get sample */
+    assert(ppe_sample_offset(ppe) + NGTCP2_HP_SAMPLELEN <= ngtcp2_buf_len(buf));
+
+    rv = cc->hp_mask(mask, &cc->hp, &cc->hp_ctx,
+                     buf->begin + ppe_sample_offset(ppe));
   }
-
-  buf->last = payload + payloadlen + cc->aead.max_overhead;
-
-  /* Make sure that we have enough space to get sample */
-  assert(ppe_sample_offset(ppe) + NGTCP2_HP_SAMPLELEN <= ngtcp2_buf_len(buf));
-
-  rv = cc->hp_mask(mask, &cc->hp, &cc->hp_ctx,
-                   buf->begin + ppe_sample_offset(ppe));
   if (rv != 0) {
-    return NGTCP2_ERR_CALLBACK_FAILURE;
+    return rv == NGTCP2_ERR_BUF_CONTRACT ? rv : NGTCP2_ERR_CALLBACK_FAILURE;
   }
 
   p = buf->begin;

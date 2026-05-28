@@ -22,12 +22,12 @@
  * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-#ifndef NGTCP2_CRYPTO_PICOTLS_H
-#define NGTCP2_CRYPTO_PICOTLS_H
+#ifndef NGTCP2_CRYPTO_ZPICOTLS_H
+#define NGTCP2_CRYPTO_ZPICOTLS_H
 
 #include <zngtcp2/zngtcp2.h>
 
-#include <picotls.h>
+#include <zpicotls.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -36,11 +36,11 @@ extern "C" {
 /**
  * @struct
  *
- * :type:`ngtcp2_crypto_picotls_ctx` contains per-connection state of
- * Picotls object, and must be set to
+ * :type:`ngtcp2_crypto_zpicotls_ctx` contains per-connection state of
+ * zpicotls object, and must be set to
  * `ngtcp2_conn_set_tls_native_handle`.
  */
-typedef struct ngtcp2_crypto_picotls_ctx {
+typedef struct ngtcp2_crypto_zpicotls_ctx {
   /**
    * :member:`ptls` is a pointer to ptls_t object.
    */
@@ -50,41 +50,60 @@ typedef struct ngtcp2_crypto_picotls_ctx {
    * during this particular TLS handshake.
    */
   ptls_handshake_properties_t handshake_properties;
-} ngtcp2_crypto_picotls_ctx;
+} ngtcp2_crypto_zpicotls_ctx;
 
 /**
  * @function
  *
- * `ngtcp2_crypto_picotls_ctx_init` initializes the object pointed by
+ * `ngtcp2_crypto_zpicotls_ctx_init` initializes the object pointed by
  * |cptls|.  |cptls| must not be NULL.
  */
 NGTCP2_EXTERN void
-ngtcp2_crypto_picotls_ctx_init(ngtcp2_crypto_picotls_ctx *cptls);
+ngtcp2_crypto_zpicotls_ctx_init(ngtcp2_crypto_zpicotls_ctx *cptls);
 
 /**
  * @function
  *
- * `ngtcp2_crypto_picotls_from_epoch` translates |epoch| to
+ * `ngtcp2_crypto_zpicotls_get_crypto_ops` returns the zpicotls packet crypto
+ * operation table.
+ */
+NGTCP2_EXTERN const ngtcp2_crypto_ops *
+ngtcp2_crypto_zpicotls_get_crypto_ops(void);
+
+/**
+ * @function
+ *
+ * `ngtcp2_crypto_zpicotls_configure_conn` installs |cptls| as the TLS native
+ * handle and installs mandatory zpicotls packet crypto operations on |conn|.
+ */
+NGTCP2_EXTERN void
+ngtcp2_crypto_zpicotls_configure_conn(ngtcp2_conn *conn,
+                                      ngtcp2_crypto_zpicotls_ctx *cptls);
+
+/**
+ * @function
+ *
+ * `ngtcp2_crypto_zpicotls_from_epoch` translates |epoch| to
  * :type:`ngtcp2_encryption_level`.  This function is only available
- * for Picotls backend.
+ * for zpicotls backend.
  */
 NGTCP2_EXTERN ngtcp2_encryption_level
-ngtcp2_crypto_picotls_from_epoch(size_t epoch);
+ngtcp2_crypto_zpicotls_from_epoch(size_t epoch);
 
 /**
  * @function
  *
- * `ngtcp2_crypto_picotls_from_ngtcp2_encryption_level` translates
+ * `ngtcp2_crypto_zpicotls_from_ngtcp2_encryption_level` translates
  * |encryption_level| to epoch.  This function is only available for
- * Picotls backend.
+ * zpicotls backend.
  */
-NGTCP2_EXTERN size_t ngtcp2_crypto_picotls_from_ngtcp2_encryption_level(
+NGTCP2_EXTERN size_t ngtcp2_crypto_zpicotls_from_ngtcp2_encryption_level(
   ngtcp2_encryption_level encryption_level);
 
 /**
  * @function
  *
- * `ngtcp2_crypto_picotls_configure_server_context` configures |ctx|
+ * `ngtcp2_crypto_zpicotls_configure_server_context` configures |ctx|
  * for server side QUIC connection.  It performs the following
  * modifications:
  *
@@ -101,12 +120,12 @@ NGTCP2_EXTERN size_t ngtcp2_crypto_picotls_from_ngtcp2_encryption_level(
  * It returns 0 if it succeeds, or -1.
  */
 NGTCP2_EXTERN int
-ngtcp2_crypto_picotls_configure_server_context(ptls_context_t *ctx);
+ngtcp2_crypto_zpicotls_configure_server_context(ptls_context_t *ctx);
 
 /**
  * @function
  *
- * `ngtcp2_crypto_picotls_configure_client_context` configures |ctx|
+ * `ngtcp2_crypto_zpicotls_configure_client_context` configures |ctx|
  * for client side QUIC connection.  It performs the following
  * modifications:
  *
@@ -122,25 +141,25 @@ ngtcp2_crypto_picotls_configure_server_context(ptls_context_t *ctx);
  * It returns 0 if it succeeds, or -1.
  */
 NGTCP2_EXTERN int
-ngtcp2_crypto_picotls_configure_client_context(ptls_context_t *ctx);
+ngtcp2_crypto_zpicotls_configure_client_context(ptls_context_t *ctx);
 
 /**
  * @function
  *
- * `ngtcp2_crypto_picotls_configure_server_session` configures |cptls|
+ * `ngtcp2_crypto_zpicotls_configure_server_session` configures |cptls|
  * for server side QUIC connection.  It performs the following
  * modifications:
  *
  * - Set handshake_properties.collect_extension to
- *   `ngtcp2_crypto_picotls_collect_extension`.
+ *   `ngtcp2_crypto_zpicotls_collect_extension`.
  * - Set handshake_properties.collected_extensions to
- *   `ngtcp2_crypto_picotls_collected_extensions`.
+ *   `ngtcp2_crypto_zpicotls_collected_extensions`.
  *
  * The callbacks set by this function only handle QUIC Transport
  * Parameters TLS extension.  If an application needs to handle the
  * other TLS extensions, set its own callbacks and call
- * `ngtcp2_crypto_picotls_collect_extension` and
- * `ngtcp2_crypto_picotls_collected_extensions` form them.
+ * `ngtcp2_crypto_zpicotls_collect_extension` and
+ * `ngtcp2_crypto_zpicotls_collected_extensions` form them.
  *
  * During the QUIC handshake, the first element of
  * handshake_properties.additional_extensions is assigned to send QUIC
@@ -148,7 +167,7 @@ ngtcp2_crypto_picotls_configure_client_context(ptls_context_t *ctx);
  * allocate at least 2 elements for
  * handshake_properties.additional_extensions.
  *
- * Call `ngtcp2_crypto_picotls_deconfigure_session` to free up the
+ * Call `ngtcp2_crypto_zpicotls_deconfigure_session` to free up the
  * resources.
  *
  * Application must set a pointer to :type:`ngtcp2_crypto_conn_ref` to
@@ -159,22 +178,22 @@ ngtcp2_crypto_picotls_configure_client_context(ptls_context_t *ctx);
  *
  * It returns 0 if it succeeds, or -1.
  */
-NGTCP2_EXTERN int ngtcp2_crypto_picotls_configure_server_session(
-  ngtcp2_crypto_picotls_ctx *cptls);
+NGTCP2_EXTERN int ngtcp2_crypto_zpicotls_configure_server_session(
+  ngtcp2_crypto_zpicotls_ctx *cptls, ngtcp2_conn *conn);
 
 /**
  * @function
  *
- * `ngtcp2_crypto_picotls_configure_client_session` configures |cptls|
+ * `ngtcp2_crypto_zpicotls_configure_client_session` configures |cptls|
  * for client side QUIC connection.  It performs the following
  * modifications:
  *
  * - Set handshake_properties.max_early_data_size to a pointer to
  *   uint32_t, which is allocated dynamically by this function.
  * - Set handshake_properties.collect_extension to
- *   `ngtcp2_crypto_picotls_collect_extension`.
+ *   `ngtcp2_crypto_zpicotls_collect_extension`.
  * - Set handshake_properties.collected_extensions to
- *   `ngtcp2_crypto_picotls_collected_extensions`.
+ *   `ngtcp2_crypto_zpicotls_collected_extensions`.
  * - Set handshake_properties.additional_extensions[0].data to the
  *   dynamically allocated buffer which contains QUIC Transport
  *   Parameters TLS extension.  An application must allocate at least
@@ -183,10 +202,10 @@ NGTCP2_EXTERN int ngtcp2_crypto_picotls_configure_server_session(
  * The callbacks set by this function only handle QUIC Transport
  * Parameters TLS extension.  If an application needs to handle the
  * other TLS extensions, set its own callbacks and call
- * `ngtcp2_crypto_picotls_collect_extension` and
- * `ngtcp2_crypto_picotls_collected_extensions` form them.
+ * `ngtcp2_crypto_zpicotls_collect_extension` and
+ * `ngtcp2_crypto_zpicotls_collected_extensions` form them.
  *
- * Call `ngtcp2_crypto_picotls_deconfigure_session` to free up the
+ * Call `ngtcp2_crypto_zpicotls_deconfigure_session` to free up the
  * resources.
  *
  * Application must set a pointer to :type:`ngtcp2_crypto_conn_ref` to
@@ -197,14 +216,13 @@ NGTCP2_EXTERN int ngtcp2_crypto_picotls_configure_server_session(
  *
  * It returns 0 if it succeeds, or -1.
  */
-NGTCP2_EXTERN int
-ngtcp2_crypto_picotls_configure_client_session(ngtcp2_crypto_picotls_ctx *cptls,
-                                               ngtcp2_conn *conn);
+NGTCP2_EXTERN int ngtcp2_crypto_zpicotls_configure_client_session(
+  ngtcp2_crypto_zpicotls_ctx *cptls, ngtcp2_conn *conn);
 
 /**
  * @function
  *
- * `ngtcp2_crypto_picotls_deconfigure_session` frees the resources
+ * `ngtcp2_crypto_zpicotls_deconfigure_session` frees the resources
  * allocated for |cptls| during QUIC connection.  It frees the
  * following data using :manpage:`free(3)`:
  *
@@ -214,28 +232,28 @@ ngtcp2_crypto_picotls_configure_client_session(ngtcp2_crypto_picotls_ctx *cptls,
  * If |cptls| is NULL, this function does nothing.
  */
 NGTCP2_EXTERN void
-ngtcp2_crypto_picotls_deconfigure_session(ngtcp2_crypto_picotls_ctx *cptls);
+ngtcp2_crypto_zpicotls_deconfigure_session(ngtcp2_crypto_zpicotls_ctx *cptls);
 
 /**
  * @function
  *
- * `ngtcp2_crypto_picotls_collect_extension` is a callback function
+ * `ngtcp2_crypto_zpicotls_collect_extension` is a callback function
  * which only returns nonzero if |type| ==
  * :macro:`NGTCP2_TLSEXT_QUIC_TRANSPORT_PARAMETERS_V1`.
  */
-NGTCP2_EXTERN int ngtcp2_crypto_picotls_collect_extension(
+NGTCP2_EXTERN int ngtcp2_crypto_zpicotls_collect_extension(
   ptls_t *ptls, struct st_ptls_handshake_properties_t *properties,
   uint16_t type);
 
 /**
  * @function
  *
- * `ngtcp2_crypto_picotls_collected_extensions` is a callback function
+ * `ngtcp2_crypto_zpicotls_collected_extensions` is a callback function
  * which only handles the extension of type
  * :macro:`NGTCP2_TLSEXT_QUIC_TRANSPORT_PARAMETERS_V1`.  The other
  * extensions are ignored.
  */
-NGTCP2_EXTERN int ngtcp2_crypto_picotls_collected_extensions(
+NGTCP2_EXTERN int ngtcp2_crypto_zpicotls_collected_extensions(
   ptls_t *ptls, struct st_ptls_handshake_properties_t *properties,
   ptls_raw_extension_t *extensions);
 
@@ -243,4 +261,4 @@ NGTCP2_EXTERN int ngtcp2_crypto_picotls_collected_extensions(
 }
 #endif /* defined(__cplusplus) */
 
-#endif /* !defined(NGTCP2_CRYPTO_PICOTLS_H) */
+#endif /* !defined(NGTCP2_CRYPTO_ZPICOTLS_H) */

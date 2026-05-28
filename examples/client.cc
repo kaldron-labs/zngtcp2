@@ -226,27 +226,32 @@ void Client::disconnect() {
 namespace {
 int recv_crypto_data(ngtcp2_conn *conn,
                      ngtcp2_encryption_level encryption_level, uint64_t offset,
-                     const uint8_t *data, size_t datalen, void *user_data) {
+                     const ngtcp2_buf *data, void *user_data) {
+  auto datap = data ? data->pos : nullptr;
+  auto datalen = data ? ngtcp2_buf_len(data) : 0;
+
   if (!config.quiet && !config.no_quic_dump) {
-    debug::print_crypto_data(encryption_level, {data, datalen});
+    debug::print_crypto_data(encryption_level, {datap, datalen});
   }
 
   return ngtcp2_crypto_recv_crypto_data_cb(conn, encryption_level, offset, data,
-                                           datalen, user_data);
+                                           user_data);
 }
 } // namespace
 
 namespace {
 int recv_stream_data(ngtcp2_conn *conn, uint32_t flags, int64_t stream_id,
-                     uint64_t offset, const uint8_t *data, size_t datalen,
-                     void *user_data, void *stream_user_data) {
+                     uint64_t offset, const ngtcp2_buf *data, void *user_data,
+                     void *stream_user_data) {
+  auto datalen = ngtcp2_buf_len(data);
+
   if (!config.quiet && !config.no_quic_dump) {
-    debug::print_stream_data(stream_id, {data, datalen});
+    debug::print_stream_data(stream_id, {data->pos, datalen});
   }
 
   auto c = static_cast<Client *>(user_data);
 
-  if (!c->recv_stream_data(flags, stream_id, {data, datalen})) {
+  if (!c->recv_stream_data(flags, stream_id, {data->pos, datalen})) {
     return NGTCP2_ERR_CALLBACK_FAILURE;
   }
 
@@ -477,22 +482,6 @@ int get_new_connection_id(ngtcp2_conn *conn, ngtcp2_cid *cid,
 } // namespace
 
 namespace {
-int do_hp_mask(uint8_t *dest, const ngtcp2_crypto_cipher *hp,
-               const ngtcp2_crypto_cipher_ctx *hp_ctx, const uint8_t *sample) {
-  if (ngtcp2_crypto_hp_mask(dest, hp, hp_ctx, sample) != 0) {
-    return NGTCP2_ERR_CALLBACK_FAILURE;
-  }
-
-  if (!config.quiet && config.show_secret) {
-    debug::print_hp_mask({dest, NGTCP2_HP_MASKLEN},
-                         {sample, NGTCP2_HP_SAMPLELEN});
-  }
-
-  return 0;
-}
-} // namespace
-
-namespace {
 int update_key(ngtcp2_conn *conn, uint8_t *rx_secret, uint8_t *tx_secret,
                ngtcp2_crypto_aead_ctx *rx_aead_ctx, uint8_t *rx_iv,
                ngtcp2_crypto_aead_ctx *tx_aead_ctx, uint8_t *tx_iv,
@@ -650,9 +639,6 @@ std::expected<void, Error> Client::init(int fd, const Address &local_addr,
     .recv_crypto_data = ::recv_crypto_data,
     .handshake_completed = ::handshake_completed,
     .recv_version_negotiation = ::recv_version_negotiation,
-    .encrypt = ngtcp2_crypto_encrypt_cb,
-    .decrypt = ngtcp2_crypto_decrypt_cb,
-    .hp_mask = do_hp_mask,
     .recv_stream_data = ::recv_stream_data,
     .acked_stream_data_offset = ::acked_stream_data_offset,
     .stream_close = stream_close,

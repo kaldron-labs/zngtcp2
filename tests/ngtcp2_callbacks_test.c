@@ -58,13 +58,12 @@ static int recv_client_initial(ngtcp2_conn *conn, const ngtcp2_cid *dcid,
 
 static int recv_crypto_data(ngtcp2_conn *conn,
                             ngtcp2_encryption_level encryption_level,
-                            uint64_t offset, const uint8_t *data,
-                            size_t datalen, void *user_data) {
+                            uint64_t offset, const ngtcp2_buf *data,
+                            void *user_data) {
   (void)conn;
   (void)encryption_level;
   (void)offset;
   (void)data;
-  (void)datalen;
   (void)user_data;
 
   return 0;
@@ -89,63 +88,15 @@ static int recv_version_negotiation(ngtcp2_conn *conn, const ngtcp2_pkt_hd *hd,
   return 0;
 }
 
-static int encrypt(uint8_t *dest, const ngtcp2_crypto_aead *aead,
-                   const ngtcp2_crypto_aead_ctx *aead_ctx,
-                   const uint8_t *plaintext, size_t plaintextlen,
-                   const uint8_t *nonce, size_t noncelen, const uint8_t *aad,
-                   size_t aadlen) {
-  (void)dest;
-  (void)aead;
-  (void)aead_ctx;
-  (void)plaintext;
-  (void)plaintextlen;
-  (void)nonce;
-  (void)noncelen;
-  (void)aad;
-  (void)aadlen;
-
-  return 0;
-}
-
-static int decrypt(uint8_t *dest, const ngtcp2_crypto_aead *aead,
-                   const ngtcp2_crypto_aead_ctx *aead_ctx,
-                   const uint8_t *ciphertext, size_t ciphertextlen,
-                   const uint8_t *nonce, size_t noncelen, const uint8_t *aad,
-                   size_t aadlen) {
-  (void)dest;
-  (void)aead;
-  (void)aead_ctx;
-  (void)ciphertext;
-  (void)ciphertextlen;
-  (void)nonce;
-  (void)noncelen;
-  (void)aad;
-  (void)aadlen;
-
-  return 0;
-}
-
-static int hp_mask(uint8_t *dest, const ngtcp2_crypto_cipher *hp,
-                   const ngtcp2_crypto_cipher_ctx *hp_ctx,
-                   const uint8_t *sample) {
-  (void)dest;
-  (void)hp;
-  (void)hp_ctx;
-  (void)sample;
-
-  return 0;
-}
-
 static int recv_stream_data(ngtcp2_conn *conn, uint32_t flags,
                             int64_t stream_id, uint64_t offset,
-                            const uint8_t *data, size_t datalen,
-                            void *user_data, void *stream_user_data) {
+                            const ngtcp2_buf *data, void *user_data,
+                            void *stream_user_data) {
   (void)conn;
   (void)flags;
   (void)stream_id;
   (void)offset;
   (void)data;
-  (void)datalen;
   (void)user_data;
   (void)stream_user_data;
 
@@ -539,9 +490,6 @@ void test_ngtcp2_callbacks_convert_to_latest(void) {
     .recv_crypto_data = recv_crypto_data,
     .handshake_completed = handshake_completed,
     .recv_version_negotiation = recv_version_negotiation,
-    .encrypt = encrypt,
-    .decrypt = decrypt,
-    .hp_mask = hp_mask,
     .recv_stream_data = recv_stream_data,
     .acked_stream_data_offset = acked_stream_data_offset,
     .stream_open = stream_open,
@@ -598,9 +546,6 @@ void test_ngtcp2_callbacks_convert_to_latest(void) {
   assert_ptr_equal(srcbuf.handshake_completed, dest->handshake_completed);
   assert_ptr_equal(srcbuf.recv_version_negotiation,
                    dest->recv_version_negotiation);
-  assert_ptr_equal(srcbuf.encrypt, dest->encrypt);
-  assert_ptr_equal(srcbuf.decrypt, dest->decrypt);
-  assert_ptr_equal(srcbuf.hp_mask, dest->hp_mask);
   assert_ptr_equal(srcbuf.recv_stream_data, dest->recv_stream_data);
   assert_ptr_equal(srcbuf.acked_stream_data_offset,
                    dest->acked_stream_data_offset);
@@ -655,9 +600,6 @@ void test_ngtcp2_callbacks_convert_to_old(void) {
     .recv_crypto_data = recv_crypto_data,
     .handshake_completed = handshake_completed,
     .recv_version_negotiation = recv_version_negotiation,
-    .encrypt = encrypt,
-    .decrypt = decrypt,
-    .hp_mask = hp_mask,
     .recv_stream_data = recv_stream_data,
     .acked_stream_data_offset = acked_stream_data_offset,
     .stream_open = stream_open,
@@ -715,9 +657,6 @@ void test_ngtcp2_callbacks_convert_to_old(void) {
   assert_ptr_equal(src.handshake_completed, destbuf.handshake_completed);
   assert_ptr_equal(src.recv_version_negotiation,
                    destbuf.recv_version_negotiation);
-  assert_ptr_equal(src.encrypt, destbuf.encrypt);
-  assert_ptr_equal(src.decrypt, destbuf.decrypt);
-  assert_ptr_equal(src.hp_mask, destbuf.hp_mask);
   assert_ptr_equal(src.recv_stream_data, destbuf.recv_stream_data);
   assert_ptr_equal(src.acked_stream_data_offset,
                    destbuf.acked_stream_data_offset);

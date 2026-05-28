@@ -21,48 +21,7 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-if(HAVE_CRYPTO)
+if(HAVE_ZPICOTLS)
   add_subdirectory(includes)
-endif()
-
-if(HAVE_QUICTLS)
-  add_subdirectory(quictls)
-elseif(ENABLE_OPENSSL)
-  message(WARNING "libzngtcp2_crypto_quictls library is disabled due to lack of good quictls")
-endif()
-
-if(HAVE_LIBRESSL)
-  add_subdirectory(quictls)
-elseif(ENABLE_OPENSSL)
-  message(WARNING "libzngtcp2_crypto_libressl library is disabled due to lack of good LibreSSL")
-endif()
-
-if(HAVE_GNUTLS)
-  add_subdirectory(gnutls)
-elseif(ENABLE_GNUTLS)
-  message(WARNING "libzngtcp2_crypto_gnutls library is disabled due to lack of good GnuTLS")
-endif()
-
-if(HAVE_BORINGSSL)
-  add_subdirectory(boringssl)
-elseif(ENABLE_BORINGSSL)
-  message(WARNING "libzngtcp2_crypto_boringssl library is disabled due to lack of good BoringSSL")
-endif()
-
-if(HAVE_PICOTLS)
-  add_subdirectory(picotls)
-elseif(ENABLE_PICOTLS)
-  message(WARNING "libzngtcp2_crypto_picotls library is disabled due to lack of good Picotls")
-endif()
-
-if(HAVE_WOLFSSL)
-  add_subdirectory(wolfssl)
-elseif(ENABLE_WOLFSSL)
-  message(WARNING "libzngtcp2_crypto_wolfssl library is disabled due to lack of good wolfSSL")
-endif()
-
-if(HAVE_OSSL)
-  add_subdirectory(ossl)
-elseif(ENABLE_OPENSSL)
-  message(WARNING "libzngtcp2_crypto_ossl library is disabled due to lack of good ossl")
+  add_subdirectory(zpicotls)
 endif()

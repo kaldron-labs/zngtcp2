@@ -41,5 +41,6 @@ munit_void_test_decl(test_ngtcp2_buf_slice)
 munit_void_test_decl(test_ngtcp2_buf_move)
 munit_void_test_decl(test_ngtcp2_buf_contract_error)
 munit_void_test_decl(test_ngtcp2_conn_buf_stats)
+munit_void_test_decl(test_ngtcp2_conn_buffer_api_contract)
 
 #endif /* !defined(NGTCP2_BUF_TEST_H) */

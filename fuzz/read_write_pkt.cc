@@ -71,8 +71,12 @@ int recv_client_initial(ngtcp2_conn *conn, const ngtcp2_cid *dcid,
 namespace {
 int recv_crypto_data(ngtcp2_conn *conn,
                      ngtcp2_encryption_level encryption_level, uint64_t offset,
-                     const uint8_t *data, size_t datalen, void *user_data) {
+                     const ngtcp2_buf *data, void *user_data) {
   auto fuzzed_data_provider = static_cast<FuzzedDataProvider *>(user_data);
+  (void)conn;
+  (void)encryption_level;
+  (void)offset;
+  (void)data;
 
   return fuzzed_data_provider->ConsumeBool() ? NGTCP2_ERR_CALLBACK_FAILURE : 0;
 }
@@ -137,9 +141,15 @@ int null_hp_mask(uint8_t *dest, const ngtcp2_crypto_cipher *hp,
 
 namespace {
 int recv_stream_data(ngtcp2_conn *conn, uint32_t flags, int64_t stream_id,
-                     uint64_t offset, const uint8_t *data, size_t datalen,
-                     void *user_data, void *stream_user_data) {
+                     uint64_t offset, const ngtcp2_buf *data, void *user_data,
+                     void *stream_user_data) {
   auto fuzzed_data_provider = static_cast<FuzzedDataProvider *>(user_data);
+  (void)conn;
+  (void)flags;
+  (void)stream_id;
+  (void)offset;
+  (void)data;
+  (void)stream_user_data;
 
   return fuzzed_data_provider->ConsumeBool() ? NGTCP2_ERR_CALLBACK_FAILURE : 0;
 }
@@ -597,9 +607,6 @@ ngtcp2_conn *setup_conn(FuzzedDataProvider &fuzzed_data_provider,
     .recv_crypto_data = recv_crypto_data,
     .handshake_completed = handshake_completed,
     .recv_version_negotiation = recv_version_negotiation,
-    .encrypt = null_encrypt,
-    .decrypt = null_decrypt,
-    .hp_mask = null_hp_mask,
     .recv_stream_data = recv_stream_data,
     .acked_stream_data_offset = acked_stream_data_offset,
     .stream_open = stream_open,
