@@ -129,8 +129,9 @@ ngtcp2_ssize ngtcp2_ppe_final(ngtcp2_ppe *ppe, const uint8_t **ppkt) {
   size_t i;
   int rv;
 
-  assert(cc->encrypt || cc->ops.encrypt_pkt);
-  assert(cc->hp_mask || cc->ops.hp_mask);
+  assert(cc->encrypt || cc->ops.encrypt_pkt || cc->buf_stats);
+  assert(cc->hp_mask || cc->ops.hp_mask || cc->ops.encrypt_pkt ||
+         cc->buf_stats);
 
   if (ppe->len_offset) {
     ngtcp2_put_uvarint30(
@@ -146,7 +147,23 @@ ngtcp2_ssize ngtcp2_ppe_final(ngtcp2_ppe *ppe, const uint8_t **ppkt) {
                              &cc->ckm->aead_ctx, buf->begin, ppe->hdlen,
                              ppe->nonce, cc->ckm->iv.len, &cc->hp, &cc->hp_ctx,
                              ppe_sample_offset(ppe), mask, cc->ops_ctx);
+    if (rv != 0) {
+      if (cc->buf_stats) {
+        ++cc->buf_stats->encrypt_inplace_failure;
+      }
+      return rv == NGTCP2_ERR_BUF_CONTRACT ? rv : NGTCP2_ERR_CALLBACK_FAILURE;
+    }
+
+    if (cc->buf_stats) {
+      ++cc->buf_stats->encrypt_inplace_success;
+    }
   } else {
+    if (cc->buf_stats) {
+      ++cc->buf_stats->encrypt_inplace_failure;
+      ++cc->buf_stats->buf_contract_failure;
+      return NGTCP2_ERR_BUF_CONTRACT;
+    }
+
     rv =
       cc->encrypt(payload, &cc->aead, &cc->ckm->aead_ctx, payload, payloadlen,
                   ppe->nonce, cc->ckm->iv.len, buf->begin, ppe->hdlen);

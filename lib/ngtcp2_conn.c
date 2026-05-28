@@ -2864,6 +2864,7 @@ conn_write_handshake_pkt(ngtcp2_conn *conn, ngtcp2_pkt_info *pi, uint8_t *dest,
   cc.hp = pktns->crypto.ctx.hp;
   cc.ops = conn->crypto.ops;
   cc.ops_ctx = conn->crypto.ops_ctx;
+  cc.buf_stats = &conn->buf_stats;
 
   ngtcp2_pkt_hd_init(
     &hd, conn_pkt_flags_long(conn), type, &conn->dcid.current.cid, &conn->oscid,
@@ -3939,6 +3940,7 @@ static ngtcp2_ssize conn_write_pkt(ngtcp2_conn *conn, ngtcp2_pkt_info *pi,
 
     cc->ops = conn->crypto.ops;
     cc->ops_ctx = conn->crypto.ops_ctx;
+    cc->buf_stats = &conn->buf_stats;
 
     if (conn_should_send_max_data(conn)) {
       rv = ngtcp2_frame_chain_objalloc_new(&nfrc, &conn->frc_objalloc);
@@ -4980,6 +4982,7 @@ ngtcp2_ssize ngtcp2_conn_write_single_frame_pkt(
   cc.hp = pktns->crypto.ctx.hp;
   cc.ops = conn->crypto.ops;
   cc.ops_ctx = conn->crypto.ops_ctx;
+  cc.buf_stats = &conn->buf_stats;
 
   ngtcp2_pkt_hd_init(&hd, hd_flags, type, dcid, scid,
                      pktns->tx.last_pkt_num + 1, pktns_select_pkt_numlen(pktns),

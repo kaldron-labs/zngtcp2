@@ -76,6 +76,12 @@ zpicotls packet crypto ops are installed.  Internal legacy tests without
 provider ops fall back to the legacy decrypt buffer and increment
 ``decrypt_buf_use``.
 
+Target packet transmit encrypts the payload and applies header protection in
+the caller-owned ``packet_tx`` buffer through ``ngtcp2_crypto_ops.encrypt_pkt``.
+Successful packet protection increments ``encrypt_inplace_success``; provider
+contract failures increment ``encrypt_inplace_failure`` and return
+``NGTCP2_ERR_BUF_CONTRACT``.
+
 The target public receive path exposes first STREAM frames and CRYPTO data as
 ``ngtcp2_buf`` callback buffers.  If the packet buffer has retain/release owner
 callbacks, zngtcp2 retains the packet owner for the callback and releases it

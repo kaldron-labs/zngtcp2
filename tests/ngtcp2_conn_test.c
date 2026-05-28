@@ -9747,6 +9747,8 @@ void test_ngtcp2_conn_write_stream_buf_retain_ack_release(void) {
   assert_int(0, ==, rv);
   assert_true(ngtcp2_rtb_empty(&conn->pktns.rtb));
 
+  ngtcp2_conn_reset_buf_stats(conn);
+
   rv = ngtcp2_conn_open_bidi_stream(conn, &stream_id, NULL);
 
   assert_int(0, ==, rv);
@@ -9774,6 +9776,8 @@ void test_ngtcp2_conn_write_stream_buf_retain_ack_release(void) {
 
   assert_uint64(1, ==, stats.app_retain);
   assert_uint64(0, ==, stats.app_release);
+  assert_uint64(1, ==, stats.encrypt_inplace_success);
+  assert_uint64(0, ==, stats.encrypt_inplace_failure);
 
   it = ngtcp2_rtb_head(&conn->pktns.rtb);
 
@@ -9798,6 +9802,8 @@ void test_ngtcp2_conn_write_stream_buf_retain_ack_release(void) {
 
   assert_uint64(2, ==, stats.app_retain);
   assert_uint64(0, ==, stats.app_release);
+  assert_uint64(1, ==, stats.encrypt_inplace_success);
+  assert_uint64(0, ==, stats.encrypt_inplace_failure);
 
   fr.ack = (ngtcp2_ack){
     .type = NGTCP2_FRAME_ACK,
@@ -9816,6 +9822,8 @@ void test_ngtcp2_conn_write_stream_buf_retain_ack_release(void) {
 
   assert_uint64(2, ==, stats.app_retain);
   assert_uint64(1, ==, stats.app_release);
+  assert_uint64(1, ==, stats.encrypt_inplace_success);
+  assert_uint64(0, ==, stats.encrypt_inplace_failure);
 
   ngtcp2_conn_del(conn);
 
