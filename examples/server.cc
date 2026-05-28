@@ -2602,7 +2602,7 @@ Options:
               Specify  QUIC versions  in hex  string in  the order  of
               preference.  Server negotiates one  of those versions if
               client  initially  selects  a  less  preferred  version.
-              These versions must be  supported by libngtcp2.  Instead
+              These versions must be  supported by libzngtcp2.  Instead
               of  specifying hex  string,  there  are special  aliases
               available: "v1"  indicates QUIC  v1, and  "v2" indicates
               QUIC v2.
@@ -2610,7 +2610,7 @@ Options:
               Specify QUIC  versions in  hex string  that are  sent in
               available_versions    field    of    version_information
               transport parameter.   This list  can include  a version
-              which  is  not  supported   by  libngtcp2.   Instead  of
+              which  is  not  supported   by  libzngtcp2.   Instead  of
               specifying  hex   string,  there  are   special  aliases
               available: "v1"  indicates QUIC  v1, and  "v2" indicates
               QUIC v2.

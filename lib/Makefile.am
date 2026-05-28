@@ -29,10 +29,10 @@ AM_CPPFLAGS = -I$(srcdir)/includes -I$(builddir)/includes -DBUILDING_NGTCP2
 AM_LDFLAGS = ${LIBTOOL_LDFLAGS}
 
 pkgconfigdir = $(libdir)/pkgconfig
-pkgconfig_DATA = libngtcp2.pc
+pkgconfig_DATA = libzngtcp2.pc
 DISTCLEANFILES = $(pkgconfig_DATA)
 
-lib_LTLIBRARIES = libngtcp2.la
+lib_LTLIBRARIES = libzngtcp2.la
 
 OBJECTS = \
 	ngtcp2_pkt.c \
@@ -135,6 +135,6 @@ HFILES = \
 	ngtcp2_pktns_id.h \
 	ngtcp2_tstamp.h
 
-libngtcp2_la_SOURCES = $(HFILES) $(OBJECTS)
-libngtcp2_la_LDFLAGS = -no-undefined \
+libzngtcp2_la_SOURCES = $(HFILES) $(OBJECTS)
+libzngtcp2_la_LDFLAGS = -no-undefined \
 	-version-info $(LT_CURRENT):$(LT_REVISION):$(LT_AGE)

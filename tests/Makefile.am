@@ -38,6 +38,7 @@ OBJECTS = \
 	ngtcp2_conn_test.c \
 	ngtcp2_ringbuf_test.c \
 	ngtcp2_conv_test.c \
+	ngtcp2_buf_test.c \
 	ngtcp2_ksl_test.c \
 	ngtcp2_gaptr_test.c \
 	ngtcp2_vec_test.c \
@@ -76,6 +77,7 @@ HFILES= \
 	ngtcp2_conn_test.h \
 	ngtcp2_ringbuf_test.h \
 	ngtcp2_conv_test.h \
+	ngtcp2_buf_test.h \
 	ngtcp2_ksl_test.h \
 	ngtcp2_gaptr_test.h \
 	ngtcp2_vec_test.h \
@@ -109,7 +111,7 @@ main_SOURCES = $(HFILES) $(OBJECTS)
 if ENABLE_SHARED
 main_LDADD = ${top_builddir}/lib/.libs/*.o
 else
-main_LDADD = ${top_builddir}/lib/.libs/libngtcp2.la
+main_LDADD = ${top_builddir}/lib/.libs/libzngtcp2.la
 endif
 main_LDFLAGS = -static
 

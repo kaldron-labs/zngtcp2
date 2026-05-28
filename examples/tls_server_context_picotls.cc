@@ -27,7 +27,7 @@
 #include <memory>
 #include <algorithm>
 
-#include <ngtcp2/ngtcp2_crypto_picotls.h>
+#include <zngtcp2/zngtcp2_crypto_zpicotls.h>
 
 #include <openssl/pem.h>
 #if OPENSSL_VERSION_NUMBER >= 0x30000000L

@@ -28,7 +28,7 @@ cmake_minimum_required(VERSION 3.20)
 cmake_policy(SET CMP0063 NEW)
 
 # XXX using 0.1.90 instead of 0.2.0-DEV
-project(ngtcp2 VERSION 1.22.90 LANGUAGES C)
+project(zngtcp2 VERSION 1.22.90 LANGUAGES C)
 
 # See versioning rule:
 #  https://www.gnu.org/software/libtool/manual/html_node/Updating-version-info.html
@@ -159,8 +159,8 @@ endif()
 enable_testing()
 add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
 
-# OpenSSL (required for libngtcp2_crypto_quictls,
-# libngtcp2_crypto_picotls and examples)
+# OpenSSL (required for libzngtcp2_crypto_quictls,
+# libzngtcp2_crypto_picotls and examples)
 include(CheckSymbolExists)
 if(OPENSSL_FOUND)
   set(VANILLA_OPENSSL_INCLUDE_DIRS ${OPENSSL_INCLUDE_DIR})
@@ -216,7 +216,7 @@ else()
   set(OPENSSL_LIBRARIES     "")
 endif()
 
-# BoringSSL (required for libngtcp2_crypto_boringssl)
+# BoringSSL (required for libzngtcp2_crypto_boringssl)
 if(ENABLE_BORINGSSL)
   cmake_push_check_state()
   set(CMAKE_REQUIRED_INCLUDES   "${BORINGSSL_INCLUDE_DIR}")
@@ -254,7 +254,7 @@ set(HAVE_LIBEV      ${LIBEV_FOUND})
 # libnghttp3 (required for examples)
 set(HAVE_LIBNGHTTP3 ${LIBNGHTTP3_FOUND})
 
-# GnuTLS (required for libngtcp2_crypto_gnutls)
+# GnuTLS (required for libzngtcp2_crypto_gnutls)
 if(ENABLE_GNUTLS)
   set(GNUTLS_INCLUDE_DIRS  ${GNUTLS_INCLUDE_DIR})
   set(HAVE_GNUTLS TRUE)
@@ -265,7 +265,7 @@ else()
   set(GNUTLS_LIBRARIES     "")
 endif()
 
-# Picotls (required for libngtcp2_crypto_picotls)
+# Picotls (required for libzngtcp2_crypto_picotls)
 if(ENABLE_PICOTLS)
   cmake_push_check_state()
   set(CMAKE_REQUIRED_INCLUDES   "${PICOTLS_INCLUDE_DIR}" "${VANILLA_OPENSSL_INCLUDE_DIRS}")
@@ -287,7 +287,7 @@ else()
   set(PICOTLS_LIBRARIES     "")
 endif()
 
-# wolfSSL (required for libngtcp2_crypto_wolfssl)
+# wolfSSL (required for libzngtcp2_crypto_wolfssl)
 if(ENABLE_WOLFSSL)
   set(WOLFSSL_INCLUDE_DIRS  ${WOLFSSL_INCLUDE_DIR})
   set(HAVE_WOLFSSL TRUE)
@@ -374,7 +374,7 @@ file(RELATIVE_PATH top_srcdir   "${CMAKE_CURRENT_BINARY_DIR}/dir" "${CMAKE_CURRE
 file(RELATIVE_PATH top_builddir "${CMAKE_CURRENT_BINARY_DIR}/dir" "${CMAKE_CURRENT_BINARY_DIR}")
 set(abs_top_srcdir  "${CMAKE_CURRENT_SOURCE_DIR}")
 set(abs_top_builddir "${CMAKE_CURRENT_BINARY_DIR}")
-# libngtcp2.pc (pkg-config file)
+# libzngtcp2.pc (pkg-config file)
 set(prefix          "${CMAKE_INSTALL_PREFIX}")
 set(exec_prefix     "${CMAKE_INSTALL_PREFIX}")
 set(libdir          "${CMAKE_INSTALL_FULL_LIBDIR}")
@@ -384,8 +384,8 @@ set(VERSION         "${PACKAGE_VERSION}")
 set(bindir          "${CMAKE_INSTALL_FULL_BINDIR}")
 set(sbindir         "${CMAKE_INSTALL_FULL_SBINDIR}")
 foreach(name
-  lib/libngtcp2.pc
-  lib/includes/ngtcp2/version.h
+  lib/libzngtcp2.pc
+  lib/includes/zngtcp2/version.h
 )
   configure_file("${name}.in" "${name}" @ONLY)
 endforeach()

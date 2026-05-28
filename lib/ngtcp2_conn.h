@@ -29,7 +29,7 @@
 #  include <config.h>
 #endif /* defined(HAVE_CONFIG_H) */
 
-#include <ngtcp2/ngtcp2.h>
+#include <zngtcp2/zngtcp2.h>
 
 #include "ngtcp2_mem.h"
 #include "ngtcp2_crypto.h"
@@ -321,6 +321,8 @@ struct ngtcp2_conn {
   ngtcp2_objalloc strm_objalloc;
   ngtcp2_conn_state state;
   ngtcp2_callbacks callbacks;
+  ngtcp2_buf_allocator buf_allocator;
+  ngtcp2_conn_buf_stats buf_stats;
   /* rcid is a connection ID present in Initial or 0-RTT packet from
      client as destination connection ID.  Server uses this field to
      check that duplicated Initial or 0-RTT packet are indeed sent to
@@ -534,6 +536,8 @@ struct ngtcp2_conn {
 
     /* tls_native_handle is a native handle to TLS session object. */
     void *tls_native_handle;
+    ngtcp2_crypto_ops ops;
+    void *ops_ctx;
     /* decrypt_hp_buf is a buffer which is used to write unprotected
        packet header. */
     ngtcp2_vec decrypt_hp_buf;

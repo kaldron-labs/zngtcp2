@@ -199,7 +199,7 @@ Types (structs, unions and typedefs)
 Synopsis
 --------
 
-*#include <ngtcp2/{filename}>*
+*#include <zngtcp2/{filename}>*
 
 '''.format(funcname=doc.funcname, secul='='*len(doc.funcname),
            filename=doc.filename))

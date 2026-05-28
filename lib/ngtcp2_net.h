@@ -56,7 +56,7 @@
 #  include <libkern/OSByteOrder.h>
 #endif /* defined(__APPLE__) */
 
-#include <ngtcp2/ngtcp2.h>
+#include <zngtcp2/zngtcp2.h>
 
 #if HAVE_DECL_BE64TOH
 #  define ngtcp2_ntohl64(N) be64toh(N)

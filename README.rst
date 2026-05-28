@@ -9,7 +9,7 @@ ngtcp2 project is an effort to implement `RFC9000
 Documentation
 -------------
 
-`Online documentation <https://nghttp2.org/ngtcp2/>`_ is available.
+`Online documentation <https://nghttp2.org/zngtcp2/>`_ is available.
 
 Public test server
 ------------------
@@ -29,7 +29,7 @@ implementation:
 Requirements
 ------------
 
-The libngtcp2 C library itself does not depend on any external
+The libzngtcp2 C library itself does not depend on any external
 libraries.  The example client, and server are written in C++23, and
 should compile with the modern C++ compilers (e.g., clang >= 19, or
 gcc >= 15).
@@ -46,7 +46,7 @@ To build sources under the examples directory, libev and nghttp3 are
 required:
 
 - libev
-- `nghttp3 <https://github.com/ngtcp2/nghttp3>`_ for HTTP/3
+- `nghttp3 <https://github.com/zngtcp2/nghttp3>`_ for HTTP/3
 
 To enable `TLS Certificate Compression
 <https://datatracker.ietf.org/doc/html/rfc8879>`_ in bsslclient and
@@ -93,14 +93,14 @@ Build with wolfSSL
    $ make -j$(nproc)
    $ make install
    $ cd ..
-   $ git clone --recursive https://github.com/ngtcp2/nghttp3
+   $ git clone --recursive https://github.com/zngtcp2/nghttp3
    $ cd nghttp3
    $ autoreconf -i
    $ ./configure --prefix=$PWD/build --enable-lib-only
    $ make -j$(nproc) check
    $ make install
    $ cd ..
-   $ git clone --recursive https://github.com/ngtcp2/ngtcp2
+   $ git clone --recursive https://github.com/zngtcp2/ngtcp2
    $ cd ngtcp2
    $ autoreconf -i
    $ # For Mac users who have installed libev with MacPorts, append
@@ -120,14 +120,14 @@ Build with BoringSSL
    $ cmake -B build -DCMAKE_POSITION_INDEPENDENT_CODE=ON
    $ make -j$(nproc) -C build
    $ cd ..
-   $ git clone --recursive https://github.com/ngtcp2/nghttp3
+   $ git clone --recursive https://github.com/zngtcp2/nghttp3
    $ cd nghttp3
    $ autoreconf -i
    $ ./configure --prefix=$PWD/build --enable-lib-only
    $ make -j$(nproc) check
    $ make install
    $ cd ..
-   $ git clone --recursive  https://github.com/ngtcp2/ngtcp2
+   $ git clone --recursive  https://github.com/zngtcp2/ngtcp2
    $ cd ngtcp2
    $ autoreconf -i
    $ # For Mac users who have installed libev with MacPorts, append
@@ -148,14 +148,14 @@ Build with aws-lc
    $ cmake -B build -DDISABLE_GO=ON
    $ make -j$(nproc) -C build
    $ cd ..
-   $ git clone --recursive https://github.com/ngtcp2/nghttp3
+   $ git clone --recursive https://github.com/zngtcp2/nghttp3
    $ cd nghttp3
    $ autoreconf -i
    $ ./configure --prefix=$PWD/build --enable-lib-only
    $ make -j$(nproc) check
    $ make install
    $ cd ..
-   $ git clone --recursive  https://github.com/ngtcp2/ngtcp2
+   $ git clone --recursive  https://github.com/zngtcp2/ngtcp2
    $ cd ngtcp2
    $ autoreconf -i
    $ # For Mac users who have installed libev with MacPorts, append
@@ -180,14 +180,14 @@ Build with libressl
    $ ./configure --prefix=$PWD/build
    $ make -j$(nproc) install
    $ cd ..
-   $ git clone --recursive https://github.com/ngtcp2/nghttp3
+   $ git clone --recursive https://github.com/zngtcp2/nghttp3
    $ cd nghttp3
    $ autoreconf -i
    $ ./configure --prefix=$PWD/build --enable-lib-only
    $ make -j$(nproc) check
    $ make install
    $ cd ..
-   $ git clone --recursive  https://github.com/ngtcp2/ngtcp2
+   $ git clone --recursive  https://github.com/zngtcp2/ngtcp2
    $ cd ngtcp2
    $ autoreconf -i
    $ # For Mac users who have installed libev with MacPorts, append
@@ -269,25 +269,25 @@ Crypto helper library
 In order to make TLS stack integration less painful, we provide a
 crypto helper library which offers the basic crypto operations.
 
-The header file exists under crypto/includes/ngtcp2 directory.
+The header file exists under crypto/includes/zngtcp2 directory.
 
 Each library file is built for a particular TLS backend.  The
 available crypto helper libraries are:
 
-- libngtcp2_crypto_quictls: Use quictls as TLS backend (deprecated)
-- libngtcp2_crypto_libressl: Use libressl as TLS backend
-- libngtcp2_crypto_gnutls: Use GnuTLS as TLS backend
-- libngtcp2_crypto_boringssl: Use BoringSSL and aws-lc as TLS backend
-- libngtcp2_crypto_picotls: Use Picotls as TLS backend
-- libngtcp2_crypto_wolfssl: Use wolfSSL as TLS backend
-- libngtcp2_crypto_ossl: Use OpenSSL as TLS backend (experimental)
+- libzngtcp2_crypto_quictls: Use quictls as TLS backend (deprecated)
+- libzngtcp2_crypto_libressl: Use libressl as TLS backend
+- libzngtcp2_crypto_gnutls: Use GnuTLS as TLS backend
+- libzngtcp2_crypto_boringssl: Use BoringSSL and aws-lc as TLS backend
+- libzngtcp2_crypto_picotls: Use Picotls as TLS backend
+- libzngtcp2_crypto_wolfssl: Use wolfSSL as TLS backend
+- libzngtcp2_crypto_ossl: Use OpenSSL as TLS backend (experimental)
 
 Because BoringSSL and Picotls are an unversioned product, we only
 tested their particular revision.  See Requirements section above.
 
 We use Picotls with OpenSSL as crypto backend.
 
-libngtcp2_crypto_ossl has some restrictions for its use because
+libzngtcp2_crypto_ossl has some restrictions for its use because
 OpenSSL QUIC TLS API requires us to keep crypto data in tact until it
 says that they are no longer used.  It also requires us to keep
 transport parameter buffer.  This extra book keeping is just done for
@@ -302,12 +302,12 @@ OpenSSL backend, your application must make sure that:
 If you cannot make sure neither of them, it is a good time to migrate
 your application to the other alternative (e.g., wolfSSL, aws-lc).
 
-libngtcp2_crypto_quictls, libngtcp2_crypto_libressl and
-libngtcp2_crypto_ossl cannot be built at the same time.
+libzngtcp2_crypto_quictls, libzngtcp2_crypto_libressl and
+libzngtcp2_crypto_ossl cannot be built at the same time.
 
-Although libressl has its own library libngtcp2_crypto_libressl, an
-application should include `ngtcp2/ngtcp2_crypto_quictls.h`.  There is
-no `ngtcp2/ngtcp2_crypto_libressl.h`.
+Although libressl has its own library libzngtcp2_crypto_libressl, an
+application should include `zngtcp2/ngtcp2_crypto_quictls.h`.  There is
+no `zngtcp2/ngtcp2_crypto_libressl.h`.
 
 The examples directory contains client and server that are linked to
 those crypto helper libraries and TLS backends.  They are only built

@@ -38,21 +38,21 @@ help:
 .PHONY: help html apiref cryptoapiref
 
 apiref: mkapiref.py \
-	$(top_builddir)/lib/includes/ngtcp2/version.h \
-	$(top_srcdir)/lib/includes/ngtcp2/ngtcp2.h
+	$(top_builddir)/lib/includes/zngtcp2/version.h \
+	$(top_srcdir)/lib/includes/zngtcp2/zngtcp2.h
 	$(top_srcdir)/doc/mkapiref.py \
 	--title='ngtcp2 API reference' \
 	source/apiref.rst source/macros.rst source/enums.rst source/types.rst \
 	source $(wordlist 2, $(words $^), $^)
 
 cryptoapiref: mkapiref.py \
-	$(top_srcdir)/crypto/includes/ngtcp2/ngtcp2_crypto.h \
-	$(top_srcdir)/crypto/includes/ngtcp2/ngtcp2_crypto_quictls.h \
-	$(top_srcdir)/crypto/includes/ngtcp2/ngtcp2_crypto_gnutls.h \
-	$(top_srcdir)/crypto/includes/ngtcp2/ngtcp2_crypto_boringssl.h \
-	$(top_srcdir)/crypto/includes/ngtcp2/ngtcp2_crypto_picotls.h \
-	$(top_srcdir)/crypto/includes/ngtcp2/ngtcp2_crypto_wolfssl.h \
-	$(top_srcdir)/crypto/includes/ngtcp2/ngtcp2_crypto_ossl.h
+	$(top_srcdir)/crypto/includes/zngtcp2/ngtcp2_crypto.h \
+	$(top_srcdir)/crypto/includes/zngtcp2/ngtcp2_crypto_quictls.h \
+	$(top_srcdir)/crypto/includes/zngtcp2/ngtcp2_crypto_gnutls.h \
+	$(top_srcdir)/crypto/includes/zngtcp2/ngtcp2_crypto_boringssl.h \
+	$(top_srcdir)/crypto/includes/zngtcp2/zngtcp2_crypto_zpicotls.h \
+	$(top_srcdir)/crypto/includes/zngtcp2/ngtcp2_crypto_wolfssl.h \
+	$(top_srcdir)/crypto/includes/zngtcp2/ngtcp2_crypto_ossl.h
 	$(top_srcdir)/doc/mkapiref.py \
 	--title='ngtcp2 crypto API reference' \
 	source/crypto_apiref.rst source/crypto_macros.rst \

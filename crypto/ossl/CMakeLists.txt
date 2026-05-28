@@ -36,7 +36,7 @@ set(ngtcp2_crypto_ossl_INCLUDE_DIRS
   "$<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/crypto>"
 )
 
-foreach(name libngtcp2_crypto_ossl.pc)
+foreach(name libzngtcp2_crypto_ossl.pc)
   configure_file("${name}.in" "${name}" @ONLY)
 endforeach()
 
@@ -82,5 +82,5 @@ if(ENABLE_STATIC_LIB)
     DESTINATION "${CMAKE_INSTALL_LIBDIR}")
 endif()
 
-install(FILES "${CMAKE_CURRENT_BINARY_DIR}/libngtcp2_crypto_ossl.pc"
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/libzngtcp2_crypto_ossl.pc"
   DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")

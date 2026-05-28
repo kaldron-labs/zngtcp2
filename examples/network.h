@@ -45,7 +45,7 @@
 #include <array>
 #include <variant>
 
-#include <ngtcp2/ngtcp2.h>
+#include <zngtcp2/zngtcp2.h>
 
 namespace ngtcp2 {
 

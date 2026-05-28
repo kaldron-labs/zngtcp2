@@ -32,7 +32,7 @@
 #include <string>
 #include <string_view>
 
-#include <ngtcp2/ngtcp2_crypto_picotls.h>
+#include <zngtcp2/zngtcp2_crypto_zpicotls.h>
 
 #include <picotls.h>
 

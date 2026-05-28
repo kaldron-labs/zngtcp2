@@ -102,16 +102,16 @@ install(
 
 # Public shared library
 if(ENABLE_SHARED_LIB)
-  add_library(ngtcp2 SHARED ${ngtcp2_SOURCES})
-  set_target_properties(ngtcp2 PROPERTIES
+  add_library(zngtcp2 SHARED ${ngtcp2_SOURCES})
+  set_target_properties(zngtcp2 PROPERTIES
     COMPILE_FLAGS "${WARNCFLAGS}"
     VERSION ${LT_VERSION} SOVERSION ${LT_SOVERSION}
     C_VISIBILITY_PRESET hidden
     POSITION_INDEPENDENT_CODE ON
   )
-  target_include_directories(ngtcp2 PUBLIC ${ngtcp2_INCLUDE_DIRS})
+  target_include_directories(zngtcp2 PUBLIC ${ngtcp2_INCLUDE_DIRS})
 
-  install(TARGETS ngtcp2
+  install(TARGETS zngtcp2
     EXPORT ${NGTCP2_TARGETS_EXPORT_NAME}
     ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
     LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
@@ -120,17 +120,17 @@ endif()
 
 if(ENABLE_STATIC_LIB)
   # Public static library
-  add_library(ngtcp2_static STATIC ${ngtcp2_SOURCES})
-  set_target_properties(ngtcp2_static PROPERTIES
+  add_library(zngtcp2_static STATIC ${ngtcp2_SOURCES})
+  set_target_properties(zngtcp2_static PROPERTIES
     COMPILE_FLAGS "${WARNCFLAGS}"
     VERSION ${LT_VERSION} SOVERSION ${LT_SOVERSION}
-    ARCHIVE_OUTPUT_NAME ngtcp2${STATIC_LIB_SUFFIX}
+    ARCHIVE_OUTPUT_NAME zngtcp2${STATIC_LIB_SUFFIX}
     C_VISIBILITY_PRESET hidden
   )
-  target_compile_definitions(ngtcp2_static PUBLIC "-DNGTCP2_STATICLIB")
-  target_include_directories(ngtcp2_static PUBLIC ${ngtcp2_INCLUDE_DIRS})
+  target_compile_definitions(zngtcp2_static PUBLIC "-DNGTCP2_STATICLIB")
+  target_include_directories(zngtcp2_static PUBLIC ${ngtcp2_INCLUDE_DIRS})
 
-  install(TARGETS ngtcp2_static
+  install(TARGETS zngtcp2_static
     EXPORT ${NGTCP2_TARGETS_EXPORT_NAME}
     DESTINATION "${CMAKE_INSTALL_LIBDIR}")
 endif()
@@ -140,5 +140,5 @@ install(
   NAMESPACE "${NGTCP2_NAMESPACE}"
   DESTINATION "${NGTCP2_CONFIG_INSTALL_DIR}")
 
-install(FILES "${CMAKE_CURRENT_BINARY_DIR}/libngtcp2.pc"
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/libzngtcp2.pc"
   DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")

@@ -62,7 +62,7 @@
 #  endif /* !defined(WIN32) */
 #endif   /* !defined(NGTCP2_USE_GENERIC_SOCKADDR) */
 
-#include <ngtcp2/version.h>
+#include <zngtcp2/version.h>
 
 #ifdef NGTCP2_STATICLIB
 #  define NGTCP2_EXTERN
@@ -810,6 +810,13 @@ typedef struct NGTCP2_ALIGN(8) ngtcp2_pkt_info {
  * callback function failed.
  */
 #define NGTCP2_ERR_CALLBACK_FAILURE -502
+/**
+ * @macro
+ *
+ * :macro:`NGTCP2_ERR_BUF_CONTRACT` indicates a local zngtcp2 buffer,
+ * allocator, or in-place crypto contract failure.
+ */
+#define NGTCP2_ERR_BUF_CONTRACT -503
 
 /**
  * @macrosection
@@ -855,12 +862,12 @@ typedef struct NGTCP2_ALIGN(8) ngtcp2_pkt_info {
  */
 typedef enum ngtcp2_pkt_type {
   /**
-   * :enum:`NGTCP2_PKT_VERSION_NEGOTIATION` is defined by libngtcp2
+   * :enum:`NGTCP2_PKT_VERSION_NEGOTIATION` is defined by libzngtcp2
    * for convenience.
    */
   NGTCP2_PKT_VERSION_NEGOTIATION = 0x80,
   /**
-   * :enum:`NGTCP2_PKT_STATELESS_RESET` is defined by libngtcp2 for
+   * :enum:`NGTCP2_PKT_STATELESS_RESET` is defined by libzngtcp2 for
    * convenience.
    */
   NGTCP2_PKT_STATELESS_RESET = 0x81,
@@ -881,7 +888,7 @@ typedef enum ngtcp2_pkt_type {
    */
   NGTCP2_PKT_RETRY = 0x13,
   /**
-   * :enum:`NGTCP2_PKT_1RTT` is defined by libngtcp2 for convenience.
+   * :enum:`NGTCP2_PKT_1RTT` is defined by libzngtcp2 for convenience.
    */
   NGTCP2_PKT_1RTT = 0x40
 } ngtcp2_pkt_type;
@@ -1118,6 +1125,148 @@ typedef struct ngtcp2_vec {
    */
   size_t len;
 } ngtcp2_vec;
+
+/**
+ * @enum
+ *
+ * :type:`ngtcp2_buf_origin` identifies who owns the bytes referenced by
+ * :type:`ngtcp2_buf`.
+ */
+typedef enum ngtcp2_buf_origin {
+  NGTCP2_BUF_ORIGIN_LIBRARY,
+  NGTCP2_BUF_ORIGIN_APPLICATION,
+  NGTCP2_BUF_ORIGIN_BORROWED,
+  NGTCP2_BUF_ORIGIN_EXTERNAL
+} ngtcp2_buf_origin;
+
+/**
+ * @enum
+ *
+ * :type:`ngtcp2_buf_dir` identifies the data-path direction of
+ * :type:`ngtcp2_buf`.
+ */
+typedef enum ngtcp2_buf_dir {
+  NGTCP2_BUF_DIR_INTERNAL,
+  NGTCP2_BUF_DIR_RX,
+  NGTCP2_BUF_DIR_TX
+} ngtcp2_buf_dir;
+
+/**
+ * @enum
+ *
+ * :type:`ngtcp2_buf_purpose` classifies the semantic use of
+ * :type:`ngtcp2_buf`.
+ */
+typedef enum ngtcp2_buf_purpose {
+  NGTCP2_BUF_PURPOSE_METADATA,
+  NGTCP2_BUF_PURPOSE_SCRATCH,
+  NGTCP2_BUF_PURPOSE_PACKET_RX,
+  NGTCP2_BUF_PURPOSE_PACKET_TX,
+  NGTCP2_BUF_PURPOSE_PAYLOAD_RX,
+  NGTCP2_BUF_PURPOSE_PAYLOAD_TX,
+  NGTCP2_BUF_PURPOSE_STREAM_RX,
+  NGTCP2_BUF_PURPOSE_STREAM_TX,
+  NGTCP2_BUF_PURPOSE_CRYPTO_RX,
+  NGTCP2_BUF_PURPOSE_CRYPTO_TX,
+  NGTCP2_BUF_PURPOSE_REORDER_RX
+} ngtcp2_buf_purpose;
+
+typedef int (*ngtcp2_buf_retain)(void *owner);
+typedef void (*ngtcp2_buf_release)(void *owner);
+
+/**
+ * @struct
+ *
+ * :type:`ngtcp2_buf` is the zngtcp2 byte buffer and ownership contract used
+ * for public and private data-path buffers.
+ */
+typedef struct ngtcp2_buf {
+  /**
+   * :member:`begin` points to the beginning of the buffer.
+   */
+  uint8_t *begin;
+  /**
+   * :member:`end` points to one beyond the final byte of the buffer.
+   */
+  uint8_t *end;
+  /**
+   * :member:`pos` points to the start of readable data.
+   */
+  uint8_t *pos;
+  /**
+   * :member:`last` points to one beyond the final readable byte.
+   */
+  uint8_t *last;
+  /**
+   * :member:`origin` identifies the owner class of the buffer bytes.
+   */
+  ngtcp2_buf_origin origin;
+  /**
+   * :member:`dir` identifies the data-path direction.
+   */
+  ngtcp2_buf_dir dir;
+  /**
+   * :member:`purpose` identifies the semantic data-path purpose.
+   */
+  ngtcp2_buf_purpose purpose;
+  /**
+   * :member:`owner` is passed to :member:`retain` and :member:`release`.
+   */
+  void *owner;
+  /**
+   * :member:`retain` retains :member:`owner` before ownership escapes.
+   */
+  ngtcp2_buf_retain retain;
+  /**
+   * :member:`release` releases :member:`owner`.
+   */
+  ngtcp2_buf_release release;
+} ngtcp2_buf;
+
+NGTCP2_EXTERN void ngtcp2_buf_init(ngtcp2_buf *buf, uint8_t *begin, size_t len,
+                                   ngtcp2_buf_origin origin,
+                                   ngtcp2_buf_dir dir,
+                                   ngtcp2_buf_purpose purpose, void *owner,
+                                   ngtcp2_buf_retain retain,
+                                   ngtcp2_buf_release release);
+
+NGTCP2_EXTERN int ngtcp2_buf_validate(const ngtcp2_buf *buf,
+                                      ngtcp2_buf_dir dir,
+                                      ngtcp2_buf_purpose purpose);
+
+NGTCP2_EXTERN int ngtcp2_buf_retain_owner(const ngtcp2_buf *buf);
+
+NGTCP2_EXTERN void ngtcp2_buf_release_owner(ngtcp2_buf *buf);
+
+NGTCP2_EXTERN int ngtcp2_buf_slice(ngtcp2_buf *dest, const ngtcp2_buf *src,
+                                   size_t off, size_t len,
+                                   ngtcp2_buf_purpose purpose);
+
+NGTCP2_EXTERN void ngtcp2_buf_move(ngtcp2_buf *dest, ngtcp2_buf *src);
+
+NGTCP2_EXTERN void ngtcp2_buf_reset(ngtcp2_buf *buf);
+
+NGTCP2_EXTERN size_t ngtcp2_buf_len(const ngtcp2_buf *buf);
+
+NGTCP2_EXTERN size_t ngtcp2_buf_cap(const ngtcp2_buf *buf);
+
+typedef struct ngtcp2_buf_alloc_info {
+  ngtcp2_buf_dir dir;
+  ngtcp2_buf_purpose purpose;
+  ngtcp2_buf_origin preferred_origin;
+  size_t size;
+  size_t align;
+  unsigned flags;
+} ngtcp2_buf_alloc_info;
+
+typedef struct ngtcp2_buf_allocator {
+  void *user_data;
+  int (*alloc)(ngtcp2_buf *out, const ngtcp2_buf_alloc_info *info,
+               void *user_data);
+  int (*grow)(ngtcp2_buf *buf, size_t size,
+              const ngtcp2_buf_alloc_info *info, void *user_data);
+  void (*release)(ngtcp2_buf *buf, void *user_data);
+} ngtcp2_buf_allocator;
 
 /**
  * @function
@@ -1737,6 +1886,25 @@ typedef struct ngtcp2_conn_info {
   uint64_t pkt_discarded;
 } ngtcp2_conn_info;
 
+typedef struct ngtcp2_conn_buf_stats {
+  uint64_t rx_pkt_copy;
+  uint64_t rx_trailing_copy;
+  uint64_t rx_mixed_stream_copy;
+  uint64_t decrypt_buf_use;
+  uint64_t reorder_copy;
+  uint64_t zpicotls_full_pkt_copy_attempt;
+  uint64_t zpicotls_crypto_staging_copy;
+  uint64_t app_retain;
+  uint64_t app_release;
+  uint64_t library_buf_exposed;
+  uint64_t decrypt_inplace_success;
+  uint64_t decrypt_inplace_failure;
+  uint64_t encrypt_inplace_success;
+  uint64_t encrypt_inplace_failure;
+  uint64_t allocator_reject;
+  uint64_t buf_contract_failure;
+} ngtcp2_conn_buf_stats;
+
 /**
  * @enum
  *
@@ -2116,6 +2284,11 @@ typedef struct ngtcp2_settings {
    * .. version-added:: 1.23.0
    */
   ngtcp2_log_write log_write;
+  /**
+   * :member:`buf_allocator` is the data-path buffer allocator.  A zeroed
+   * allocator means no data-path allocator is configured.
+   */
+  ngtcp2_buf_allocator buf_allocator;
 } ngtcp2_settings;
 
 /**
@@ -2266,6 +2439,25 @@ typedef struct ngtcp2_crypto_cipher_ctx {
    */
   void *native_handle;
 } ngtcp2_crypto_cipher_ctx;
+
+typedef struct ngtcp2_crypto_ops {
+  uint32_t version;
+  int (*encrypt_pkt)(ngtcp2_buf *pkt, size_t payload_offset,
+                     size_t plaintextlen, const ngtcp2_crypto_aead *aead,
+                     const ngtcp2_crypto_aead_ctx *aead_ctx,
+                     const uint8_t *aad, size_t aadlen, const uint8_t *nonce,
+                     size_t noncelen, const ngtcp2_crypto_cipher *hp,
+                     const ngtcp2_crypto_cipher_ctx *hp_ctx,
+                     size_t hp_sample_offset, uint8_t *hp_mask, void *ctx);
+  int (*decrypt_pkt)(ngtcp2_buf *pkt, size_t payload_offset,
+                     size_t ciphertextlen, const ngtcp2_crypto_aead *aead,
+                     const ngtcp2_crypto_aead_ctx *aead_ctx,
+                     const uint8_t *aad, size_t aadlen, const uint8_t *nonce,
+                     size_t noncelen, void *ctx);
+  int (*hp_mask)(uint8_t *dest, const ngtcp2_crypto_cipher *hp,
+                 const ngtcp2_crypto_cipher_ctx *hp_ctx,
+                 const uint8_t *sample, void *ctx);
+} ngtcp2_crypto_ops;
 
 /**
  * @struct
@@ -5841,6 +6033,11 @@ NGTCP2_EXTERN void ngtcp2_conn_get_conn_info_versioned(ngtcp2_conn *conn,
  */
 NGTCP2_EXTERN void ngtcp2_conn_get_conn_info2_versioned(
   const ngtcp2_conn *conn, int conn_info_version, ngtcp2_conn_info *cinfo);
+
+NGTCP2_EXTERN void ngtcp2_conn_get_buf_stats(ngtcp2_conn *conn,
+                                             ngtcp2_conn_buf_stats *dest);
+
+NGTCP2_EXTERN void ngtcp2_conn_reset_buf_stats(ngtcp2_conn *conn);
 
 /**
  * @function

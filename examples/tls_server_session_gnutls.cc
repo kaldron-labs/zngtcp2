@@ -29,7 +29,7 @@
 #include <array>
 #include <algorithm>
 
-#include <ngtcp2/ngtcp2_crypto_gnutls.h>
+#include <zngtcp2/ngtcp2_crypto_gnutls.h>
 
 #include "tls_server_context_gnutls.h"
 #include "server_base.h"

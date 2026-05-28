@@ -86,6 +86,8 @@ const char *ngtcp2_strerror(int liberr) {
     return "ERR_CONN_ID_BLOCKED";
   case NGTCP2_ERR_CALLBACK_FAILURE:
     return "ERR_CALLBACK_FAILURE";
+  case NGTCP2_ERR_BUF_CONTRACT:
+    return "ERR_BUF_CONTRACT";
   case NGTCP2_ERR_INTERNAL:
     return "ERR_INTERNAL";
   case NGTCP2_ERR_CRYPTO_BUFFER_EXCEEDED:
@@ -137,6 +139,7 @@ uint64_t ngtcp2_err_infer_quic_transport_error_code(int liberr) {
   case NGTCP2_ERR_INVALID_ARGUMENT:
   case NGTCP2_ERR_NOMEM:
   case NGTCP2_ERR_CALLBACK_FAILURE:
+  case NGTCP2_ERR_BUF_CONTRACT:
   case NGTCP2_ERR_HANDSHAKE_TIMEOUT:
   case NGTCP2_ERR_PKT_NUM_EXHAUSTED:
   case NGTCP2_ERR_INTERNAL:

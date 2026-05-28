@@ -29,6 +29,6 @@
 #  include <config.h>
 #endif /* defined(HAVE_CONFIG_H) */
 
-#include <ngtcp2/ngtcp2.h>
+#include <zngtcp2/zngtcp2.h>
 
 #endif /* !defined(NGTCP2_ERR_H) */

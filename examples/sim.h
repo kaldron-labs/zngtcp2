@@ -36,8 +36,8 @@
 #include <random>
 #include <optional>
 
-#include <ngtcp2/ngtcp2.h>
-#include <ngtcp2/ngtcp2_crypto.h>
+#include <zngtcp2/zngtcp2.h>
+#include <zngtcp2/ngtcp2_crypto.h>
 
 #include <wolfssl/options.h>
 #include <wolfssl/ssl.h>

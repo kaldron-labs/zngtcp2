@@ -33,7 +33,7 @@
 #include <expected>
 #include <set>
 
-#include <ngtcp2/ngtcp2.h>
+#include <zngtcp2/zngtcp2.h>
 
 #include "shared.h"
 #include "client_base.h"

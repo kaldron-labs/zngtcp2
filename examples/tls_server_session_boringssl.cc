@@ -26,7 +26,7 @@
 
 #include <cassert>
 
-#include <ngtcp2/ngtcp2.h>
+#include <zngtcp2/zngtcp2.h>
 
 #include "tls_server_context_boringssl.h"
 #include "server_base.h"

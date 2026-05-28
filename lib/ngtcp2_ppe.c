@@ -33,7 +33,7 @@
 
 void ngtcp2_ppe_init(ngtcp2_ppe *ppe, uint8_t *out, size_t outlen,
                      size_t dgram_offset, ngtcp2_crypto_cc *cc) {
-  ngtcp2_buf_init(&ppe->buf, out, outlen);
+  ngtcp2_buf_init_internal(&ppe->buf, out, outlen);
 
   ppe->dgram_offset = dgram_offset;
   ppe->hdlen = 0;

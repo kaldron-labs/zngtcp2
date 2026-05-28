@@ -2279,7 +2279,7 @@ void test_ngtcp2_pkt_find_server_name(void) {
   size_t i;
   uint8_t *p;
 
-  ngtcp2_buf_init(&buf, rawbuf, sizeof(rawbuf));
+  ngtcp2_buf_init_internal(&buf, rawbuf, sizeof(rawbuf));
 
   /* msg_type */
   *buf.last++ = 1;

@@ -25,10 +25,10 @@ exec_prefix=@exec_prefix@
 libdir=@libdir@
 includedir=@includedir@
 
-Name: libngtcp2_crypto_wolfssl
+Name: libzngtcp2_crypto_wolfssl
 Description: ngtcp2 wolfSSL crypto library
-URL: https://github.com/ngtcp2/ngtcp2
+URL: https://github.com/zngtcp2/ngtcp2
 Version: @VERSION@
 Libs: -L${libdir} -lngtcp2_crypto_wolfssl
 Cflags: -I${includedir}
-Requires.private: libngtcp2, wolfssl
+Requires.private: libzngtcp2, wolfssl

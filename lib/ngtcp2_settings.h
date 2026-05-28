@@ -29,7 +29,7 @@
 #  include <config.h>
 #endif /* defined(HAVE_CONFIG_H) */
 
-#include <ngtcp2/ngtcp2.h>
+#include <zngtcp2/zngtcp2.h>
 
 /* NGTCP2_DEFAULT_GLITCH_RATELIM_BURST is the maximum number of tokens
    in glitch rate limiter.  It is also the initial value. */

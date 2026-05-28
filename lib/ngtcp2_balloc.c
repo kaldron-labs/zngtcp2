@@ -35,7 +35,7 @@ void ngtcp2_balloc_init(ngtcp2_balloc *balloc, size_t blklen,
   balloc->mem = mem;
   balloc->blklen = blklen;
   balloc->head = NULL;
-  ngtcp2_buf_init(&balloc->buf, (void *)"", 0);
+  ngtcp2_buf_init_internal(&balloc->buf, (void *)"", 0);
 }
 
 void ngtcp2_balloc_free(ngtcp2_balloc *balloc) {
@@ -55,7 +55,7 @@ void ngtcp2_balloc_clear(ngtcp2_balloc *balloc) {
   }
 
   balloc->head = NULL;
-  ngtcp2_buf_init(&balloc->buf, (void *)"", 0);
+  ngtcp2_buf_init_internal(&balloc->buf, (void *)"", 0);
 }
 
 int ngtcp2_balloc_get(ngtcp2_balloc *balloc, void **pbuf, size_t n) {
@@ -74,7 +74,7 @@ int ngtcp2_balloc_get(ngtcp2_balloc *balloc, void **pbuf, size_t n) {
     hd = (void *)p;
     hd->next = balloc->head;
     balloc->head = hd;
-    ngtcp2_buf_init(
+    ngtcp2_buf_init_internal(
       &balloc->buf,
       (uint8_t *)(((uintptr_t)p + sizeof(ngtcp2_memblock_hd) + 0xFU) &
                   ~(uintptr_t)0xFU),

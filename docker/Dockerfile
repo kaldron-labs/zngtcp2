@@ -23,7 +23,7 @@ cd ..
 rm -rf aws-lc
 
 git clone --recursive --shallow-submodules --depth 1 \
-    https://github.com/ngtcp2/nghttp3
+    https://github.com/zngtcp2/nghttp3
 cd nghttp3
 autoreconf -i
 ./configure --disable-dependency-tracking --enable-lib-only \
@@ -34,7 +34,7 @@ cd ..
 rm -rf nghttp3
 
 git clone --recursive --shallow-submodules --depth 1 -b $NGTCP2_BRANCH \
-    https://github.com/ngtcp2/ngtcp2
+    https://github.com/zngtcp2/ngtcp2
 cd ngtcp2
 autoreconf -i
 ./configure \

@@ -22,41 +22,41 @@
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 install(FILES
-    ngtcp2/ngtcp2_crypto.h
-  DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/ngtcp2")
+    zngtcp2/ngtcp2_crypto.h
+  DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/zngtcp2")
 
 if(HAVE_QUICTLS OR HAVE_LIBRESSL)
   install(FILES
-      ngtcp2/ngtcp2_crypto_quictls.h
-      DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/ngtcp2")
+      zngtcp2/ngtcp2_crypto_quictls.h
+      DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/zngtcp2")
 endif()
 
 if(HAVE_GNUTLS)
   install(FILES
-      ngtcp2/ngtcp2_crypto_gnutls.h
-      DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/ngtcp2")
+      zngtcp2/ngtcp2_crypto_gnutls.h
+      DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/zngtcp2")
 endif()
 
 if(HAVE_BORINGSSL)
   install(FILES
-      ngtcp2/ngtcp2_crypto_boringssl.h
-      DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/ngtcp2")
+      zngtcp2/ngtcp2_crypto_boringssl.h
+      DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/zngtcp2")
 endif()
 
 if(HAVE_PICOTLS)
   install(FILES
-      ngtcp2/ngtcp2_crypto_picotls.h
-      DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/ngtcp2")
+      zngtcp2/zngtcp2_crypto_zpicotls.h
+      DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/zngtcp2")
 endif()
 
 if(HAVE_WOLFSSL)
   install(FILES
-      ngtcp2/ngtcp2_crypto_wolfssl.h
-      DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/ngtcp2")
+      zngtcp2/ngtcp2_crypto_wolfssl.h
+      DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/zngtcp2")
 endif()
 
 if(HAVE_OSSL)
   install(FILES
-      ngtcp2/ngtcp2_crypto_ossl.h
-      DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/ngtcp2")
+      zngtcp2/ngtcp2_crypto_ossl.h
+      DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/zngtcp2")
 endif()

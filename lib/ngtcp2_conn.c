@@ -1335,11 +1335,12 @@ static int conn_new(ngtcp2_conn **pconn, const ngtcp2_cid *dcid,
                    user_data);
   if ((*pconn)->qlog.write) {
     buf = buf_align(buf);
-    ngtcp2_buf_init(&(*pconn)->qlog.buf, buf, NGTCP2_QLOG_BUFLEN);
+    ngtcp2_buf_init_internal(&(*pconn)->qlog.buf, buf, NGTCP2_QLOG_BUFLEN);
     buf = buf_advance(buf, NGTCP2_QLOG_BUFLEN);
   }
 
   (*pconn)->local.settings = *settings;
+  (*pconn)->buf_allocator = settings->buf_allocator;
 
   if (settings->tokenlen) {
     tokenbuf = ngtcp2_mem_malloc(mem, settings->tokenlen);
@@ -13284,6 +13285,15 @@ void ngtcp2_conn_get_conn_info2_versioned(const ngtcp2_conn *conn,
                                           int conn_info_version,
                                           ngtcp2_conn_info *cinfo) {
   ngtcp2_conn_info_init_versioned(conn_info_version, cinfo, &conn->cstat);
+}
+
+void ngtcp2_conn_get_buf_stats(ngtcp2_conn *conn,
+                               ngtcp2_conn_buf_stats *dest) {
+  *dest = conn->buf_stats;
+}
+
+void ngtcp2_conn_reset_buf_stats(ngtcp2_conn *conn) {
+  conn->buf_stats = (ngtcp2_conn_buf_stats){0};
 }
 
 static void conn_get_loss_time_and_pktns(ngtcp2_conn *conn,

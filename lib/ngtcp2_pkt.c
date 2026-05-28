@@ -2674,7 +2674,7 @@ int ngtcp2_pkt_find_server_name(ngtcp2_vec *server_name, const ngtcp2_vec *v) {
 
   assert(v->len);
 
-  ngtcp2_buf_init(&buf, v->base, v->len);
+  ngtcp2_buf_init_internal(&buf, v->base, v->len);
   buf.last += v->len;
 
   /* Handshake msg_type and length */

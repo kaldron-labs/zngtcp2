@@ -26,7 +26,7 @@
 
 #include <cassert>
 
-#include <ngtcp2/ngtcp2_crypto_picotls.h>
+#include <zngtcp2/zngtcp2_crypto_zpicotls.h>
 
 #include "tls_server_context_picotls.h"
 #include "server_base.h"

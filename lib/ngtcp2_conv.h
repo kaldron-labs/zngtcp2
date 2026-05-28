@@ -29,7 +29,7 @@
 #  include <config.h>
 #endif /* defined(HAVE_CONFIG_H) */
 
-#include <ngtcp2/ngtcp2.h>
+#include <zngtcp2/zngtcp2.h>
 
 /*
  * ngtcp2_get_uint64be reads 8 bytes from |p| as 64 bits unsigned

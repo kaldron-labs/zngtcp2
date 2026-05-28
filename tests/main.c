@@ -40,6 +40,7 @@
 #include "ngtcp2_conn_test.h"
 #include "ngtcp2_ringbuf_test.h"
 #include "ngtcp2_conv_test.h"
+#include "ngtcp2_buf_test.h"
 #include "ngtcp2_ksl_test.h"
 #include "ngtcp2_map_test.h"
 #include "ngtcp2_gaptr_test.h"
@@ -78,6 +79,7 @@ int main(int argc, char *argv[]) {
     conn_suite,
     ringbuf_suite,
     conv_suite,
+    buf_suite,
     ksl_suite,
     gaptr_suite,
     vec_suite,

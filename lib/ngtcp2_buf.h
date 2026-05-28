@@ -29,33 +29,13 @@
 #  include <config.h>
 #endif /* defined(HAVE_CONFIG_H) */
 
-#include <ngtcp2/ngtcp2.h>
-
-typedef struct ngtcp2_buf {
-  /* begin points to the beginning of the buffer. */
-  uint8_t *begin;
-  /* end points to the one beyond of the last byte of the buffer */
-  uint8_t *end;
-  /* pos points to the start of data.  Typically, this points to the
-     point that next data should be read.  Initially, it points to
-     |begin|. */
-  uint8_t *pos;
-  /* last points to the one beyond of the last data of the buffer.
-     Typically, new data is written at this point.  Initially, it
-     points to |begin|. */
-  uint8_t *last;
-} ngtcp2_buf;
+#include <zngtcp2/zngtcp2.h>
 
 /*
- * ngtcp2_buf_init initializes |buf| with the given buffer.
+ * ngtcp2_buf_init_internal initializes |buf| for internal scratch or metadata
+ * use that does not cross a public data-path ownership boundary.
  */
-void ngtcp2_buf_init(ngtcp2_buf *buf, uint8_t *begin, size_t len);
-
-/*
- * ngtcp2_buf_reset resets pos and last fields to match begin field to
- * make ngtcp2_buf_len(buf) return 0.
- */
-void ngtcp2_buf_reset(ngtcp2_buf *buf);
+void ngtcp2_buf_init_internal(ngtcp2_buf *buf, uint8_t *begin, size_t len);
 
 /*
  * ngtcp2_buf_left returns the number of additional bytes which can be
@@ -65,18 +45,6 @@ void ngtcp2_buf_reset(ngtcp2_buf *buf);
 static inline size_t ngtcp2_buf_left(const ngtcp2_buf *buf) {
   return (size_t)(buf->end - buf->last);
 }
-
-/*
- * ngtcp2_buf_len returns the number of bytes left to read.  In other
- * words, it returns buf->last - buf->pos.
- */
-#define ngtcp2_buf_len(BUF) (size_t)((BUF)->last - (BUF)->pos)
-
-/*
- * ngtcp2_buf_cap returns the capacity of the buffer.  In other words,
- * it returns buf->end - buf->begin.
- */
-size_t ngtcp2_buf_cap(const ngtcp2_buf *buf);
 
 /*
  * ngtcp2_buf_trunc truncates the number of bytes to read to at most

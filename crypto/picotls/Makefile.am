@@ -31,12 +31,12 @@ AM_CPPFLAGS = -I$(top_srcdir)/lib/includes -I$(top_builddir)/lib/includes \
 AM_LDFLAGS = ${LIBTOOL_LDFLAGS}
 
 pkgconfigdir = $(libdir)/pkgconfig
-pkgconfig_DATA = libngtcp2_crypto_picotls.pc
+pkgconfig_DATA = libzngtcp2_crypto_picotls.pc
 DISTCLEANFILES = $(pkgconfig_DATA)
 
-lib_LIBRARIES = libngtcp2_crypto_picotls.a
+lib_LIBRARIES = libzngtcp2_crypto_picotls.a
 
-libngtcp2_crypto_picotls_a_SOURCES = picotls.c ../shared.c ../shared.h
+libzngtcp2_crypto_picotls_a_SOURCES = picotls.c ../shared.c ../shared.h
 
 check_PROGRAMS = cryptotest
 
@@ -46,8 +46,8 @@ cryptotest_SOURCES = \
 	$(top_srcdir)/tests/munit/munit.c $(top_srcdir)/tests/munit/munit.h
 cryptotest_CPPFLAGS = ${AM_CPPFLAGS} -I$(top_srcdir)/tests/munit
 cryptotest_LDADD = \
-	libngtcp2_crypto_picotls.a \
-	$(top_builddir)/lib/libngtcp2.la \
+	libzngtcp2_crypto_picotls.a \
+	$(top_builddir)/lib/libzngtcp2.la \
 	@PICOTLS_LIBS@ @VANILLA_OPENSSL_LIBS@
 
 TESTS = cryptotest

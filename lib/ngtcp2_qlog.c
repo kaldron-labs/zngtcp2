@@ -1093,7 +1093,7 @@ void ngtcp2_qlog_retry_pkt_received(ngtcp2_qlog *qlog, const ngtcp2_pkt_hd *hd,
     return;
   }
 
-  ngtcp2_buf_init(&buf, rawbuf, sizeof(rawbuf));
+  ngtcp2_buf_init_internal(&buf, rawbuf, sizeof(rawbuf));
 
   *buf.last++ = '\x1E';
   *buf.last++ = '{';
@@ -1155,7 +1155,7 @@ void ngtcp2_qlog_version_negotiation_pkt_received(ngtcp2_qlog *qlog,
     return;
   }
 
-  ngtcp2_buf_init(&buf, rawbuf, sizeof(rawbuf));
+  ngtcp2_buf_init_internal(&buf, rawbuf, sizeof(rawbuf));
 
   *buf.last++ = '\x1E';
   *buf.last++ = '{';

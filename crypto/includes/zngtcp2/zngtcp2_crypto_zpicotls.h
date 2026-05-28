@@ -25,7 +25,7 @@
 #ifndef NGTCP2_CRYPTO_PICOTLS_H
 #define NGTCP2_CRYPTO_PICOTLS_H
 
-#include <ngtcp2/ngtcp2.h>
+#include <zngtcp2/zngtcp2.h>
 
 #include <picotls.h>
 

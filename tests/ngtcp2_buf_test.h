@@ -1,7 +1,7 @@
 /*
  * ngtcp2
  *
- * Copyright (c) 2022 ngtcp2 contributors
+ * Copyright (c) 2026 ngtcp2 contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files (the
@@ -22,31 +22,24 @@
  * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-#ifndef NGTCP2_UNREACHABLE_H
-#define NGTCP2_UNREACHABLE_H
+#ifndef NGTCP2_BUF_TEST_H
+#define NGTCP2_BUF_TEST_H
 
 #ifdef HAVE_CONFIG_H
 #  include <config.h>
 #endif /* defined(HAVE_CONFIG_H) */
 
-#include <zngtcp2/zngtcp2.h>
+#define MUNIT_ENABLE_ASSERT_ALIASES
 
-#ifdef __FILE_NAME__
-#  define NGTCP2_FILE_NAME __FILE_NAME__
-#else /* !defined(__FILE_NAME__) */
-#  define NGTCP2_FILE_NAME "(file)"
-#endif /* !defined(__FILE_NAME__) */
+#include "munit.h"
 
-#define ngtcp2_unreachable()                                                   \
-  ngtcp2_unreachable_fail(NGTCP2_FILE_NAME, __LINE__, __func__)
+extern const MunitSuite buf_suite;
 
-#ifdef _MSC_VER
-__declspec(noreturn)
-#endif /* defined(_MSC_VER) */
-    void ngtcp2_unreachable_fail(const char *file, int line, const char *func)
-#ifndef _MSC_VER
-        __attribute__((noreturn))
-#endif /* !defined(_MSC_VER) */
-        ;
+munit_void_test_decl(test_ngtcp2_buf_validate)
+munit_void_test_decl(test_ngtcp2_buf_retain_release)
+munit_void_test_decl(test_ngtcp2_buf_slice)
+munit_void_test_decl(test_ngtcp2_buf_move)
+munit_void_test_decl(test_ngtcp2_buf_contract_error)
+munit_void_test_decl(test_ngtcp2_conn_buf_stats)
 
-#endif /* !defined(NGTCP2_UNREACHABLE_H) */
+#endif /* !defined(NGTCP2_BUF_TEST_H) */

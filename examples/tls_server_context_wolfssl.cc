@@ -29,7 +29,7 @@
 #include <limits>
 #include <algorithm>
 
-#include <ngtcp2/ngtcp2_crypto_wolfssl.h>
+#include <zngtcp2/ngtcp2_crypto_wolfssl.h>
 
 #include "server_base.h"
 #include "template.h"

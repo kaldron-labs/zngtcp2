@@ -42,6 +42,7 @@ set(main_SOURCES
   ngtcp2_conn_test.c
   ngtcp2_ringbuf_test.c
   ngtcp2_conv_test.c
+  ngtcp2_buf_test.c
   ngtcp2_ksl_test.c
   ngtcp2_gaptr_test.c
   ngtcp2_vec_test.c
@@ -75,7 +76,7 @@ add_executable(main EXCLUDE_FROM_ALL
 # FIXME enable and fix warnings
 #set_target_properties(main PROPERTIES COMPILE_FLAGS "${WARNCFLAGS}")
 target_link_libraries(main
-  ngtcp2_static
+  zngtcp2_static
 )
 add_test(main main)
 add_dependencies(check main)

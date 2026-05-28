@@ -63,7 +63,7 @@ void test_ngtcp2_qlog_write_frame(void) {
   ngtcp2_frame fr;
 
   ngtcp2_qlog_init(&qlog, qlog_write, 0, NULL);
-  ngtcp2_buf_init(&qlog.buf, buf, sizeof(buf));
+  ngtcp2_buf_init_internal(&qlog.buf, buf, sizeof(buf));
 
   {
     fr.padding = (ngtcp2_padding){

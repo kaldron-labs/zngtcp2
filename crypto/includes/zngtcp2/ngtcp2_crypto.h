@@ -25,7 +25,7 @@
 #ifndef NGTCP2_CRYPTO_H
 #define NGTCP2_CRYPTO_H
 
-#include <ngtcp2/ngtcp2.h>
+#include <zngtcp2/zngtcp2.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -85,7 +85,7 @@ extern "C" {
  * Handshake and 1-RTT packets.  If it is unable to obtain necessary
  * data from |tls_native_handle|, this function returns NULL.
  *
- * If libngtcp2_crypto_quictls is linked, |tls_native_handle| must be
+ * If libzngtcp2_crypto_quictls is linked, |tls_native_handle| must be
  * a pointer to SSL object.
  */
 NGTCP2_EXTERN ngtcp2_crypto_ctx *ngtcp2_crypto_ctx_tls(ngtcp2_crypto_ctx *ctx,
@@ -100,7 +100,7 @@ NGTCP2_EXTERN ngtcp2_crypto_ctx *ngtcp2_crypto_ctx_tls(ngtcp2_crypto_ctx *ctx,
  * packets.  If it is unable to obtain necessary data from
  * |tls_native_handle|, this function returns NULL.
  *
- * If libngtcp2_crypto_quictls is linked, |tls_native_handle| must be
+ * If libzngtcp2_crypto_quictls is linked, |tls_native_handle| must be
  * a pointer to SSL object.
  */
 NGTCP2_EXTERN ngtcp2_crypto_ctx *
@@ -112,13 +112,13 @@ ngtcp2_crypto_ctx_tls_early(ngtcp2_crypto_ctx *ctx, void *tls_native_handle);
  * `ngtcp2_crypto_md_init` initializes |md| with the provided
  * |md_native_handle| which is an underlying message digest object.
  *
- * If libngtcp2_crypto_quictls is linked, |md_native_handle| must be a
+ * If libzngtcp2_crypto_quictls is linked, |md_native_handle| must be a
  * pointer to EVP_MD.
  *
- * If libngtcp2_crypto_gnutls is linked, |md_native_handle| must be
+ * If libzngtcp2_crypto_gnutls is linked, |md_native_handle| must be
  * gnutls_mac_algorithm_t casted to ``void *``.
  *
- * If libngtcp2_crypto_boringssl is linked, |md_native_handle| must be
+ * If libzngtcp2_crypto_boringssl is linked, |md_native_handle| must be
  * a pointer to EVP_MD.
  */
 NGTCP2_EXTERN ngtcp2_crypto_md *ngtcp2_crypto_md_init(ngtcp2_crypto_md *md,

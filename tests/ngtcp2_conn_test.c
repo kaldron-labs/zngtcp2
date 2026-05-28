@@ -17895,7 +17895,7 @@ void test_ngtcp2_conn_crumble_initial_pkt(void) {
   conn_options opts;
   uint8_t *end_data;
 
-  ngtcp2_buf_init(&tls_buf, tls_rawbuf, sizeof(tls_rawbuf));
+  ngtcp2_buf_init_internal(&tls_buf, tls_rawbuf, sizeof(tls_rawbuf));
 
   /* msg_type */
   *tls_buf.last++ = 1;

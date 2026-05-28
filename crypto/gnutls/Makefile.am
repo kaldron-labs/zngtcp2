@@ -31,15 +31,15 @@ AM_CPPFLAGS = -I$(top_srcdir)/lib/includes -I$(top_builddir)/lib/includes \
 AM_LDFLAGS = ${LIBTOOL_LDFLAGS}
 
 pkgconfigdir = $(libdir)/pkgconfig
-pkgconfig_DATA = libngtcp2_crypto_gnutls.pc
+pkgconfig_DATA = libzngtcp2_crypto_gnutls.pc
 DISTCLEANFILES = $(pkgconfig_DATA)
 
-lib_LTLIBRARIES = libngtcp2_crypto_gnutls.la
+lib_LTLIBRARIES = libzngtcp2_crypto_gnutls.la
 
-libngtcp2_crypto_gnutls_la_SOURCES = gnutls.c ../shared.c ../shared.h
-libngtcp2_crypto_gnutls_la_LDFLAGS = -no-undefined \
+libzngtcp2_crypto_gnutls_la_SOURCES = gnutls.c ../shared.c ../shared.h
+libzngtcp2_crypto_gnutls_la_LDFLAGS = -no-undefined \
 	-version-info $(CRYPTO_GNUTLS_LT_CURRENT):$(CRYPTO_GNUTLS_LT_REVISION):$(CRYPTO_GNUTLS_LT_AGE)
-libngtcp2_crypto_gnutls_la_LIBADD = $(top_builddir)/lib/libngtcp2.la \
+libzngtcp2_crypto_gnutls_la_LIBADD = $(top_builddir)/lib/libzngtcp2.la \
 	@GNUTLS_LIBS@
 
 check_PROGRAMS = cryptotest
@@ -50,7 +50,7 @@ cryptotest_SOURCES = \
 	$(top_srcdir)/tests/munit/munit.c $(top_srcdir)/tests/munit/munit.h
 cryptotest_CPPFLAGS = ${AM_CPPFLAGS} -I$(top_srcdir)/tests/munit
 cryptotest_LDADD = \
-	libngtcp2_crypto_gnutls.la \
-	$(top_builddir)/lib/libngtcp2.la
+	libzngtcp2_crypto_gnutls.la \
+	$(top_builddir)/lib/libzngtcp2.la
 
 TESTS = cryptotest

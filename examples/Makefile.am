@@ -37,7 +37,7 @@ AM_CPPFLAGS = \
 	@EXTRA_DEFS@
 AM_LDFLAGS = -no-install \
 	@LIBTOOL_LDFLAGS@
-LDADD = $(top_builddir)/lib/libngtcp2.la \
+LDADD = $(top_builddir)/lib/libzngtcp2.la \
 	$(top_builddir)/third-party/liburlparse.la \
 	@LIBEV_LIBS@ \
 	@LIBNGHTTP3_LIBS@ \
@@ -70,9 +70,9 @@ noinst_PROGRAMS =
 
 if ENABLE_EXAMPLE_QUICTLS
 if ENABLE_EXAMPLE_LIBRESSL
-crypto_lib = $(top_builddir)/crypto/quictls/libngtcp2_crypto_libressl.la
+crypto_lib = $(top_builddir)/crypto/quictls/libzngtcp2_crypto_libressl.la
 else
-crypto_lib = $(top_builddir)/crypto/quictls/libngtcp2_crypto_quictls.la
+crypto_lib = $(top_builddir)/crypto/quictls/libzngtcp2_crypto_quictls.la
 endif
 
 noinst_PROGRAMS += qtlsclient qtlsserver \
@@ -116,7 +116,7 @@ noinst_PROGRAMS += gtlsclient gtlsserver gtlssimpleclient
 gtlssimpleclient_CPPFLAGS = ${AM_CPPFLAGS} \
 	@JEMALLOC_CFLAGS@ @GNUTLS_CFLAGS@
 gtlssimpleclient_LDADD = ${LDADD} \
-	$(top_builddir)/crypto/gnutls/libngtcp2_crypto_gnutls.la \
+	$(top_builddir)/crypto/gnutls/libzngtcp2_crypto_gnutls.la \
 	@GNUTLS_LIBS@ \
 	@JEMALLOC_LIBS@
 gtlssimpleclient_SOURCES = gtlssimpleclient.c
@@ -125,7 +125,7 @@ gtlsclient_CPPFLAGS = ${AM_CPPFLAGS} \
 	@JEMALLOC_CFLAGS@ @GNUTLS_CFLAGS@ \
 	-DWITH_EXAMPLE_GNUTLS -DWITH_EXAMPLE_HTTP3_PROTO_CODEC
 gtlsclient_LDADD = ${LDADD} \
-	$(top_builddir)/crypto/gnutls/libngtcp2_crypto_gnutls.la \
+	$(top_builddir)/crypto/gnutls/libzngtcp2_crypto_gnutls.la \
 	@GNUTLS_LIBS@ \
 	@JEMALLOC_LIBS@
 gtlsclient_SOURCES = client.cc client.h ${CLIENT_SRCS} \
@@ -137,7 +137,7 @@ gtlsclient_SOURCES = client.cc client.h ${CLIENT_SRCS} \
 
 gtlsserver_CPPFLAGS = ${gtlsclient_CPPFLAGS}
 gtlsserver_LDADD = ${gtlsclient_LDADD} \
-	$(top_builddir)/crypto/gnutls/libngtcp2_crypto_gnutls.la \
+	$(top_builddir)/crypto/gnutls/libzngtcp2_crypto_gnutls.la \
 	@GNUTLS_LIBS@
 gtlsserver_SOURCES = server.cc server.h ${SERVER_SRCS} \
 	http3_server_proto_codec.cc http3_server_proto_codec.h \
@@ -153,7 +153,7 @@ noinst_PROGRAMS += bsslclient bsslserver
 bsslclient_CPPFLAGS = @BORINGSSL_CFLAGS@ \
 	-DWITH_EXAMPLE_BORINGSSL -DWITH_EXAMPLE_HTTP3_PROTO_CODEC ${AM_CPPFLAGS}
 bsslclient_LDADD = \
-	$(top_builddir)/crypto/boringssl/libngtcp2_crypto_boringssl.a \
+	$(top_builddir)/crypto/boringssl/libzngtcp2_crypto_boringssl.a \
 	@BORINGSSL_LIBS@ \
 	@JEMALLOC_LIBS@ \
         ${LDADD}
@@ -182,7 +182,7 @@ noinst_PROGRAMS += ptlsclient ptlsserver
 ptlsclient_CPPFLAGS = ${AM_CPPFLAGS} @PICOTLS_CFLAGS@ @VANILLA_OPENSSL_CFLAGS@ \
 	-DWITH_EXAMPLE_PICOTLS -DWITH_EXAMPLE_HTTP3_PROTO_CODEC
 ptlsclient_LDADD = ${LDADD} \
-	$(top_builddir)/crypto/picotls/libngtcp2_crypto_picotls.a \
+	$(top_builddir)/crypto/picotls/libzngtcp2_crypto_picotls.a \
 	@PICOTLS_LIBS@ @VANILLA_OPENSSL_LIBS@ \
 	@JEMALLOC_LIBS@
 ptlsclient_SOURCES = client.cc client.h ${CLIENT_SRCS} \
@@ -210,7 +210,7 @@ noinst_PROGRAMS += wsslclient wsslserver wsslhqclient wsslhqserver
 wsslclient_CPPFLAGS = ${AM_CPPFLAGS} @WOLFSSL_CFLAGS@ \
 	-DWITH_EXAMPLE_WOLFSSL -DWITH_EXAMPLE_HTTP3_PROTO_CODEC
 wsslclient_LDADD = ${LDADD} \
-	$(top_builddir)/crypto/wolfssl/libngtcp2_crypto_wolfssl.la \
+	$(top_builddir)/crypto/wolfssl/libzngtcp2_crypto_wolfssl.la \
 	@WOLFSSL_LIBS@ \
 	@JEMALLOC_LIBS@
 wsslclient_SOURCES = client.cc client.h ${CLIENT_SRCS} \
@@ -258,7 +258,7 @@ osslclient_CPPFLAGS = ${AM_CPPFLAGS} \
 	@JEMALLOC_CFLAGS@ @OPENSSL_CFLAGS@ \
 	-DWITH_EXAMPLE_OSSL -DWITH_EXAMPLE_HTTP3_PROTO_CODEC
 osslclient_LDADD = ${LDADD} \
-	$(top_builddir)/crypto/ossl/libngtcp2_crypto_ossl.la \
+	$(top_builddir)/crypto/ossl/libzngtcp2_crypto_ossl.la \
 	@OPENSSL_LIBS@ \
 	@JEMALLOC_LIBS@
 osslclient_SOURCES = client.cc client.h ${CLIENT_SRCS} \
@@ -296,7 +296,7 @@ examplestest_SOURCES += \
 	debug.cc debug.h
 examplestest_CPPFLAGS += @WOLFSSL_CFLAGS@ -DWITH_EXAMPLE_WOLFSSL
 examplestest_LDADD += \
-	$(top_builddir)/crypto/wolfssl/libngtcp2_crypto_wolfssl.la \
+	$(top_builddir)/crypto/wolfssl/libzngtcp2_crypto_wolfssl.la \
 	@WOLFSSL_LIBS@
 endif # ENABLE_EXAMPLE_WOLFSSL
 

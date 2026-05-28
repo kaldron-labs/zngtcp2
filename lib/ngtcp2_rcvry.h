@@ -29,7 +29,7 @@
 #  include <config.h>
 #endif /* defined(HAVE_CONFIG_H) */
 
-#include <ngtcp2/ngtcp2.h>
+#include <zngtcp2/zngtcp2.h>
 
 /* NGTCP2_PKT_THRESHOLD is kPacketThreshold described in RFC 9002. */
 #define NGTCP2_PKT_THRESHOLD 3

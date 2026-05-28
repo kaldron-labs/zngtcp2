@@ -1959,7 +1959,7 @@ Options:
               defaults to 0 which means the number of <URI> specified.
   -v, --version=<HEX>
               Specify QUIC version to use in hex string.  If the given
-              version is  not supported by libngtcp2,  client will use
+              version is  not supported by libzngtcp2,  client will use
               QUIC v1  long packet  types.  Instead of  specifying hex
               string,  there  are   special  aliases  available:  "v1"
               indicates QUIC v1, and "v2" indicates QUIC v2.
@@ -1969,7 +1969,7 @@ Options:
               Specify  QUIC versions  in hex  string in  the order  of
               preference.   Client chooses  one of  those versions  if
               client received Version  Negotiation packet from server.
-              These versions must be  supported by libngtcp2.  Instead
+              These versions must be  supported by libzngtcp2.  Instead
               of  specifying hex  string,  there  are special  aliases
               available: "v1"  indicates QUIC  v1, and  "v2" indicates
               QUIC v2.
@@ -1977,7 +1977,7 @@ Options:
               Specify QUIC  versions in  hex string  that are  sent in
               available_versions    field    of    version_information
               transport parameter.   This list  can include  a version
-              which  is  not  supported   by  libngtcp2.   Instead  of
+              which  is  not  supported   by  libzngtcp2.   Instead  of
               specifying  hex   string,  there  are   special  aliases
               available: "v1"  indicates QUIC  v1, and  "v2" indicates
               QUIC v2.

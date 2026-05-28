@@ -22,4 +22,4 @@
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 EXTRA_DIST = CMakeLists.txt
 
-nobase_include_HEADERS = ngtcp2/ngtcp2.h ngtcp2/version.h
+nobase_include_HEADERS = zngtcp2/zngtcp2.h zngtcp2/version.h

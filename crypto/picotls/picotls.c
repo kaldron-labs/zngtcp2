@@ -29,8 +29,8 @@
 #include <assert.h>
 #include <string.h>
 
-#include <ngtcp2/ngtcp2_crypto.h>
-#include <ngtcp2/ngtcp2_crypto_picotls.h>
+#include <zngtcp2/ngtcp2_crypto.h>
+#include <zngtcp2/zngtcp2_crypto_zpicotls.h>
 
 #include <picotls.h>
 #include <picotls/openssl.h>
@@ -615,7 +615,7 @@ static int update_traffic_key_server_cb(ptls_update_traffic_key_t *self,
     }
 
     if (level == NGTCP2_ENCRYPTION_LEVEL_HANDSHAKE) {
-      /* libngtcp2 allows an application to change QUIC transport
+      /* libzngtcp2 allows an application to change QUIC transport
        * parameters before installing Handshake tx key.  We need to
        * wait for the key to get the correct local transport
        * parameters from ngtcp2_conn.

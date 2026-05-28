@@ -31,15 +31,15 @@ AM_CPPFLAGS = -I$(top_srcdir)/lib/includes -I$(top_builddir)/lib/includes \
 AM_LDFLAGS = ${LIBTOOL_LDFLAGS}
 
 pkgconfigdir = $(libdir)/pkgconfig
-pkgconfig_DATA = libngtcp2_crypto_wolfssl.pc
+pkgconfig_DATA = libzngtcp2_crypto_wolfssl.pc
 DISTCLEANFILES = $(pkgconfig_DATA)
 
-lib_LTLIBRARIES = libngtcp2_crypto_wolfssl.la
+lib_LTLIBRARIES = libzngtcp2_crypto_wolfssl.la
 
-libngtcp2_crypto_wolfssl_la_SOURCES = wolfssl.c ../shared.c ../shared.h
-libngtcp2_crypto_wolfssl_la_LDFLAGS = -no-undefined \
+libzngtcp2_crypto_wolfssl_la_SOURCES = wolfssl.c ../shared.c ../shared.h
+libzngtcp2_crypto_wolfssl_la_LDFLAGS = -no-undefined \
 	-version-info $(CRYPTO_WOLFSSL_LT_CURRENT):$(CRYPTO_WOLFSSL_LT_REVISION):$(CRYPTO_WOLFSSL_LT_AGE)
-libngtcp2_crypto_wolfssl_la_LIBADD = $(top_builddir)/lib/libngtcp2.la \
+libzngtcp2_crypto_wolfssl_la_LIBADD = $(top_builddir)/lib/libzngtcp2.la \
 	@WOLFSSL_LIBS@
 
 check_PROGRAMS = cryptotest
@@ -50,7 +50,7 @@ cryptotest_SOURCES = \
 	$(top_srcdir)/tests/munit/munit.c $(top_srcdir)/tests/munit/munit.h
 cryptotest_CPPFLAGS = ${AM_CPPFLAGS} -I$(top_srcdir)/tests/munit
 cryptotest_LDADD = \
-	libngtcp2_crypto_wolfssl.la \
-	$(top_builddir)/lib/libngtcp2.la
+	libzngtcp2_crypto_wolfssl.la \
+	$(top_builddir)/lib/libzngtcp2.la
 
 TESTS = cryptotest

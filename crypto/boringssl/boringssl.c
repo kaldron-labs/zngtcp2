@@ -29,8 +29,8 @@
 #include <assert.h>
 #include <string.h>
 
-#include <ngtcp2/ngtcp2_crypto.h>
-#include <ngtcp2/ngtcp2_crypto_boringssl.h>
+#include <zngtcp2/ngtcp2_crypto.h>
+#include <zngtcp2/ngtcp2_crypto_boringssl.h>
 
 #include <openssl/ssl.h>
 #include <openssl/evp.h>

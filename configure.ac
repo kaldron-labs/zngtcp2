@@ -22,7 +22,7 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 AC_PREREQ(2.61)
-AC_INIT([ngtcp2], [1.23.0-DEV], [t-tujikawa@users.sourceforge.net])
+AC_INIT([zngtcp2], [1.23.0-DEV], [t-tujikawa@users.sourceforge.net])
 AC_CONFIG_AUX_DIR([.])
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_HEADERS([config.h])
@@ -107,7 +107,7 @@ AC_ARG_ENABLE(asan,
 
 AC_ARG_ENABLE([lib-only],
     [AS_HELP_STRING([--enable-lib-only],
-                    [Build libngtcp2 and libngtcp2_crypto only.])],
+                    [Build libzngtcp2 and libzngtcp2_crypto only.])],
     [lib_only=$enableval], [lib_only=no])
 
 AC_ARG_WITH([jemalloc],
@@ -205,8 +205,8 @@ esac
 
 AM_CONDITIONAL([ENABLE_SHARED], [ test "x${enable_shared}" = "xyes" ])
 
-# OpenSSL (required for libngtcp2_crypto_quictls, libngtcp2_crypto_libressl
-# libngtcp2_crypto_picotls, libngtcp2_crypto_ossl and examples)
+# OpenSSL (required for libzngtcp2_crypto_quictls, libzngtcp2_crypto_libressl
+# libzngtcp2_crypto_picotls, libzngtcp2_crypto_ossl and examples)
 have_openssl=no
 have_vanilla_openssl=no
 have_quictls=no
@@ -311,7 +311,7 @@ AM_CONDITIONAL([HAVE_QUICTLS], [ test "x${have_quictls}" = "xyes" ])
 AM_CONDITIONAL([HAVE_LIBRESSL], [ test "x${have_libressl}" = "xyes" ])
 AM_CONDITIONAL([HAVE_OSSL], [ test "x${have_ossl}" = "xyes" ])
 
-# GnuTLS (required for libngtcp2_crypto_gnutls)
+# GnuTLS (required for libzngtcp2_crypto_gnutls)
 have_gnutls=no
 if test "x${request_gnutls}" != "xno"; then
   PKG_CHECK_MODULES([GNUTLS], [gnutls >= 3.7.3],
@@ -328,7 +328,7 @@ fi
 
 AM_CONDITIONAL([HAVE_GNUTLS], [ test "x${have_gnutls}" = "xyes" ])
 
-# BoringSSL (required for libngtcp2_crypto_boringssl)
+# BoringSSL (required for libzngtcp2_crypto_boringssl)
 have_boringssl=no
 if test "x${request_boringssl}" != "xno"; then
   AC_LANG_PUSH(C++)
@@ -368,7 +368,7 @@ fi
 
 AM_CONDITIONAL([HAVE_BORINGSSL], [ test "x${have_boringssl}" = "xyes" ])
 
-# Picotls openssl backend (required for libngtcp2_crypto_picotls)
+# Picotls openssl backend (required for libzngtcp2_crypto_picotls)
 have_picotls=no
 if test "x${request_picotls}" != "xno"; then
   save_CFLAGS="$CFLAGS"
@@ -397,7 +397,7 @@ fi
 
 AM_CONDITIONAL([HAVE_PICOTLS], [ test "x${have_picotls}" = "xyes" ])
 
-# wolfSSL (required for libngtcp2_crypto_wolfssl)
+# wolfSSL (required for libzngtcp2_crypto_wolfssl)
 have_wolfssl=no
 if test "x${request_wolfssl}" != "xno"; then
   PKG_CHECK_MODULES([WOLFSSL], [wolfssl >= 5.5.0],
@@ -796,25 +796,25 @@ AC_SUBST([EXTRACFLAG])
 AC_CONFIG_FILES([
   Makefile
   lib/Makefile
-  lib/libngtcp2.pc
+  lib/libzngtcp2.pc
   lib/includes/Makefile
-  lib/includes/ngtcp2/version.h
+  lib/includes/zngtcp2/version.h
   tests/Makefile
   crypto/Makefile
   crypto/quictls/Makefile
-  crypto/quictls/libngtcp2_crypto_libressl.pc
-  crypto/quictls/libngtcp2_crypto_quictls.pc
+  crypto/quictls/libzngtcp2_crypto_libressl.pc
+  crypto/quictls/libzngtcp2_crypto_quictls.pc
   crypto/includes/Makefile
   crypto/gnutls/Makefile
-  crypto/gnutls/libngtcp2_crypto_gnutls.pc
+  crypto/gnutls/libzngtcp2_crypto_gnutls.pc
   crypto/boringssl/Makefile
-  crypto/boringssl/libngtcp2_crypto_boringssl.pc
+  crypto/boringssl/libzngtcp2_crypto_boringssl.pc
   crypto/picotls/Makefile
-  crypto/picotls/libngtcp2_crypto_picotls.pc
+  crypto/picotls/libzngtcp2_crypto_picotls.pc
   crypto/wolfssl/Makefile
-  crypto/wolfssl/libngtcp2_crypto_wolfssl.pc
+  crypto/wolfssl/libzngtcp2_crypto_wolfssl.pc
   crypto/ossl/Makefile
-  crypto/ossl/libngtcp2_crypto_ossl.pc
+  crypto/ossl/libzngtcp2_crypto_ossl.pc
   doc/Makefile
   doc/source/conf.py
   third-party/Makefile
@@ -850,13 +850,13 @@ AC_MSG_NOTICE([summary of build options:
     Libtool:
       LIBTOOL_LDFLAGS: ${LIBTOOL_LDFLAGS}
     Crypto helper libraries:
-      libngtcp2_crypto_quictls:   ${have_quictls}
-      libngtcp2_crypto_libressl:  ${have_libressl}
-      libngtcp2_crypto_gnutls:    ${have_gnutls}
-      libngtcp2_crypto_boringssl: ${have_boringssl}
-      libngtcp2_crypto_picotls:   ${have_picotls}
-      libngtcp2_crypto_wolfssl:   ${have_wolfssl}
-      libngtcp2_crypto_ossl:      ${have_ossl}
+      libzngtcp2_crypto_quictls:   ${have_quictls}
+      libzngtcp2_crypto_libressl:  ${have_libressl}
+      libzngtcp2_crypto_gnutls:    ${have_gnutls}
+      libzngtcp2_crypto_boringssl: ${have_boringssl}
+      libzngtcp2_crypto_picotls:   ${have_picotls}
+      libzngtcp2_crypto_wolfssl:   ${have_wolfssl}
+      libzngtcp2_crypto_ossl:      ${have_ossl}
     Debug:
       Debug:          ${debug} (CFLAGS='${DEBUGCFLAGS}')
     Libs:

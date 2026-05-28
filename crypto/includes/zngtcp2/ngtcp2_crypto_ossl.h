@@ -25,7 +25,7 @@
 #ifndef NGTCP2_CRYPTO_OSSL_H
 #define NGTCP2_CRYPTO_OSSL_H
 
-#include <ngtcp2/ngtcp2.h>
+#include <zngtcp2/zngtcp2.h>
 
 #include <openssl/ssl.h>
 
@@ -135,10 +135,10 @@ NGTCP2_EXTERN SSL *ngtcp2_crypto_ossl_ctx_get_ssl(ngtcp2_crypto_ossl_ctx *ctx);
 /**
  * @function
  *
- * `ngtcp2_crypto_ossl_init` initializes libngtcp2_crypto_ossl
+ * `ngtcp2_crypto_ossl_init` initializes libzngtcp2_crypto_ossl
  * library.  This initialization is optional.  It is highly
  * recommended to call this function before any use of
- * libngtcp2_crypto library API to workaround the performance
+ * libzngtcp2_crypto library API to workaround the performance
  * regression.
  *
  * This function returns 0 if it succeeds, or -1.

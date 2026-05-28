@@ -25,9 +25,9 @@ exec_prefix=@exec_prefix@
 libdir=@libdir@
 includedir=@includedir@
 
-Name: libngtcp2
-Description: ngtcp2 library
-URL: https://github.com/ngtcp2/ngtcp2
+Name: libzngtcp2
+Description: zngtcp2 library
+URL: https://github.com/zngtcp2/ngtcp2
 Version: @VERSION@
-Libs: -L${libdir} -lngtcp2
+Libs: -L${libdir} -lzngtcp2
 Cflags: -I${includedir}

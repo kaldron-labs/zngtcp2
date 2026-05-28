@@ -30,7 +30,7 @@
 #include <limits>
 #include <algorithm>
 
-#include <ngtcp2/ngtcp2_crypto_ossl.h>
+#include <zngtcp2/ngtcp2_crypto_ossl.h>
 
 #include <openssl/err.h>
 

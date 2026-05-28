@@ -33,22 +33,22 @@ AM_LDFLAGS = ${LIBTOOL_LDFLAGS}
 pkgconfigdir = $(libdir)/pkgconfig
 
 if HAVE_LIBRESSL
-pkgconfig_DATA = libngtcp2_crypto_libressl.pc
-lib_LTLIBRARIES = libngtcp2_crypto_libressl.la
+pkgconfig_DATA = libzngtcp2_crypto_libressl.pc
+lib_LTLIBRARIES = libzngtcp2_crypto_libressl.la
 
-libngtcp2_crypto_libressl_la_SOURCES = quictls.c ../shared.c ../shared.h
-libngtcp2_crypto_libressl_la_LDFLAGS = -no-undefined \
+libzngtcp2_crypto_libressl_la_SOURCES = quictls.c ../shared.c ../shared.h
+libzngtcp2_crypto_libressl_la_LDFLAGS = -no-undefined \
 	-version-info $(CRYPTO_LIBRESSL_LT_CURRENT):$(CRYPTO_LIBRESSL_LT_REVISION):$(CRYPTO_LIBRESSL_LT_AGE)
-libngtcp2_crypto_libressl_la_LIBADD = $(top_builddir)/lib/libngtcp2.la \
+libzngtcp2_crypto_libressl_la_LIBADD = $(top_builddir)/lib/libzngtcp2.la \
 	@OPENSSL_LIBS@
 else
-pkgconfig_DATA = libngtcp2_crypto_quictls.pc
-lib_LTLIBRARIES = libngtcp2_crypto_quictls.la
+pkgconfig_DATA = libzngtcp2_crypto_quictls.pc
+lib_LTLIBRARIES = libzngtcp2_crypto_quictls.la
 
-libngtcp2_crypto_quictls_la_SOURCES = quictls.c ../shared.c ../shared.h
-libngtcp2_crypto_quictls_la_LDFLAGS = -no-undefined \
+libzngtcp2_crypto_quictls_la_SOURCES = quictls.c ../shared.c ../shared.h
+libzngtcp2_crypto_quictls_la_LDFLAGS = -no-undefined \
 	-version-info $(CRYPTO_QUICTLS_LT_CURRENT):$(CRYPTO_QUICTLS_LT_REVISION):$(CRYPTO_QUICTLS_LT_AGE)
-libngtcp2_crypto_quictls_la_LIBADD = $(top_builddir)/lib/libngtcp2.la \
+libzngtcp2_crypto_quictls_la_LIBADD = $(top_builddir)/lib/libzngtcp2.la \
 	@OPENSSL_LIBS@
 endif
 
@@ -60,11 +60,11 @@ cryptotest_SOURCES = \
 	$(top_srcdir)/tests/munit/munit.c $(top_srcdir)/tests/munit/munit.h
 cryptotest_CPPFLAGS = ${AM_CPPFLAGS} -I$(top_srcdir)/tests/munit
 if HAVE_LIBRESSL
-cryptotest_LDADD = libngtcp2_crypto_libressl.la
+cryptotest_LDADD = libzngtcp2_crypto_libressl.la
 else # !HAVE_LIBRESSL
-cryptotest_LDADD = libngtcp2_crypto_quictls.la
+cryptotest_LDADD = libzngtcp2_crypto_quictls.la
 endif # !HAVE_LIBRESSL
-cryptotest_LDADD += $(top_builddir)/lib/libngtcp2.la
+cryptotest_LDADD += $(top_builddir)/lib/libzngtcp2.la
 
 TESTS = cryptotest
 

@@ -31,7 +31,7 @@
 
 #include <stddef.h>
 
-#include <ngtcp2/ngtcp2.h>
+#include <zngtcp2/zngtcp2.h>
 
 #define ngtcp2_struct_of(ptr, type, member)                                    \
   ((type *)(void *)((char *)(ptr) - offsetof(type, member)))

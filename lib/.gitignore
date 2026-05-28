@@ -1,2 +1,2 @@
-includes/ngtcp2/version.h
-libngtcp2.pc
+includes/zngtcp2/version.h
+libzngtcp2.pc

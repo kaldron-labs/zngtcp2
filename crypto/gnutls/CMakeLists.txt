@@ -39,7 +39,7 @@ set(ngtcp2_crypto_gnutls_INCLUDE_DIRS
   "${GNUTLS_INCLUDE_DIRS}"
 )
 
-foreach(name libngtcp2_crypto_gnutls.pc)
+foreach(name libzngtcp2_crypto_gnutls.pc)
   configure_file("${name}.in" "${name}" @ONLY)
 endforeach()
 
@@ -82,5 +82,5 @@ if(ENABLE_STATIC_LIB)
     DESTINATION "${CMAKE_INSTALL_LIBDIR}")
 endif()
 
-install(FILES "${CMAKE_CURRENT_BINARY_DIR}/libngtcp2_crypto_gnutls.pc"
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/libzngtcp2_crypto_gnutls.pc"
   DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")

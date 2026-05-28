@@ -29,7 +29,7 @@
 #  include <config.h>
 #endif /* defined(HAVE_CONFIG_H) */
 
-#include <ngtcp2/ngtcp2_crypto.h>
+#include <zngtcp2/ngtcp2_crypto.h>
 
 /* Maximum key usage (encryption) limits */
 #define NGTCP2_CRYPTO_MAX_ENCRYPTION_AES_GCM (1ULL << 23)
@@ -80,13 +80,13 @@ ngtcp2_crypto_ctx *ngtcp2_crypto_ctx_initial(ngtcp2_crypto_ctx *ctx);
  * `ngtcp2_crypto_aead_init` initializes |aead| with the provided
  * |aead_native_handle| which is an underlying AEAD object.
  *
- * If libngtcp2_crypto_quictls is linked, |aead_native_handle| must be
+ * If libzngtcp2_crypto_quictls is linked, |aead_native_handle| must be
  * a pointer to EVP_CIPHER.
  *
- * If libngtcp2_crypto_gnutls is linked, |aead_native_handle| must be
+ * If libzngtcp2_crypto_gnutls is linked, |aead_native_handle| must be
  * gnutls_cipher_algorithm_t casted to ``void *``.
  *
- * If libngtcp2_crypto_boringssl is linked, |aead_native_handle| must
+ * If libzngtcp2_crypto_boringssl is linked, |aead_native_handle| must
  * be a pointer to EVP_AEAD.
  */
 ngtcp2_crypto_aead *ngtcp2_crypto_aead_init(ngtcp2_crypto_aead *aead,
@@ -194,7 +194,7 @@ int ngtcp2_crypto_update_traffic_secret(uint8_t *dest, uint32_t version,
  * pointed by |buf| of length |len|, to the native handle |tls|.
  *
  * |tls| points to a implementation dependent TLS session object.  If
- * libngtcp2_crypto_quictls is linked, |tls| must be a pointer to SSL
+ * libzngtcp2_crypto_quictls is linked, |tls| must be a pointer to SSL
  * object.
  *
  * This function returns 0 if it succeeds, or -1.
@@ -210,7 +210,7 @@ int ngtcp2_crypto_set_local_transport_params(void *tls, const uint8_t *buf,
  * `ngtcp2_conn_set_remote_transport_params`.
  *
  * |tls| points to a implementation dependent TLS session object.  If
- * libngtcp2_crypto_quictls is linked, |tls| must be a pointer to SSL
+ * libzngtcp2_crypto_quictls is linked, |tls| must be a pointer to SSL
  * object.
  *
  * This function returns 0 if it succeeds, or -1.

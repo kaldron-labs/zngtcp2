@@ -28,7 +28,7 @@
 #include <fstream>
 #include <algorithm>
 
-#include <ngtcp2/ngtcp2_crypto_boringssl.h>
+#include <zngtcp2/ngtcp2_crypto_boringssl.h>
 
 #include <openssl/err.h>
 #include <openssl/hpke.h>
