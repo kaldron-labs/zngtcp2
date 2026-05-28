@@ -77,10 +77,6 @@ void ngtcp2_strm_free(ngtcp2_strm *strm) {
     ngtcp2_mem_free(strm->mem, strm->tx.streamfrq);
   }
 
-  if (strm->rx.rob) {
-    ngtcp2_rob_free(strm->rx.rob);
-    ngtcp2_mem_free(strm->mem, strm->rx.rob);
-  }
   if (strm->rx.reorder) {
     ngtcp2_reorder_free(strm->rx.reorder);
     ngtcp2_mem_free(strm->mem, strm->rx.reorder);
@@ -90,25 +86,6 @@ void ngtcp2_strm_free(ngtcp2_strm *strm) {
     ngtcp2_gaptr_free(strm->tx.acked_offset);
     ngtcp2_mem_free(strm->mem, strm->tx.acked_offset);
   }
-}
-
-static int strm_rob_init(ngtcp2_strm *strm) {
-  int rv;
-  ngtcp2_rob *rob = ngtcp2_mem_malloc(strm->mem, sizeof(*rob));
-
-  if (rob == NULL) {
-    return NGTCP2_ERR_NOMEM;
-  }
-
-  rv = ngtcp2_rob_init(rob, 8 * 1024, strm->mem);
-  if (rv != 0) {
-    ngtcp2_mem_free(strm->mem, rob);
-    return rv;
-  }
-
-  strm->rx.rob = rob;
-
-  return 0;
 }
 
 static int strm_reorder_init(ngtcp2_strm *strm, ngtcp2_reorder_release release,
@@ -130,16 +107,7 @@ uint64_t ngtcp2_strm_rx_offset(const ngtcp2_strm *strm) {
     return ngtcp2_reorder_first_gap_offset(strm->rx.reorder,
                                            strm->rx.cont_offset);
   }
-  if (strm->rx.rob == NULL) {
-    return strm->rx.cont_offset;
-  }
-  return ngtcp2_rob_first_gap_offset(strm->rx.rob);
-}
-
-/* strm_rob_heavily_fragmented returns nonzero if the number of gaps
-   in |rob| exceeds the limit. */
-static int strm_rob_heavily_fragmented(const ngtcp2_rob *rob) {
-  return ngtcp2_ksl_len(&rob->gapksl) >= 4000;
+  return strm->rx.cont_offset;
 }
 
 static int strm_reorder_heavily_fragmented(const ngtcp2_reorder *reorder) {
@@ -153,34 +121,6 @@ static int strm_reorder_heavily_fragmented(const ngtcp2_reorder *reorder) {
   }
 
   return 0;
-}
-
-ngtcp2_ssize ngtcp2_strm_recv_reordering(ngtcp2_strm *strm, const uint8_t *data,
-                                         size_t datalen, uint64_t offset) {
-  int rv;
-  ngtcp2_ssize nwrite;
-
-  if (strm->rx.rob == NULL) {
-    rv = strm_rob_init(strm);
-    if (rv != 0) {
-      return rv;
-    }
-
-    if (strm->rx.cont_offset) {
-      ngtcp2_rob_remove_prefix(strm->rx.rob, strm->rx.cont_offset);
-    }
-  }
-
-  nwrite = ngtcp2_rob_push(strm->rx.rob, offset, data, datalen);
-  if (nwrite < 0) {
-    return nwrite;
-  }
-
-  if (strm_rob_heavily_fragmented(strm->rx.rob)) {
-    return NGTCP2_ERR_INTERNAL;
-  }
-
-  return nwrite;
 }
 
 int ngtcp2_strm_recv_reordering_buf(ngtcp2_strm *strm, ngtcp2_buf *buf,
@@ -216,12 +156,8 @@ void ngtcp2_strm_update_rx_offset(ngtcp2_strm *strm, uint64_t offset) {
     ngtcp2_reorder_remove_prefix(strm->rx.reorder, offset);
     return;
   }
-  if (strm->rx.rob == NULL) {
-    strm->rx.cont_offset = offset;
-    return;
-  }
 
-  ngtcp2_rob_remove_prefix(strm->rx.rob, offset);
+  strm->rx.cont_offset = offset;
 }
 
 void ngtcp2_strm_discard_reordered_data(ngtcp2_strm *strm) {
@@ -232,16 +168,6 @@ void ngtcp2_strm_discard_reordered_data(ngtcp2_strm *strm) {
     ngtcp2_mem_free(strm->mem, strm->rx.reorder);
     strm->rx.reorder = NULL;
   }
-
-  if (strm->rx.rob == NULL) {
-    return;
-  }
-
-  strm->rx.cont_offset = ngtcp2_strm_rx_offset(strm);
-
-  ngtcp2_rob_free(strm->rx.rob);
-  ngtcp2_mem_free(strm->mem, strm->rx.rob);
-  strm->rx.rob = NULL;
 }
 
 void ngtcp2_strm_shutdown(ngtcp2_strm *strm, uint32_t flags) {

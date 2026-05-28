@@ -46,6 +46,13 @@ const MunitSuite strm_suite = {
 
 static uint8_t nulldata[1024];
 
+static void test_reorder_release(ngtcp2_buf *buf, int allocator_owned,
+                                 void *user_data) {
+  (void)buf;
+  (void)allocator_owned;
+  (void)user_data;
+}
+
 static void setup_strm_streamfrq_fixture(ngtcp2_strm *strm,
                                          ngtcp2_objalloc *frc_objalloc,
                                          const ngtcp2_mem *mem) {
@@ -808,6 +815,9 @@ void test_ngtcp2_strm_streamfrq_unacked_pop(void) {
 void test_ngtcp2_strm_discard_reordered_data(void) {
   ngtcp2_strm strm;
   const ngtcp2_mem *mem = ngtcp2_mem_default();
+  ngtcp2_buf buf;
+  size_t nwrite;
+  int rv;
 
   /* No reordered data has been received. */
   ngtcp2_strm_init(&strm, 0, NGTCP2_STRM_FLAG_NONE, 0, 0, NULL, NULL, mem);
@@ -815,7 +825,7 @@ void test_ngtcp2_strm_discard_reordered_data(void) {
   ngtcp2_strm_update_rx_offset(&strm, 1000000007);
   ngtcp2_strm_discard_reordered_data(&strm);
 
-  assert_null(strm.rx.rob);
+  assert_null(strm.rx.reorder);
   assert_uint64(1000000007, ==, ngtcp2_strm_rx_offset(&strm));
 
   ngtcp2_strm_free(&strm);
@@ -824,14 +834,21 @@ void test_ngtcp2_strm_discard_reordered_data(void) {
   ngtcp2_strm_init(&strm, 0, NGTCP2_STRM_FLAG_NONE, 0, 0, NULL, NULL, mem);
 
   ngtcp2_strm_update_rx_offset(&strm, 1000000007);
-  ngtcp2_strm_recv_reordering(&strm, nulldata, 117, 1000000008);
+  ngtcp2_buf_init(&buf, nulldata, 117, NGTCP2_BUF_ORIGIN_BORROWED,
+                  NGTCP2_BUF_DIR_RX, NGTCP2_BUF_PURPOSE_REORDER_RX, NULL, NULL,
+                  NULL);
+  buf.last = buf.end;
+  rv = ngtcp2_strm_recv_reordering_buf(&strm, &buf, 1000000008,
+                                       test_reorder_release, NULL, 0, &nwrite);
 
-  assert_not_null(strm.rx.rob);
+  assert_int(0, ==, rv);
+  assert_size(117, ==, nwrite);
+  assert_not_null(strm.rx.reorder);
   assert_uint64(1000000007, ==, ngtcp2_strm_rx_offset(&strm));
 
   ngtcp2_strm_discard_reordered_data(&strm);
 
-  assert_null(strm.rx.rob);
+  assert_null(strm.rx.reorder);
   assert_uint64(1000000007, ==, ngtcp2_strm_rx_offset(&strm));
 
   ngtcp2_strm_free(&strm);
