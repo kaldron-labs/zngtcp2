@@ -111,6 +111,61 @@ static int null_hp_mask(uint8_t *dest, const ngtcp2_crypto_cipher *hp,
   return 0;
 }
 
+static int null_encrypt_pkt(
+  ngtcp2_buf *pkt, size_t payload_offset, size_t plaintextlen,
+  const ngtcp2_crypto_aead *aead, const ngtcp2_crypto_aead_ctx *aead_ctx,
+  const uint8_t *aad, size_t aadlen, const uint8_t *nonce, size_t noncelen,
+  const ngtcp2_crypto_cipher *hp, const ngtcp2_crypto_cipher_ctx *hp_ctx,
+  size_t hp_sample_offset, uint8_t *hp_mask, void *ctx) {
+  uint8_t *payload = pkt->begin + payload_offset;
+  int rv;
+
+  (void)ctx;
+
+  rv = null_encrypt(payload, aead, aead_ctx, payload, plaintextlen, nonce,
+                    noncelen, aad, aadlen);
+  if (rv != 0) {
+    return rv;
+  }
+
+  pkt->last = payload + plaintextlen + aead->max_overhead;
+
+  if (hp_mask == NULL) {
+    return 0;
+  }
+
+  return null_hp_mask(hp_mask, hp, hp_ctx, pkt->begin + hp_sample_offset);
+}
+
+static int null_ops_hp_mask(ngtcp2_buf *dest, const ngtcp2_crypto_cipher *hp,
+                            const ngtcp2_crypto_cipher_ctx *hp_ctx,
+                            const ngtcp2_buf *sample, void *ctx) {
+  int rv;
+
+  (void)ctx;
+
+  if (dest == NULL || sample == NULL ||
+      ngtcp2_buf_cap(dest) < NGTCP2_HP_SAMPLELEN ||
+      ngtcp2_buf_len(sample) < NGTCP2_HP_SAMPLELEN) {
+    return NGTCP2_ERR_BUF_CONTRACT;
+  }
+
+  rv = null_hp_mask(dest->pos, hp, hp_ctx, sample->pos);
+  if (rv != 0) {
+    return rv;
+  }
+
+  dest->last = dest->pos + NGTCP2_HP_SAMPLELEN;
+
+  return 0;
+}
+
+static const ngtcp2_crypto_ops null_crypto_ops = {
+  .version = 1,
+  .encrypt_pkt = null_encrypt_pkt,
+  .hp_mask = null_ops_hp_mask,
+};
+
 /*
  * write_short_pkt writes a QUIC short header packet containing
  * |frlen| frames pointed by |fr| into |out| whose capacity is
@@ -121,8 +176,7 @@ static size_t write_short_pkt(uint8_t *out, size_t outlen, uint8_t flags,
                               ngtcp2_frame *fr, size_t frlen,
                               ngtcp2_crypto_km *ckm) {
   ngtcp2_crypto_cc cc = {
-    .encrypt = null_encrypt,
-    .hp_mask = null_hp_mask,
+    .ops = null_crypto_ops,
     .ckm = ckm,
     .aead.max_overhead = NGTCP2_FAKE_AEAD_OVERHEAD,
   };
@@ -164,8 +218,7 @@ static size_t write_long_pkt(uint8_t *out, size_t outlen, uint8_t flags,
                              size_t tokenlen, ngtcp2_frame *fr, size_t frlen,
                              ngtcp2_crypto_km *ckm, int padding) {
   ngtcp2_crypto_cc cc = {
-    .encrypt = null_encrypt,
-    .hp_mask = null_hp_mask,
+    .ops = null_crypto_ops,
     .ckm = ckm,
   };
   ngtcp2_ppe ppe;

@@ -4149,8 +4149,9 @@ typedef struct ngtcp2_callbacks {
  * `ngtcp2_pkt_write_connection_close` writes Initial packet
  * containing CONNECTION_CLOSE frame with the given |error_code| and
  * the optional |reason| of length |reasonlen| to the buffer pointed
- * by |dest| of length |destlen|.  All encryption parameters are for
- * Initial packet encryption.  The packet number is always 0.
+ * by |dest| of length |destlen|.  |ops| must provide buffer-based
+ * packet encryption.  All encryption parameters are for Initial
+ * packet encryption.  The packet number is always 0.
  *
  * The primary use case of this function is for server to send
  * CONNECTION_CLOSE frame in Initial packet to close connection
@@ -4163,13 +4164,15 @@ typedef struct ngtcp2_callbacks {
  *     Buffer is too small.
  * :macro:`NGTCP2_ERR_CALLBACK_FAILURE`
  *     Callback function failed.
+ * :macro:`NGTCP2_ERR_BUF_CONTRACT`
+ *     Required buffer packet encryption operation is not provided.
  */
 NGTCP2_EXTERN ngtcp2_ssize ngtcp2_pkt_write_connection_close(
   uint8_t *dest, size_t destlen, uint32_t version, const ngtcp2_cid *dcid,
   const ngtcp2_cid *scid, uint64_t error_code, const uint8_t *reason,
-  size_t reasonlen, ngtcp2_encrypt encrypt, const ngtcp2_crypto_aead *aead,
+  size_t reasonlen, const ngtcp2_crypto_aead *aead,
   const ngtcp2_crypto_aead_ctx *aead_ctx, const uint8_t *iv,
-  ngtcp2_hp_mask hp_mask, const ngtcp2_crypto_cipher *hp,
+  const ngtcp2_crypto_ops *ops, void *ops_ctx, const ngtcp2_crypto_cipher *hp,
   const ngtcp2_crypto_cipher_ctx *hp_ctx);
 
 /**
@@ -6185,9 +6188,8 @@ NGTCP2_EXTERN uint64_t ngtcp2_conn_get_cwnd_left2(const ngtcp2_conn *conn);
  * @function
  *
  * `ngtcp2_conn_set_initial_crypto_ctx` sets |ctx| for Initial packet
- * encryption.  The passed data will be passed to
- * :type:`ngtcp2_encrypt`, :type:`ngtcp2_decrypt` and
- * :type:`ngtcp2_hp_mask` callbacks.
+ * encryption.  The installed :type:`ngtcp2_crypto_ops` consume this
+ * context on the packet data path.
  */
 NGTCP2_EXTERN void
 ngtcp2_conn_set_initial_crypto_ctx(ngtcp2_conn *conn,
@@ -6222,9 +6224,8 @@ ngtcp2_conn_get_initial_crypto_ctx2(const ngtcp2_conn *conn);
  * @function
  *
  * `ngtcp2_conn_set_crypto_ctx` sets |ctx| for Handshake/1-RTT packet
- * encryption.  The passed data will be passed to
- * :type:`ngtcp2_encrypt`, :type:`ngtcp2_decrypt` and
- * :type:`ngtcp2_hp_mask` callbacks.
+ * encryption.  The installed :type:`ngtcp2_crypto_ops` consume this
+ * context on the packet data path.
  */
 NGTCP2_EXTERN void ngtcp2_conn_set_crypto_ctx(ngtcp2_conn *conn,
                                               const ngtcp2_crypto_ctx *ctx);
@@ -6258,9 +6259,8 @@ ngtcp2_conn_get_crypto_ctx2(const ngtcp2_conn *conn);
  * @function
  *
  * `ngtcp2_conn_set_0rtt_crypto_ctx` sets |ctx| for 0-RTT packet
- * encryption.  The passed data will be passed to
- * :type:`ngtcp2_encrypt`, :type:`ngtcp2_decrypt` and
- * :type:`ngtcp2_hp_mask` callbacks.
+ * encryption.  The installed :type:`ngtcp2_crypto_ops` consume this
+ * context on the packet data path.
  */
 NGTCP2_EXTERN void
 ngtcp2_conn_set_0rtt_crypto_ctx(ngtcp2_conn *conn,

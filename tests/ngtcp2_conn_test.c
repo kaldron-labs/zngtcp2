@@ -4103,8 +4103,7 @@ void test_ngtcp2_conn_recv_new_token(void) {
   setup_default_client(&conn);
 
   cc = (ngtcp2_crypto_cc){
-    .encrypt = null_encrypt,
-    .hp_mask = null_hp_mask,
+    .ops = null_crypto_ops,
     .ckm = conn->pktns.crypto.rx.ckm,
     .aead.max_overhead = NGTCP2_FAKE_AEAD_OVERHEAD,
   };
@@ -19656,14 +19655,14 @@ void test_ngtcp2_pkt_write_connection_close(void) {
 
   spktlen = ngtcp2_pkt_write_connection_close(
     buf, sizeof(buf), NGTCP2_PROTO_VER_V1, &dcid, &scid, NGTCP2_INVALID_TOKEN,
-    (const uint8_t *)"foo", 3, null_encrypt, &fake_initial_aead, &null_aead_ctx,
-    null_iv, null_hp_mask, &null_hp, &null_hp_ctx);
+    (const uint8_t *)"foo", 3, &fake_initial_aead, &null_aead_ctx, null_iv,
+    &null_crypto_ops, NULL, &null_hp, &null_hp_ctx);
 
   assert_ptrdiff(0, <, spktlen);
 
   spktlen = ngtcp2_pkt_write_connection_close(
     buf, 16, NGTCP2_PROTO_VER_V1, &dcid, &scid, NGTCP2_INVALID_TOKEN, NULL, 0,
-    null_encrypt, &fake_initial_aead, &null_aead_ctx, null_iv, null_hp_mask,
+    &fake_initial_aead, &null_aead_ctx, null_iv, &null_crypto_ops, NULL,
     &null_hp, &null_hp_ctx);
 
   assert_ptrdiff(NGTCP2_ERR_NOBUF, ==, spktlen);

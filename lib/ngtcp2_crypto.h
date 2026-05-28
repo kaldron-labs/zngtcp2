@@ -91,9 +91,6 @@ typedef struct ngtcp2_crypto_cc {
   ngtcp2_crypto_cipher hp;
   ngtcp2_crypto_km *ckm;
   ngtcp2_crypto_cipher_ctx hp_ctx;
-  ngtcp2_encrypt encrypt;
-  ngtcp2_decrypt decrypt;
-  ngtcp2_hp_mask hp_mask;
   ngtcp2_crypto_ops ops;
   void *ops_ctx;
   ngtcp2_conn_buf_stats *buf_stats;

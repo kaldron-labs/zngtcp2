@@ -1595,6 +1595,57 @@ ngtcp2_ssize ngtcp2_crypto_verify_regular_token2(
                                      timeout, ts);
 }
 
+static int shared_encrypt_pkt(
+  ngtcp2_buf *pkt, size_t payload_offset, size_t plaintextlen,
+  const ngtcp2_crypto_aead *aead, const ngtcp2_crypto_aead_ctx *aead_ctx,
+  const uint8_t *aad, size_t aadlen, const uint8_t *nonce, size_t noncelen,
+  const ngtcp2_crypto_cipher *hp, const ngtcp2_crypto_cipher_ctx *hp_ctx,
+  size_t hp_sample_offset, uint8_t *hp_mask, void *ctx) {
+  uint8_t *payload;
+  int rv;
+
+  (void)ctx;
+
+  if (ngtcp2_buf_validate(pkt, NGTCP2_BUF_DIR_TX,
+                          NGTCP2_BUF_PURPOSE_PACKET_TX) != 0 ||
+      pkt->origin != NGTCP2_BUF_ORIGIN_APPLICATION ||
+      payload_offset > (size_t)(pkt->end - pkt->pos) ||
+      plaintextlen > (size_t)(pkt->end - pkt->pos) - payload_offset ||
+      aead->max_overhead >
+        (size_t)(pkt->end - pkt->pos) - payload_offset - plaintextlen) {
+    return NGTCP2_ERR_BUF_CONTRACT;
+  }
+
+  payload = pkt->pos + payload_offset;
+
+  rv = ngtcp2_crypto_encrypt(payload, aead, aead_ctx, payload, plaintextlen,
+                             nonce, noncelen, aad, aadlen);
+  if (rv != 0) {
+    return rv;
+  }
+
+  pkt->last = payload + plaintextlen + aead->max_overhead;
+
+  if (hp_mask == NULL) {
+    return 0;
+  }
+
+  if (hp == NULL || hp_ctx == NULL ||
+      hp_sample_offset > (size_t)(pkt->last - pkt->pos) ||
+      NGTCP2_HP_SAMPLELEN >
+        (size_t)(pkt->last - pkt->pos) - hp_sample_offset) {
+    return NGTCP2_ERR_BUF_CONTRACT;
+  }
+
+  return ngtcp2_crypto_hp_mask(hp_mask, hp, hp_ctx,
+                               pkt->pos + hp_sample_offset);
+}
+
+static const ngtcp2_crypto_ops shared_crypto_ops = {
+  .version = 1,
+  .encrypt_pkt = shared_encrypt_pkt,
+};
+
 ngtcp2_ssize ngtcp2_crypto_write_connection_close(
   uint8_t *dest, size_t destlen, uint32_t version, const ngtcp2_cid *dcid,
   const ngtcp2_cid *scid, uint64_t error_code, const uint8_t *reason,
@@ -1637,8 +1688,7 @@ ngtcp2_ssize ngtcp2_crypto_write_connection_close(
 
   spktlen = ngtcp2_pkt_write_connection_close(
     dest, destlen, version, dcid, scid, error_code, reason, reasonlen,
-    ngtcp2_crypto_encrypt_cb, &ctx.aead, &aead_ctx, tx_iv,
-    ngtcp2_crypto_hp_mask_cb, &ctx.hp, &hp_ctx);
+    &ctx.aead, &aead_ctx, tx_iv, &shared_crypto_ops, NULL, &ctx.hp, &hp_ctx);
   if (spktlen < 0) {
     spktlen = -1;
   }
