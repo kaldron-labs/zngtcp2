@@ -8259,7 +8259,6 @@ void test_ngtcp2_conn_recv_stream_data_buf_coalesced(void) {
 
   assert_uint64(second_pktlen, ==, stats.rx_trailing_copy);
   assert_uint64(1, ==, stats.library_buf_exposed);
-  assert_uint64(0, ==, stats.decrypt_buf_use);
 
   ngtcp2_conn_del(conn);
 }

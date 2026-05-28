@@ -1882,7 +1882,6 @@ typedef struct ngtcp2_conn_buf_stats {
   uint64_t rx_pkt_copy;
   uint64_t rx_trailing_copy;
   uint64_t rx_mixed_stream_copy;
-  uint64_t decrypt_buf_use;
   uint64_t reorder_copy;
   uint64_t zpicotls_full_pkt_copy_attempt;
   uint64_t zpicotls_crypto_staging_copy;

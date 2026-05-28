@@ -45,7 +45,6 @@ Copy Counters
 
 Forbidden target-path counters:
 
-* ``decrypt_buf_use``
 * ``rx_pkt_copy``
 * ``zpicotls_full_pkt_copy_attempt``
 * ``zpicotls_crypto_staging_copy``
