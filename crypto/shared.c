@@ -1708,7 +1708,7 @@ int ngtcp2_crypto_client_initial_cb(ngtcp2_conn *conn, void *user_data) {
   }
 
   if (ngtcp2_crypto_read_write_crypto_data(
-        conn, NGTCP2_ENCRYPTION_LEVEL_INITIAL, NULL, 0) != 0) {
+        conn, NGTCP2_ENCRYPTION_LEVEL_INITIAL, NULL) != 0) {
     return NGTCP2_ERR_CALLBACK_FAILURE;
   }
 
@@ -1781,9 +1781,7 @@ int ngtcp2_crypto_recv_crypto_data_cb(ngtcp2_conn *conn,
   (void)offset;
   (void)user_data;
 
-  rv = ngtcp2_crypto_read_write_crypto_data(conn, encryption_level,
-                                            data ? data->pos : NULL,
-                                            data ? ngtcp2_buf_len(data) : 0);
+  rv = ngtcp2_crypto_read_write_crypto_data(conn, encryption_level, data);
   if (rv != 0) {
     switch (rv) {
     case /* NGTCP2_CRYPTO_QUICTLS_ERR_TLS_WANT_CLIENT_HELLO_CB */ -10001:

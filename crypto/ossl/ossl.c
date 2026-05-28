@@ -870,14 +870,16 @@ int ngtcp2_crypto_hp_mask(uint8_t *dest, const ngtcp2_crypto_cipher *hp,
 
 int ngtcp2_crypto_read_write_crypto_data(
   ngtcp2_conn *conn, ngtcp2_encryption_level encryption_level,
-  const uint8_t *data, size_t datalen) {
+  const ngtcp2_buf *data) {
   ngtcp2_crypto_ossl_ctx *ossl_ctx = ngtcp2_conn_get_tls_native_handle2(conn);
   SSL *ssl = ossl_ctx->ssl;
+  const uint8_t *datap = data ? data->pos : NULL;
+  size_t datalen = data ? ngtcp2_buf_len(data) : 0;
   int rv;
   int err;
   (void)encryption_level;
 
-  if (crypto_ossl_ctx_write_crypto_data(ossl_ctx, data, datalen) != 0) {
+  if (crypto_ossl_ctx_write_crypto_data(ossl_ctx, datap, datalen) != 0) {
     return -1;
   }
 

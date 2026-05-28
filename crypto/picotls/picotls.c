@@ -377,13 +377,15 @@ int ngtcp2_crypto_hp_mask(uint8_t *dest, const ngtcp2_crypto_cipher *hp,
 
 int ngtcp2_crypto_read_write_crypto_data(
   ngtcp2_conn *conn, ngtcp2_encryption_level encryption_level,
-  const uint8_t *data, size_t datalen) {
+  const ngtcp2_buf *data) {
   ngtcp2_crypto_picotls_ctx *cptls = ngtcp2_conn_get_tls_native_handle2(conn);
   ptls_buffer_t sendbuf;
   size_t epoch_offsets[5] = {0};
   size_t epoch =
     ngtcp2_crypto_picotls_from_ngtcp2_encryption_level(encryption_level);
   size_t epoch_datalen;
+  const uint8_t *datap = data ? data->pos : NULL;
+  size_t datalen = data ? ngtcp2_buf_len(data) : 0;
   size_t i;
   int rv;
 
@@ -391,7 +393,7 @@ int ngtcp2_crypto_read_write_crypto_data(
 
   assert(datalen == 0 || epoch == ptls_get_read_epoch(cptls->ptls));
 
-  rv = ptls_handle_message(cptls->ptls, &sendbuf, epoch_offsets, epoch, data,
+  rv = ptls_handle_message(cptls->ptls, &sendbuf, epoch_offsets, epoch, datap,
                            datalen, &cptls->handshake_properties);
   if (rv != 0 && rv != PTLS_ERROR_IN_PROGRESS) {
     if (PTLS_ERROR_GET_CLASS(rv) == PTLS_ERROR_CLASS_SELF_ALERT) {

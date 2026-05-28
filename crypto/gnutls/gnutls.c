@@ -507,15 +507,17 @@ ngtcp2_crypto_gnutls_from_ngtcp2_encryption_level(
 
 int ngtcp2_crypto_read_write_crypto_data(
   ngtcp2_conn *conn, ngtcp2_encryption_level encryption_level,
-  const uint8_t *data, size_t datalen) {
+  const ngtcp2_buf *data) {
   gnutls_session_t session = ngtcp2_conn_get_tls_native_handle2(conn);
+  const uint8_t *datap = data ? data->pos : NULL;
+  size_t datalen = data ? ngtcp2_buf_len(data) : 0;
   int rv;
 
   if (datalen > 0) {
     rv = gnutls_handshake_write(
       session,
-      ngtcp2_crypto_gnutls_from_ngtcp2_encryption_level(encryption_level), data,
-      datalen);
+      ngtcp2_crypto_gnutls_from_ngtcp2_encryption_level(encryption_level),
+      datap, datalen);
     if (rv != 0) {
       if (!gnutls_error_is_fatal(rv)) {
         return 0;

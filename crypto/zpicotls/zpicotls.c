@@ -544,23 +544,45 @@ void ngtcp2_crypto_zpicotls_configure_conn(ngtcp2_conn *conn,
   ngtcp2_conn_set_crypto_ops(conn, &zpicotls_crypto_ops, cptls);
 }
 
+static int zpicotls_validate_crypto_rx_buf(const ngtcp2_buf *data) {
+  if (data == NULL) {
+    return 0;
+  }
+
+  if (ngtcp2_buf_validate(data, NGTCP2_BUF_DIR_RX,
+                          NGTCP2_BUF_PURPOSE_CRYPTO_RX) == 0 ||
+      ngtcp2_buf_validate(data, NGTCP2_BUF_DIR_RX,
+                          NGTCP2_BUF_PURPOSE_REORDER_RX) == 0) {
+    return 0;
+  }
+
+  return NGTCP2_ERR_BUF_CONTRACT;
+}
+
 int ngtcp2_crypto_read_write_crypto_data(
   ngtcp2_conn *conn, ngtcp2_encryption_level encryption_level,
-  const uint8_t *data, size_t datalen) {
+  const ngtcp2_buf *data) {
   ngtcp2_crypto_zpicotls_ctx *cptls = ngtcp2_conn_get_tls_native_handle2(conn);
   ptls_buffer_t sendbuf;
   size_t epoch_offsets[5] = {0};
   size_t epoch =
     ngtcp2_crypto_zpicotls_from_ngtcp2_encryption_level(encryption_level);
   size_t epoch_datalen;
+  const uint8_t *datap = data ? data->pos : NULL;
+  size_t datalen = data ? ngtcp2_buf_len(data) : 0;
   size_t i;
   int rv;
+
+  rv = zpicotls_validate_crypto_rx_buf(data);
+  if (rv != 0) {
+    return rv;
+  }
 
   ptls_buffer_init_tx(&sendbuf, (void *)"", 0);
 
   assert(datalen == 0 || epoch == ptls_get_read_epoch(cptls->ptls));
 
-  rv = ptls_handle_message(cptls->ptls, &sendbuf, epoch_offsets, epoch, data,
+  rv = ptls_handle_message(cptls->ptls, &sendbuf, epoch_offsets, epoch, datap,
                            datalen, &cptls->handshake_properties);
   if (rv != 0 && rv != PTLS_ERROR_IN_PROGRESS) {
     if (PTLS_ERROR_GET_CLASS(rv) == PTLS_ERROR_CLASS_SELF_ALERT) {

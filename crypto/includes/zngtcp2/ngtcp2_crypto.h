@@ -520,12 +520,12 @@ NGTCP2_EXTERN int ngtcp2_crypto_recv_client_initial_cb(ngtcp2_conn *conn,
 /**
  * @function
  *
- * `ngtcp2_crypto_read_write_crypto_data` reads CRYPTO data |data| of
- * length |datalen| in an encryption level |encryption_level|, and may
- * feed outgoing CRYPTO data to |conn|.  This function can drive
- * handshake.  This function can be also used after handshake
- * completes.  It is allowed to call this function with |datalen| ==
- * 0.  In this case, no additional read operation is done.
+ * `ngtcp2_crypto_read_write_crypto_data` reads CRYPTO data |data| in
+ * an encryption level |encryption_level|, and may feed outgoing
+ * CRYPTO data to |conn|.  This function can drive handshake.  This
+ * function can be also used after handshake completes.  It is allowed
+ * to call this function with |data| == NULL or `ngtcp2_buf_len(data)`
+ * == 0.  In this case, no additional read operation is done.
  *
  * This function is implemented per TLS backend.  See
  * :ref:`tls-integration` for more details.
@@ -539,7 +539,7 @@ NGTCP2_EXTERN int ngtcp2_crypto_recv_client_initial_cb(ngtcp2_conn *conn,
 NGTCP2_EXTERN int
 ngtcp2_crypto_read_write_crypto_data(ngtcp2_conn *conn,
                                      ngtcp2_encryption_level encryption_level,
-                                     const uint8_t *data, size_t datalen);
+                                     const ngtcp2_buf *data);
 
 /**
  * @function
