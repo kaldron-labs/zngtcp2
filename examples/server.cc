@@ -1139,9 +1139,14 @@ std::expected<void, Error> Handler::start_closing_period() {
   ngtcp2_path_storage_zero(&ps);
 
   ngtcp2_pkt_info pi;
+  ngtcp2_buf pkt;
+
+  ngtcp2_buf_init(&pkt, conn_closebuf_->wpos(), conn_closebuf_->left(),
+                  NGTCP2_BUF_ORIGIN_APPLICATION, NGTCP2_BUF_DIR_TX,
+                  NGTCP2_BUF_PURPOSE_PACKET_TX, nullptr, nullptr, nullptr);
+
   auto n = ngtcp2_conn_write_connection_close(
-    conn_, &ps.path, &pi, conn_closebuf_->wpos(), conn_closebuf_->left(),
-    &last_error_, util::timestamp());
+    conn_, &ps.path, &pi, &pkt, &last_error_, util::timestamp());
   if (n < 0) {
     std::println(stderr, "ngtcp2_conn_write_connection_close: {}",
                  ngtcp2_strerror(static_cast<int>(n)));

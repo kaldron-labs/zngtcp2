@@ -13520,6 +13520,35 @@ void ngtcp2_ccerr_set_application_error(ngtcp2_ccerr *ccerr,
 
 ngtcp2_ssize ngtcp2_conn_write_connection_close_versioned(
   ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
+  ngtcp2_pkt_info *pi, ngtcp2_buf *dest, const ngtcp2_ccerr *ccerr,
+  ngtcp2_tstamp ts) {
+  int rv;
+  ngtcp2_ssize nwrite;
+
+  rv =
+    ngtcp2_buf_validate(dest, NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_PACKET_TX);
+  if (rv != 0 || dest->origin != NGTCP2_BUF_ORIGIN_APPLICATION) {
+    ++conn->buf_stats.buf_contract_failure;
+    return NGTCP2_ERR_BUF_CONTRACT;
+  }
+
+  rv = conn_require_crypto_ops(conn);
+  if (rv != 0) {
+    return rv;
+  }
+
+  nwrite = ngtcp2_conn_write_connection_close_legacy_versioned(
+    conn, path, pkt_info_version, pi, dest->pos,
+    (size_t)(dest->end - dest->pos), ccerr, ts);
+  if (nwrite > 0) {
+    dest->last = dest->pos + nwrite;
+  }
+
+  return nwrite;
+}
+
+ngtcp2_ssize ngtcp2_conn_write_connection_close_legacy_versioned(
+  ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
   ngtcp2_pkt_info *pi, uint8_t *dest, size_t destlen, const ngtcp2_ccerr *ccerr,
   ngtcp2_tstamp ts) {
   (void)pkt_info_version;

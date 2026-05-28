@@ -6170,10 +6170,11 @@ NGTCP2_EXTERN void ngtcp2_ccerr_set_application_error(ngtcp2_ccerr *ccerr,
  * @function
  *
  * `ngtcp2_conn_write_connection_close` writes a packet which contains
- * CONNECTION_CLOSE frame(s) (type 0x1C or 0x1D) in the buffer pointed
- * by |dest| whose capacity is |destlen|.
+ * CONNECTION_CLOSE frame(s) (type 0x1C or 0x1D) in |dest|.  |dest|
+ * must be an application-origin, mutable, contiguous
+ * :enum:`NGTCP2_BUF_PURPOSE_PACKET_TX` buffer.
  *
- * For client, |destlen| should be at least
+ * For client, the writable capacity of |dest| should be at least
  * :macro:`NGTCP2_MAX_UDP_PAYLOAD_SIZE`.
  *
  * If |path| is not ``NULL``, this function stores the network path
@@ -6193,7 +6194,8 @@ NGTCP2_EXTERN void ngtcp2_ccerr_set_application_error(ngtcp2_ccerr *ccerr,
  * CONNECTION_CLOSE (type 0x1D) frame.  Otherwise, it does not produce
  * any data, and returns 0.
  *
- * |destlen| could be shorten by some factors (e.g., server side
+ * The available writable capacity could be shortened by some factors
+ * (e.g., server side
  * amplification limit).  This function returns
  * :macro:`NGTCP2_ERR_NOBUF` if the resulting buffer is too small even
  * if the given buffer has enough space.  This can happen if sending a
@@ -6222,10 +6224,13 @@ NGTCP2_EXTERN void ngtcp2_ccerr_set_application_error(ngtcp2_ccerr *ccerr,
  *     Packet number is exhausted, and cannot send any more packet.
  * :macro:`NGTCP2_ERR_CALLBACK_FAILURE`
  *     User callback failed
+ * :macro:`NGTCP2_ERR_BUF_CONTRACT`
+ *     |dest| is not a valid packet TX buffer or required packet crypto
+ *     operations are not installed.
  */
 NGTCP2_EXTERN ngtcp2_ssize ngtcp2_conn_write_connection_close_versioned(
   ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
-  ngtcp2_pkt_info *pi, uint8_t *dest, size_t destlen, const ngtcp2_ccerr *ccerr,
+  ngtcp2_pkt_info *pi, ngtcp2_buf *dest, const ngtcp2_ccerr *ccerr,
   ngtcp2_tstamp ts);
 
 /**
@@ -6864,11 +6869,9 @@ NGTCP2_EXTERN void ngtcp2_secure_clear(void *data, size_t len);
  * `ngtcp2_conn_write_connection_close_versioned` to set the correct
  * struct version.
  */
-#define ngtcp2_conn_write_connection_close(CONN, PATH, PI, DEST, DESTLEN,      \
-                                           CCERR, TS)                          \
+#define ngtcp2_conn_write_connection_close(CONN, PATH, PI, DEST, CCERR, TS)    \
   ngtcp2_conn_write_connection_close_versioned(                                \
-    (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (DEST), (DESTLEN), (CCERR), \
-    (TS))
+    (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (DEST), (CCERR), (TS))
 
 /*
  * `ngtcp2_transport_params_encode` is a wrapper around

@@ -60,6 +60,7 @@
 #undef ngtcp2_conn_write_stream
 #undef ngtcp2_conn_write_datagram
 #undef ngtcp2_conn_writev_datagram
+#undef ngtcp2_conn_write_connection_close
 
 #define NGTCP2_WRITE_STREAM_FLAG_MORE 0x01U
 
@@ -133,6 +134,17 @@ ngtcp2_ssize ngtcp2_conn_writev_datagram_legacy_versioned(
   ngtcp2_conn_writev_datagram_legacy_versioned(                                \
     (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (DEST), (DESTLEN),          \
     (PACCEPTED), (FLAGS), (DGRAM_ID), (DATAV), (DATAVCNT), (TS))
+
+ngtcp2_ssize ngtcp2_conn_write_connection_close_legacy_versioned(
+  ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
+  ngtcp2_pkt_info *pi, uint8_t *dest, size_t destlen, const ngtcp2_ccerr *ccerr,
+  ngtcp2_tstamp ts);
+
+#define ngtcp2_conn_write_connection_close(CONN, PATH, PI, DEST, DESTLEN,      \
+                                           CCERR, TS)                          \
+  ngtcp2_conn_write_connection_close_legacy_versioned(                         \
+    (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (DEST), (DESTLEN), (CCERR), \
+    (TS))
 
 typedef enum {
   /* Client specific handshake states */

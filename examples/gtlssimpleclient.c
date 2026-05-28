@@ -573,6 +573,7 @@ static void client_close(struct client *c) {
   ngtcp2_pkt_info pi;
   ngtcp2_path_storage ps;
   uint8_t buf[1280];
+  ngtcp2_buf pkt;
 
   if (ngtcp2_conn_in_closing_period2(c->conn) ||
       ngtcp2_conn_in_draining_period2(c->conn)) {
@@ -581,8 +582,12 @@ static void client_close(struct client *c) {
 
   ngtcp2_path_storage_zero(&ps);
 
+  ngtcp2_buf_init(&pkt, buf, sizeof(buf), NGTCP2_BUF_ORIGIN_APPLICATION,
+                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_PACKET_TX, NULL, NULL,
+                  NULL);
+
   nwrite = ngtcp2_conn_write_connection_close(
-    c->conn, &ps.path, &pi, buf, sizeof(buf), &c->last_error, timestamp());
+    c->conn, &ps.path, &pi, &pkt, &c->last_error, timestamp());
   if (nwrite < 0) {
     fprintf(stderr, "ngtcp2_conn_write_connection_close: %s\n",
             ngtcp2_strerror((int)nwrite));
