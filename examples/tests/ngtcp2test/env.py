@@ -11,26 +11,13 @@ log = logging.getLogger(__name__)
 class CryptoLib:
 
     IGNORES_CIPHER_CONFIG = [
-        'picotls', 'boringssl'
+        'zpicotls'
     ]
     UNSUPPORTED_CIPHERS = {
-        'wolfssl': [
-            'TLS_AES_128_CCM_SHA256',  # no plans to
-        ],
-        'picotls': [
-            'TLS_AES_128_CCM_SHA256',  # no plans to
-        ],
-        'boringssl': [
+        'zpicotls': [
             'TLS_AES_128_CCM_SHA256',  # no plans to
         ]
     }
-    GNUTLS_CIPHERS = {
-        'TLS_AES_128_GCM_SHA256': 'AES-128-GCM',
-        'TLS_AES_256_GCM_SHA384': 'AES-256-GCM',
-        'TLS_CHACHA20_POLY1305_SHA256': 'CHACHA20-POLY1305',
-        'TLS_AES_128_CCM_SHA256': 'AES-128-CCM',
-    }
-
     @classmethod
     def uses_cipher_config(cls, crypto_lib):
         return crypto_lib not in cls.IGNORES_CIPHER_CONFIG
@@ -42,11 +29,6 @@ class CryptoLib:
 
     @classmethod
     def adjust_ciphers(cls, crypto_lib, ciphers: str) -> str:
-        if crypto_lib == 'gnutls':
-            gciphers = "NORMAL:-VERS-ALL:+VERS-TLS1.3:-CIPHER-ALL"
-            for cipher in ciphers.split(':'):
-                gciphers += f':+{cls.GNUTLS_CIPHERS[cipher]}'
-            return gciphers
         return ciphers
 
 

@@ -40,7 +40,6 @@ EXTRA_DIST = \
 	CMakeOptions.txt \
 	cmake/FindLibev.cmake \
 	cmake/FindLibnghttp3.cmake \
-	cmake/Findwolfssl.cmake \
 	cmake/FindLibbrotlienc.cmake \
 	cmake/FindLibbrotlidec.cmake \
 	cmake/FindJemalloc.cmake \
@@ -56,8 +55,7 @@ clang-format:
 	test -z $${CLANGFORMAT} && CLANGFORMAT="clang-format"; \
 	$${CLANGFORMAT} -i lib/*.{c,h} tests/*.{c,h} lib/includes/zngtcp2/*.h \
 	crypto/*.{c,h} \
-	crypto/quictls/*.c crypto/gnutls/*.c crypto/boringssl/*.c \
-	crypto/wolfssl/*.c crypto/picotls/*.c crypto/zpicotls/*.c crypto/ossl/*.c \
+	crypto/zpicotls/*.c \
 	crypto/includes/zngtcp2/*.h \
 	examples/*.{cc,c,h} \
 	fuzz/*.cc

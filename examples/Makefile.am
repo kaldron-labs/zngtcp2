@@ -68,122 +68,14 @@ CLIENT_SRCS = \
 
 noinst_PROGRAMS =
 
-if ENABLE_EXAMPLE_QUICTLS
-if ENABLE_EXAMPLE_LIBRESSL
-crypto_lib = $(top_builddir)/crypto/quictls/libzngtcp2_crypto_libressl.la
-else
-crypto_lib = $(top_builddir)/crypto/quictls/libzngtcp2_crypto_quictls.la
-endif
-
-noinst_PROGRAMS += qtlsclient qtlsserver \
-	qtlssimpleclient
-
-qtlssimpleclient_CPPFLAGS = ${AM_CPPFLAGS} \
-	@JEMALLOC_CFLAGS@ @OPENSSL_CFLAGS@
-qtlssimpleclient_LDADD = ${LDADD} \
-	$(crypto_lib) \
-	@OPENSSL_LIBS@ \
-	@JEMALLOC_LIBS@
-qtlssimpleclient_SOURCES = simpleclient.c
-
-qtlsclient_CPPFLAGS = ${AM_CPPFLAGS} \
-	@JEMALLOC_CFLAGS@ @OPENSSL_CFLAGS@ \
-	-DWITH_EXAMPLE_QUICTLS -DWITH_EXAMPLE_HTTP3_PROTO_CODEC
-qtlsclient_LDADD = ${LDADD} \
-	$(crypto_lib) \
-	@OPENSSL_LIBS@ \
-	@JEMALLOC_LIBS@
-qtlsclient_SOURCES = client.cc client.h ${CLIENT_SRCS} \
-	http3_client_proto_codec.cc http3_client_proto_codec.h \
-	tls_client_context_quictls.cc tls_client_context_quictls.h \
-	tls_client_session_quictls.cc tls_client_session_quictls.h \
-	tls_session_base_quictls.cc tls_session_base_quictls.h \
-	util_openssl.cc
-
-qtlsserver_CPPFLAGS = ${qtlsclient_CPPFLAGS}
-qtlsserver_LDADD = ${qtlsclient_LDADD}
-qtlsserver_SOURCES = server.cc server.h ${SERVER_SRCS} \
-	http3_server_proto_codec.cc http3_server_proto_codec.h \
-	tls_server_context_quictls.cc tls_server_context_quictls.h \
-	tls_server_session_quictls.cc tls_server_session_quictls.h \
-	tls_session_base_quictls.cc tls_session_base_quictls.h \
-	util_openssl.cc
-endif # ENABLE_EXAMPLE_QUICTLS
-
-if ENABLE_EXAMPLE_GNUTLS
-noinst_PROGRAMS += gtlsclient gtlsserver gtlssimpleclient
-
-gtlssimpleclient_CPPFLAGS = ${AM_CPPFLAGS} \
-	@JEMALLOC_CFLAGS@ @GNUTLS_CFLAGS@
-gtlssimpleclient_LDADD = ${LDADD} \
-	$(top_builddir)/crypto/gnutls/libzngtcp2_crypto_gnutls.la \
-	@GNUTLS_LIBS@ \
-	@JEMALLOC_LIBS@
-gtlssimpleclient_SOURCES = gtlssimpleclient.c
-
-gtlsclient_CPPFLAGS = ${AM_CPPFLAGS} \
-	@JEMALLOC_CFLAGS@ @GNUTLS_CFLAGS@ \
-	-DWITH_EXAMPLE_GNUTLS -DWITH_EXAMPLE_HTTP3_PROTO_CODEC
-gtlsclient_LDADD = ${LDADD} \
-	$(top_builddir)/crypto/gnutls/libzngtcp2_crypto_gnutls.la \
-	@GNUTLS_LIBS@ \
-	@JEMALLOC_LIBS@
-gtlsclient_SOURCES = client.cc client.h ${CLIENT_SRCS} \
-	http3_client_proto_codec.cc http3_client_proto_codec.h \
-	tls_client_context_gnutls.cc tls_client_context_gnutls.h \
-	tls_client_session_gnutls.cc tls_client_session_gnutls.h \
-	tls_session_base_gnutls.cc tls_session_base_gnutls.h \
-	util_gnutls.cc
-
-gtlsserver_CPPFLAGS = ${gtlsclient_CPPFLAGS}
-gtlsserver_LDADD = ${gtlsclient_LDADD} \
-	$(top_builddir)/crypto/gnutls/libzngtcp2_crypto_gnutls.la \
-	@GNUTLS_LIBS@
-gtlsserver_SOURCES = server.cc server.h ${SERVER_SRCS} \
-	http3_server_proto_codec.cc http3_server_proto_codec.h \
-	tls_server_context_gnutls.cc tls_server_context_gnutls.h \
-	tls_server_session_gnutls.cc tls_server_session_gnutls.h \
-	tls_session_base_gnutls.cc tls_session_base_gnutls.h \
-	util_gnutls.cc
-endif # ENABLE_EXAMPLE_GNUTLS
-
-if ENABLE_EXAMPLE_BORINGSSL
-noinst_PROGRAMS += bsslclient bsslserver
-
-bsslclient_CPPFLAGS = @BORINGSSL_CFLAGS@ \
-	-DWITH_EXAMPLE_BORINGSSL -DWITH_EXAMPLE_HTTP3_PROTO_CODEC ${AM_CPPFLAGS}
-bsslclient_LDADD = \
-	$(top_builddir)/crypto/boringssl/libzngtcp2_crypto_boringssl.a \
-	@BORINGSSL_LIBS@ \
-	@JEMALLOC_LIBS@ \
-        ${LDADD}
-bsslclient_SOURCES = client.cc client.h ${CLIENT_SRCS} \
-	http3_client_proto_codec.cc http3_client_proto_codec.h \
-	tls_client_context_boringssl.cc tls_client_context_boringssl.h \
-	tls_client_session_boringssl.cc tls_client_session_boringssl.h \
-	tls_session_base_quictls.cc tls_session_base_quictls.h \
-	tls_shared_boringssl.cc tls_shared_boringssl.h \
-	util_openssl.cc
-
-bsslserver_CPPFLAGS = ${bsslclient_CPPFLAGS}
-bsslserver_LDADD = ${bsslclient_LDADD}
-bsslserver_SOURCES = server.cc server.h ${SERVER_SRCS} \
-	http3_server_proto_codec.cc http3_server_proto_codec.h \
-	tls_server_context_boringssl.cc tls_server_context_boringssl.h \
-	tls_server_session_boringssl.cc tls_server_session_boringssl.h \
-	tls_session_base_quictls.cc tls_session_base_quictls.h \
-	tls_shared_boringssl.cc tls_shared_boringssl.h \
-	util_openssl.cc
-endif # ENABLE_EXAMPLE_BORINGSSL
-
-if ENABLE_EXAMPLE_PICOTLS
+if ENABLE_EXAMPLE_ZPICOTLS
 noinst_PROGRAMS += ptlsclient ptlsserver
 
-ptlsclient_CPPFLAGS = ${AM_CPPFLAGS} @PICOTLS_CFLAGS@ @VANILLA_OPENSSL_CFLAGS@ \
+ptlsclient_CPPFLAGS = ${AM_CPPFLAGS} @ZPICOTLS_CFLAGS@ @VANILLA_OPENSSL_CFLAGS@ \
 	-DWITH_EXAMPLE_PICOTLS -DWITH_EXAMPLE_HTTP3_PROTO_CODEC
 ptlsclient_LDADD = ${LDADD} \
-	$(top_builddir)/crypto/picotls/libzngtcp2_crypto_picotls.a \
-	@PICOTLS_LIBS@ @VANILLA_OPENSSL_LIBS@ \
+	$(top_builddir)/crypto/zpicotls/libzngtcp2_crypto_zpicotls.a \
+	@ZPICOTLS_LIBS@ @VANILLA_OPENSSL_LIBS@ \
 	@JEMALLOC_LIBS@
 ptlsclient_SOURCES = client.cc client.h ${CLIENT_SRCS} \
 	http3_client_proto_codec.cc http3_client_proto_codec.h \
@@ -202,81 +94,7 @@ ptlsserver_SOURCES = server.cc server.h ${SERVER_SRCS} \
 	tls_session_base_picotls.cc tls_session_base_picotls.h \
 	tls_shared_picotls.cc tls_shared_picotls.h \
 	util_openssl.cc
-endif # ENABLE_EXAMPLE_PICOTLS
-
-if ENABLE_EXAMPLE_WOLFSSL
-noinst_PROGRAMS += wsslclient wsslserver wsslhqclient wsslhqserver
-
-wsslclient_CPPFLAGS = ${AM_CPPFLAGS} @WOLFSSL_CFLAGS@ \
-	-DWITH_EXAMPLE_WOLFSSL -DWITH_EXAMPLE_HTTP3_PROTO_CODEC
-wsslclient_LDADD = ${LDADD} \
-	$(top_builddir)/crypto/wolfssl/libzngtcp2_crypto_wolfssl.la \
-	@WOLFSSL_LIBS@ \
-	@JEMALLOC_LIBS@
-wsslclient_SOURCES = client.cc client.h ${CLIENT_SRCS} \
-	http3_client_proto_codec.cc http3_client_proto_codec.h \
-	tls_client_context_wolfssl.cc tls_client_context_wolfssl.h \
-	tls_client_session_wolfssl.cc tls_client_session_wolfssl.h \
-	tls_session_base_wolfssl.cc tls_session_base_wolfssl.h \
-	util_wolfssl.cc
-
-wsslserver_CPPFLAGS = ${wsslclient_CPPFLAGS}
-wsslserver_LDADD = ${wsslclient_LDADD}
-wsslserver_SOURCES = server.cc server.h ${SERVER_SRCS} \
-	http3_server_proto_codec.cc http3_server_proto_codec.h \
-	tls_server_context_wolfssl.cc tls_server_context_wolfssl.h \
-	tls_server_session_wolfssl.cc tls_server_session_wolfssl.h \
-	tls_session_base_wolfssl.cc tls_session_base_wolfssl.h \
-	util_wolfssl.cc
-
-wsslhqclient_CPPFLAGS = ${AM_CPPFLAGS} @WOLFSSL_CFLAGS@ \
-	-DWITH_EXAMPLE_WOLFSSL -DWITH_EXAMPLE_HQ_PROTO_CODEC
-wsslhqclient_LDADD = ${wsslclient_LDADD}
-wsslhqclient_SOURCES = client.cc client.h ${CLIENT_SRCS} \
-	hq_client_proto_codec.cc hq_client_proto_codec.h \
-	tls_client_context_wolfssl.cc tls_client_context_wolfssl.h \
-	tls_client_session_wolfssl.cc tls_client_session_wolfssl.h \
-	tls_session_base_wolfssl.cc tls_session_base_wolfssl.h \
-	util_wolfssl.cc
-
-wsslhqserver_CPPFLAGS = ${wsslhqclient_CPPFLAGS} \
-	-I$(top_srcdir)/third-party
-wsslhqserver_LDADD = ${wsslclient_LDADD} \
-	$(top_builddir)/third-party/libhttp-parser.la
-wsslhqserver_SOURCES = server.cc server.h ${SERVER_SRCS} \
-	hq_server_proto_codec.cc hq_server_proto_codec.h \
-	tls_server_context_wolfssl.cc tls_server_context_wolfssl.h \
-	tls_server_session_wolfssl.cc tls_server_session_wolfssl.h \
-	tls_session_base_wolfssl.cc tls_session_base_wolfssl.h \
-	util_wolfssl.cc
-endif # ENABLE_EXAMPLE_WOLFSSL
-
-if ENABLE_EXAMPLE_OSSL
-noinst_PROGRAMS += osslclient osslserver
-
-osslclient_CPPFLAGS = ${AM_CPPFLAGS} \
-	@JEMALLOC_CFLAGS@ @OPENSSL_CFLAGS@ \
-	-DWITH_EXAMPLE_OSSL -DWITH_EXAMPLE_HTTP3_PROTO_CODEC
-osslclient_LDADD = ${LDADD} \
-	$(top_builddir)/crypto/ossl/libzngtcp2_crypto_ossl.la \
-	@OPENSSL_LIBS@ \
-	@JEMALLOC_LIBS@
-osslclient_SOURCES = client.cc client.h ${CLIENT_SRCS} \
-	http3_client_proto_codec.cc http3_client_proto_codec.h \
-	tls_client_context_ossl.cc tls_client_context_ossl.h \
-	tls_client_session_ossl.cc tls_client_session_ossl.h \
-	tls_session_base_ossl.cc tls_session_base_ossl.h \
-	util_openssl.cc
-
-osslserver_CPPFLAGS = ${osslclient_CPPFLAGS}
-osslserver_LDADD = ${osslclient_LDADD}
-osslserver_SOURCES = server.cc server.h ${SERVER_SRCS} \
-	http3_server_proto_codec.cc http3_server_proto_codec.h \
-	tls_server_context_ossl.cc tls_server_context_ossl.h \
-	tls_server_session_ossl.cc tls_server_session_ossl.h \
-	tls_session_base_ossl.cc tls_session_base_ossl.h \
-	util_openssl.cc
-endif # ENABLE_EXAMPLE_OSSL
+endif # ENABLE_EXAMPLE_ZPICOTLS
 
 check_PROGRAMS = examplestest
 examplestest_SOURCES = examplestest.cc \
@@ -288,17 +106,6 @@ examplestest_SOURCES = examplestest.cc \
 examplestest_CPPFLAGS = ${AM_CPPFLAGS} -I$(top_srcdir)/tests/munit \
 	@JEMALLOC_CFLAGS@
 examplestest_LDADD = ${LDADD} @JEMALLOC_LIBS@
-
-if ENABLE_EXAMPLE_WOLFSSL
-examplestest_SOURCES += \
-	sim.cc sim.h \
-	sim_test.cc sim_test.h \
-	debug.cc debug.h
-examplestest_CPPFLAGS += @WOLFSSL_CFLAGS@ -DWITH_EXAMPLE_WOLFSSL
-examplestest_LDADD += \
-	$(top_builddir)/crypto/wolfssl/libzngtcp2_crypto_wolfssl.la \
-	@WOLFSSL_LIBS@
-endif # ENABLE_EXAMPLE_WOLFSSL
 
 TESTS = examplestest
 
