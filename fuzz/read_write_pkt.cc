@@ -184,16 +184,6 @@ int stream_close(ngtcp2_conn *conn, uint32_t flags, int64_t stream_id,
 } // namespace
 
 namespace {
-int recv_stateless_reset(ngtcp2_conn *conn,
-                         const ngtcp2_pkt_stateless_reset *sr,
-                         void *user_data) {
-  auto fuzzed_data_provider = static_cast<FuzzedDataProvider *>(user_data);
-
-  return fuzzed_data_provider->ConsumeBool() ? NGTCP2_ERR_CALLBACK_FAILURE : 0;
-}
-} // namespace
-
-namespace {
 int recv_retry(ngtcp2_conn *conn, const ngtcp2_pkt_hd *hd, void *user_data) {
   auto fuzzed_data_provider = static_cast<FuzzedDataProvider *>(user_data);
 
@@ -222,26 +212,6 @@ int extend_max_local_streams_uni(ngtcp2_conn *conn, uint64_t max_streams,
 namespace {
 void genrand(uint8_t *dest, size_t destlen, const ngtcp2_rand_ctx *rand_ctx) {
   memset(dest, 0, destlen);
-}
-} // namespace
-
-namespace {
-int get_new_connection_id(ngtcp2_conn *conn, ngtcp2_cid *cid, uint8_t *token,
-                          size_t cidlen, void *user_data) {
-  auto fuzzed_data_provider = static_cast<FuzzedDataProvider *>(user_data);
-
-  if (fuzzed_data_provider->ConsumeBool()) {
-    return NGTCP2_ERR_CALLBACK_FAILURE;
-  }
-
-  *cid = (ngtcp2_cid){
-    .datalen = cidlen,
-    .data = {static_cast<uint8_t>(conn->scid.last_seq + 1)},
-  };
-
-  memset(token, 0, NGTCP2_STATELESS_RESET_TOKENLEN);
-
-  return 0;
 }
 } // namespace
 
@@ -342,16 +312,6 @@ int extend_max_stream_data(ngtcp2_conn *conn, int64_t stream_id,
 } // namespace
 
 namespace {
-int dcid_status(ngtcp2_conn *conn, ngtcp2_connection_id_status_type type,
-                uint64_t seq, const ngtcp2_cid *cid, const uint8_t *token,
-                void *user_data) {
-  auto fuzzed_data_provider = static_cast<FuzzedDataProvider *>(user_data);
-
-  return fuzzed_data_provider->ConsumeBool() ? NGTCP2_ERR_CALLBACK_FAILURE : 0;
-}
-} // namespace
-
-namespace {
 int handshake_confirmed(ngtcp2_conn *conn, void *user_data) {
   auto fuzzed_data_provider = static_cast<FuzzedDataProvider *>(user_data);
 
@@ -405,20 +365,6 @@ int lost_datagram(ngtcp2_conn *conn, uint64_t dgram_id, void *user_data) {
   auto fuzzed_data_provider = static_cast<FuzzedDataProvider *>(user_data);
 
   return fuzzed_data_provider->ConsumeBool() ? NGTCP2_ERR_CALLBACK_FAILURE : 0;
-}
-} // namespace
-
-namespace {
-int get_path_challenge_data(ngtcp2_conn *conn, uint8_t *data, void *user_data) {
-  auto fuzzed_data_provider = static_cast<FuzzedDataProvider *>(user_data);
-
-  if (fuzzed_data_provider->ConsumeBool()) {
-    return NGTCP2_ERR_CALLBACK_FAILURE;
-  }
-
-  memset(data, 0, NGTCP2_PATH_CHALLENGE_DATALEN);
-
-  return 0;
 }
 } // namespace
 
@@ -615,12 +561,10 @@ ngtcp2_conn *setup_conn(FuzzedDataProvider &fuzzed_data_provider,
     .acked_stream_data_offset = acked_stream_data_offset,
     .stream_open = stream_open,
     .stream_close = stream_close,
-    .recv_stateless_reset = recv_stateless_reset,
     .recv_retry = recv_retry,
     .extend_max_local_streams_bidi = extend_max_local_streams_bidi,
     .extend_max_local_streams_uni = extend_max_local_streams_uni,
     .rand = genrand,
-    .get_new_connection_id = get_new_connection_id,
     .remove_connection_id = remove_connection_id,
     .update_key = update_key,
     .path_validation = path_validation,
@@ -629,7 +573,6 @@ ngtcp2_conn *setup_conn(FuzzedDataProvider &fuzzed_data_provider,
     .extend_max_remote_streams_bidi = extend_max_remote_streams_bidi,
     .extend_max_remote_streams_uni = extend_max_remote_streams_uni,
     .extend_max_stream_data = extend_max_stream_data,
-    .dcid_status = dcid_status,
     .handshake_confirmed = handshake_confirmed,
     .recv_new_token = recv_new_token,
     .delete_crypto_aead_ctx = delete_crypto_aead_ctx,
@@ -637,7 +580,6 @@ ngtcp2_conn *setup_conn(FuzzedDataProvider &fuzzed_data_provider,
     .recv_datagram = recv_datagram,
     .ack_datagram = ack_datagram,
     .lost_datagram = lost_datagram,
-    .get_path_challenge_data = get_path_challenge_data,
     .stream_stop_sending = stream_stop_sending,
     .version_negotiation = version_negotiation,
     .recv_rx_key = recv_rx_key,
@@ -655,15 +597,7 @@ ngtcp2_conn *setup_conn(FuzzedDataProvider &fuzzed_data_provider,
   }
 
   if (fuzzed_data_provider.ConsumeBool()) {
-    cb.get_new_connection_id2 = nullptr;
-  }
-
-  if (fuzzed_data_provider.ConsumeBool()) {
     cb.dcid_status2 = nullptr;
-  }
-
-  if (fuzzed_data_provider.ConsumeBool()) {
-    cb.get_path_challenge_data2 = nullptr;
   }
 
   static const ngtcp2_cid dcid = {

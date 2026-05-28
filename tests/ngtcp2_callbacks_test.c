@@ -134,16 +134,6 @@ static int stream_close(ngtcp2_conn *conn, uint32_t flags, int64_t stream_id,
   return 0;
 }
 
-static int recv_stateless_reset(ngtcp2_conn *conn,
-                                const ngtcp2_pkt_stateless_reset *sr,
-                                void *user_data) {
-  (void)conn;
-  (void)sr;
-  (void)user_data;
-
-  return 0;
-}
-
 static int recv_retry(ngtcp2_conn *conn, const ngtcp2_pkt_hd *hd,
                       void *user_data) {
   (void)conn;
@@ -177,18 +167,6 @@ static void rand_cb(uint8_t *dest, size_t destlen,
   (void)dest;
   (void)destlen;
   (void)rand_ctx;
-}
-
-static int get_new_connection_id(ngtcp2_conn *conn, ngtcp2_cid *cid,
-                                 uint8_t *token, size_t cidlen,
-                                 void *user_data) {
-  (void)conn;
-  (void)cid;
-  (void)token;
-  (void)cidlen;
-  (void)user_data;
-
-  return 0;
 }
 
 static int remove_connection_id(ngtcp2_conn *conn, const ngtcp2_cid *cid,
@@ -290,19 +268,6 @@ static int extend_max_stream_data(ngtcp2_conn *conn, int64_t stream_id,
   return 0;
 }
 
-static int dcid_status(ngtcp2_conn *conn, ngtcp2_connection_id_status_type type,
-                       uint64_t seq, const ngtcp2_cid *cid,
-                       const uint8_t *token, void *user_data) {
-  (void)conn;
-  (void)type;
-  (void)seq;
-  (void)cid;
-  (void)token;
-  (void)user_data;
-
-  return 0;
-}
-
 static int handshake_confirmed(ngtcp2_conn *conn, void *user_data) {
   (void)conn;
   (void)user_data;
@@ -358,15 +323,6 @@ static int lost_datagram(ngtcp2_conn *conn, uint64_t dgram_id,
                          void *user_data) {
   (void)conn;
   (void)dgram_id;
-  (void)user_data;
-
-  return 0;
-}
-
-static int get_path_challenge_data(ngtcp2_conn *conn, uint8_t *data,
-                                   void *user_data) {
-  (void)conn;
-  (void)data;
   (void)user_data;
 
   return 0;
@@ -490,12 +446,10 @@ void test_ngtcp2_callbacks_convert_to_latest(void) {
     .acked_stream_data_offset = acked_stream_data_offset,
     .stream_open = stream_open,
     .stream_close = stream_close,
-    .recv_stateless_reset = recv_stateless_reset,
     .recv_retry = recv_retry,
     .extend_max_local_streams_bidi = extend_max_local_streams_bidi,
     .extend_max_local_streams_uni = extend_max_local_streams_uni,
     .rand = rand_cb,
-    .get_new_connection_id = get_new_connection_id,
     .remove_connection_id = remove_connection_id,
     .update_key = update_key,
     .path_validation = path_validation,
@@ -504,7 +458,6 @@ void test_ngtcp2_callbacks_convert_to_latest(void) {
     .extend_max_remote_streams_bidi = extend_max_remote_streams_bidi,
     .extend_max_remote_streams_uni = extend_max_remote_streams_uni,
     .extend_max_stream_data = extend_max_stream_data,
-    .dcid_status = dcid_status,
     .handshake_confirmed = handshake_confirmed,
     .recv_new_token = recv_new_token,
     .delete_crypto_aead_ctx = delete_crypto_aead_ctx,
@@ -512,7 +465,6 @@ void test_ngtcp2_callbacks_convert_to_latest(void) {
     .recv_datagram = recv_datagram,
     .ack_datagram = ack_datagram,
     .lost_datagram = lost_datagram,
-    .get_path_challenge_data = get_path_challenge_data,
     .stream_stop_sending = stream_stop_sending,
     .version_negotiation = version_negotiation,
     .recv_rx_key = recv_rx_key,
@@ -541,14 +493,12 @@ void test_ngtcp2_callbacks_convert_to_latest(void) {
                    dest->acked_stream_data_offset);
   assert_ptr_equal(srcbuf.stream_open, dest->stream_open);
   assert_ptr_equal(srcbuf.stream_close, dest->stream_close);
-  assert_ptr_equal(srcbuf.recv_stateless_reset, dest->recv_stateless_reset);
   assert_ptr_equal(srcbuf.recv_retry, dest->recv_retry);
   assert_ptr_equal(srcbuf.extend_max_local_streams_bidi,
                    dest->extend_max_local_streams_bidi);
   assert_ptr_equal(srcbuf.extend_max_local_streams_uni,
                    dest->extend_max_local_streams_uni);
   assert_ptr_equal(srcbuf.rand, dest->rand);
-  assert_ptr_equal(srcbuf.get_new_connection_id, dest->get_new_connection_id);
   assert_ptr_equal(srcbuf.remove_connection_id, dest->remove_connection_id);
   assert_ptr_equal(srcbuf.update_key, dest->update_key);
   assert_ptr_equal(srcbuf.path_validation, dest->path_validation);
@@ -559,7 +509,6 @@ void test_ngtcp2_callbacks_convert_to_latest(void) {
   assert_ptr_equal(srcbuf.extend_max_remote_streams_uni,
                    dest->extend_max_remote_streams_uni);
   assert_ptr_equal(srcbuf.extend_max_stream_data, dest->extend_max_stream_data);
-  assert_ptr_equal(srcbuf.dcid_status, dest->dcid_status);
   assert_ptr_equal(srcbuf.handshake_confirmed, dest->handshake_confirmed);
   assert_ptr_equal(srcbuf.recv_new_token, dest->recv_new_token);
   assert_ptr_equal(srcbuf.delete_crypto_aead_ctx, dest->delete_crypto_aead_ctx);
@@ -568,8 +517,6 @@ void test_ngtcp2_callbacks_convert_to_latest(void) {
   assert_ptr_equal(srcbuf.recv_datagram, dest->recv_datagram);
   assert_ptr_equal(srcbuf.ack_datagram, dest->ack_datagram);
   assert_ptr_equal(srcbuf.lost_datagram, dest->lost_datagram);
-  assert_ptr_equal(srcbuf.get_path_challenge_data,
-                   dest->get_path_challenge_data);
   assert_ptr_equal(srcbuf.stream_stop_sending, dest->stream_stop_sending);
   assert_ptr_equal(srcbuf.version_negotiation, dest->version_negotiation);
   assert_ptr_equal(srcbuf.recv_rx_key, dest->recv_rx_key);

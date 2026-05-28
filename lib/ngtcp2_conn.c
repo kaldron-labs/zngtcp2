@@ -606,18 +606,13 @@ static int conn_call_extend_max_local_streams_uni(ngtcp2_conn *conn,
 
 static int conn_call_get_new_connection_id(ngtcp2_conn *conn, ngtcp2_cid *cid,
                                            ngtcp2_stateless_reset_token *token,
-                                           size_t cidlen) {
+  size_t cidlen) {
   int rv;
 
-  if (conn->callbacks.get_new_connection_id2) {
-    rv = conn->callbacks.get_new_connection_id2(conn, cid, token, cidlen,
-                                                conn->user_data);
-  } else {
-    assert(conn->callbacks.get_new_connection_id);
+  assert(conn->callbacks.get_new_connection_id2);
 
-    rv = conn->callbacks.get_new_connection_id(conn, cid, token->data, cidlen,
-                                               conn->user_data);
-  }
+  rv = conn->callbacks.get_new_connection_id2(conn, cid, token, cidlen,
+                                              conn->user_data);
 
   if (rv != 0) {
     return NGTCP2_ERR_CALLBACK_FAILURE;
@@ -781,19 +776,14 @@ static int conn_call_dcid_status(ngtcp2_conn *conn,
                                  const ngtcp2_dcid *dcid) {
   int rv;
 
-  if (conn->callbacks.dcid_status2) {
-    rv = conn->callbacks.dcid_status2(
-      conn, type, dcid->seq, &dcid->cid,
-      (dcid->flags & NGTCP2_DCID_FLAG_TOKEN_PRESENT) ? &dcid->token : NULL,
-      conn->user_data);
-  } else if (conn->callbacks.dcid_status) {
-    rv = conn->callbacks.dcid_status(
-      conn, type, dcid->seq, &dcid->cid,
-      (dcid->flags & NGTCP2_DCID_FLAG_TOKEN_PRESENT) ? dcid->token.data : NULL,
-      conn->user_data);
-  } else {
+  if (!conn->callbacks.dcid_status2) {
     return 0;
   }
+
+  rv = conn->callbacks.dcid_status2(
+    conn, type, dcid->seq, &dcid->cid,
+    (dcid->flags & NGTCP2_DCID_FLAG_TOKEN_PRESENT) ? &dcid->token : NULL,
+    conn->user_data);
 
   if (rv != 0) {
     return NGTCP2_ERR_CALLBACK_FAILURE;
@@ -868,17 +858,12 @@ static int conn_call_client_initial(ngtcp2_conn *conn) {
 }
 
 static int conn_call_get_path_challenge_data(ngtcp2_conn *conn,
-                                             ngtcp2_path_challenge_data *data) {
+  ngtcp2_path_challenge_data *data) {
   int rv;
 
-  if (conn->callbacks.get_path_challenge_data2) {
-    rv = conn->callbacks.get_path_challenge_data2(conn, data, conn->user_data);
-  } else {
-    assert(conn->callbacks.get_path_challenge_data);
+  assert(conn->callbacks.get_path_challenge_data2);
 
-    rv = conn->callbacks.get_path_challenge_data(conn, data->data,
-                                                 conn->user_data);
-  }
+  rv = conn->callbacks.get_path_challenge_data2(conn, data, conn->user_data);
 
   if (rv != 0) {
     return NGTCP2_ERR_CALLBACK_FAILURE;
@@ -922,21 +907,12 @@ static int
 conn_call_recv_stateless_reset(ngtcp2_conn *conn,
                                const ngtcp2_pkt_stateless_reset2 *sr) {
   int rv;
-  ngtcp2_pkt_stateless_reset legacy_sr;
 
-  if (conn->callbacks.recv_stateless_reset2) {
-    rv = conn->callbacks.recv_stateless_reset2(conn, sr, conn->user_data);
-  } else if (conn->callbacks.recv_stateless_reset) {
-    memcpy(legacy_sr.stateless_reset_token, sr->token.data,
-           sizeof(legacy_sr.stateless_reset_token));
-    legacy_sr.rand = sr->rand;
-    legacy_sr.randlen = sr->randlen;
-
-    rv =
-      conn->callbacks.recv_stateless_reset(conn, &legacy_sr, conn->user_data);
-  } else {
+  if (!conn->callbacks.recv_stateless_reset2) {
     return 0;
   }
+
+  rv = conn->callbacks.recv_stateless_reset2(conn, sr, conn->user_data);
 
   if (rv != 0) {
     return NGTCP2_ERR_CALLBACK_FAILURE;
@@ -1567,12 +1543,11 @@ static int conn_new(ngtcp2_conn **pconn, const ngtcp2_cid *dcid,
   assert(callbacks->recv_crypto_data);
   assert(server || callbacks->recv_retry);
   assert(callbacks->rand);
-  assert(callbacks->get_new_connection_id2 || callbacks->get_new_connection_id);
+  assert(callbacks->get_new_connection_id2);
   assert(callbacks->update_key);
   assert(callbacks->delete_crypto_aead_ctx);
   assert(callbacks->delete_crypto_cipher_ctx);
-  assert(callbacks->get_path_challenge_data2 ||
-         callbacks->get_path_challenge_data);
+  assert(callbacks->get_path_challenge_data2);
   assert(!server || !ngtcp2_is_reserved_version(client_chosen_version));
 
   for (i = 0; i < settings->pmtud_probeslen; ++i) {
