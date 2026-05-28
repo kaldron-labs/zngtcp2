@@ -36,6 +36,5 @@
 extern const MunitSuite settings_suite;
 
 munit_void_test_decl(test_ngtcp2_settings_convert_to_latest)
-munit_void_test_decl(test_ngtcp2_settings_convert_to_old)
 
 #endif /* !defined(NGTCP2_SETTINGS_TEST_H) */

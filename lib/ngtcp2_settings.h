@@ -39,41 +39,19 @@
 #define NGTCP2_DEFAULT_GLITCH_RATELIM_RATE 330
 
 /*
- * ngtcp2_settings_convert_to_latest converts |src| of version
- * |settings_version| to the latest version NGTCP2_SETTINGS_VERSION.
+ * ngtcp2_settings_convert_to_latest validates that |src| uses
+ * NGTCP2_SETTINGS_VERSION and returns |src|.
  *
- * |dest| must point to the latest version.  |src| may be the older
- * version, and if so, it may have fewer fields.  Accessing those
- * fields causes undefined behavior.
- *
- * If |settings_version| == NGTCP2_SETTINGS_VERSION, no conversion is
- * made, and |src| is returned.  Otherwise, first |dest| is
- * initialized via ngtcp2_settings_default, and then all valid fields
- * in |src| are copied into |dest|.  Finally, |dest| is returned.
+ * |dest| is unused and exists only for the versioned constructor call
+ * path.
  */
 const ngtcp2_settings *
 ngtcp2_settings_convert_to_latest(ngtcp2_settings *dest, int settings_version,
                                   const ngtcp2_settings *src);
 
 /*
- * ngtcp2_settings_convert_to_old converts |src| of the latest version
- * to |dest| of version |settings_version|.
- *
- * |settings_version| must not be the latest version
- *  NGTCP2_SETTINGS_VERSION.
- *
- * |dest| points to the older version, and it may have fewer fields.
- * Accessing those fields causes undefined behavior.
- *
- * This function copies all valid fields in version |settings_version|
- * from |src| to |dest|.
- */
-void ngtcp2_settings_convert_to_old(int settings_version, ngtcp2_settings *dest,
-                                    const ngtcp2_settings *src);
-
-/*
- * ngtcp2_settingslen_version returns the effective length of
- * ngtcp2_settings at the version |settings_version|.
+ * ngtcp2_settingslen_version returns sizeof(ngtcp2_settings) for
+ * NGTCP2_SETTINGS_VERSION.
  */
 size_t ngtcp2_settingslen_version(int settings_version);
 

@@ -27,76 +27,33 @@
 #include <string.h>
 #include <assert.h>
 
-#include "ngtcp2_unreachable.h"
-
 void ngtcp2_settings_default_versioned(int settings_version,
                                        ngtcp2_settings *settings) {
-  size_t len = ngtcp2_settingslen_version(settings_version);
+  assert(settings_version == NGTCP2_SETTINGS_VERSION);
 
-  memset(settings, 0, len);
+  memset(settings, 0, sizeof(*settings));
 
-  switch (settings_version) {
-  case NGTCP2_SETTINGS_VERSION:
-  case NGTCP2_SETTINGS_V3:
-    settings->glitch_ratelim_burst = NGTCP2_DEFAULT_GLITCH_RATELIM_BURST;
-    settings->glitch_ratelim_rate = NGTCP2_DEFAULT_GLITCH_RATELIM_RATE;
-    /* fall through */
-  case NGTCP2_SETTINGS_V2:
-  case NGTCP2_SETTINGS_V1:
-    settings->cc_algo = NGTCP2_CC_ALGO_CUBIC;
-    settings->initial_rtt = NGTCP2_DEFAULT_INITIAL_RTT;
-    settings->ack_thresh = 2;
-    settings->max_tx_udp_payload_size = 1500 - 48;
-    settings->handshake_timeout = UINT64_MAX;
-
-    break;
-  }
-}
-
-static void settings_copy(ngtcp2_settings *dest, const ngtcp2_settings *src,
-                          int settings_version) {
-  assert(settings_version != NGTCP2_SETTINGS_VERSION);
-
-  memcpy(dest, src, ngtcp2_settingslen_version(settings_version));
+  settings->glitch_ratelim_burst = NGTCP2_DEFAULT_GLITCH_RATELIM_BURST;
+  settings->glitch_ratelim_rate = NGTCP2_DEFAULT_GLITCH_RATELIM_RATE;
+  settings->cc_algo = NGTCP2_CC_ALGO_CUBIC;
+  settings->initial_rtt = NGTCP2_DEFAULT_INITIAL_RTT;
+  settings->ack_thresh = 2;
+  settings->max_tx_udp_payload_size = 1500 - 48;
+  settings->handshake_timeout = UINT64_MAX;
 }
 
 const ngtcp2_settings *
 ngtcp2_settings_convert_to_latest(ngtcp2_settings *dest, int settings_version,
                                   const ngtcp2_settings *src) {
-  if (settings_version == NGTCP2_SETTINGS_VERSION) {
-    return src;
-  }
+  (void)dest;
 
-  ngtcp2_settings_default(dest);
+  assert(settings_version == NGTCP2_SETTINGS_VERSION);
 
-  settings_copy(dest, src, settings_version);
-
-  return dest;
-}
-
-void ngtcp2_settings_convert_to_old(int settings_version, ngtcp2_settings *dest,
-                                    const ngtcp2_settings *src) {
-  assert(settings_version != NGTCP2_SETTINGS_VERSION);
-
-  settings_copy(dest, src, settings_version);
+  return src;
 }
 
 size_t ngtcp2_settingslen_version(int settings_version) {
-  ngtcp2_settings settings;
+  assert(settings_version == NGTCP2_SETTINGS_VERSION);
 
-  switch (settings_version) {
-  case NGTCP2_SETTINGS_VERSION:
-    return sizeof(settings);
-  case NGTCP2_SETTINGS_V3:
-    return offsetof(ngtcp2_settings, glitch_ratelim_rate) +
-           sizeof(settings.glitch_ratelim_rate);
-  case NGTCP2_SETTINGS_V2:
-    return offsetof(ngtcp2_settings, pmtud_probeslen) +
-           sizeof(settings.pmtud_probeslen);
-  case NGTCP2_SETTINGS_V1:
-    return offsetof(ngtcp2_settings, initial_pkt_num) +
-           sizeof(settings.initial_pkt_num);
-  default:
-    ngtcp2_unreachable();
-  }
+  return sizeof(ngtcp2_settings);
 }

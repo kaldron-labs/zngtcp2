@@ -2038,11 +2038,7 @@ typedef enum ngtcp2_token_type {
   NGTCP2_TOKEN_TYPE_NEW_TOKEN
 } ngtcp2_token_type;
 
-#define NGTCP2_SETTINGS_V1 1
-#define NGTCP2_SETTINGS_V2 2
-#define NGTCP2_SETTINGS_V3 3
-#define NGTCP2_SETTINGS_V4 4
-#define NGTCP2_SETTINGS_VERSION NGTCP2_SETTINGS_V4
+#define NGTCP2_SETTINGS_VERSION 1
 
 /**
  * @struct
@@ -2244,7 +2240,6 @@ typedef struct ngtcp2_settings {
    * inclusive.
    */
   uint32_t initial_pkt_num;
-  /* The following fields have been added since NGTCP2_SETTINGS_V2. */
   /**
    * :member:`pmtud_probes` is the array of UDP datagram payload size
    * to probe during Path MTU Discovery.  The discovery is done in the
@@ -2265,7 +2260,6 @@ typedef struct ngtcp2_settings {
    * .. version-added:: 1.4.0
    */
   size_t pmtud_probeslen;
-  /* The following fields have been added since NGTCP2_SETTINGS_V3. */
   /**
    * :member:`glitch_ratelim_burst` is the maximum number of tokens
    * available to "glitch" rate limiter.  "glitch" is a suspicious
@@ -2285,7 +2279,6 @@ typedef struct ngtcp2_settings {
    * .. version-added:: 1.15.0
    */
   uint64_t glitch_ratelim_rate;
-  /* The following fields have been added since NGTCP2_SETTINGS_V4. */
   /**
    * :member:`log_write` is the callback function when a single log
    * message is emitted.  If both :member:`log_write` and
