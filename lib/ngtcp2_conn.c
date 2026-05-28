@@ -937,13 +937,26 @@ conn_call_recv_stateless_reset(ngtcp2_conn *conn,
 
 static int conn_call_recv_new_token(ngtcp2_conn *conn, const uint8_t *token,
                                     size_t tokenlen) {
+  uint8_t empty = 0;
+  ngtcp2_buf buf;
+  int retained;
   int rv;
 
   if (!conn->callbacks.recv_new_token) {
     return 0;
   }
 
-  rv = conn->callbacks.recv_new_token(conn, token, tokenlen, conn->user_data);
+  rv = conn_make_rx_callback_buf(conn, &buf, &retained, token, tokenlen,
+                                 NGTCP2_BUF_PURPOSE_PAYLOAD_RX, &empty);
+  if (rv != 0) {
+    return rv;
+  }
+
+  rv = conn->callbacks.recv_new_token(conn, &buf, conn->user_data);
+  if (retained) {
+    ngtcp2_buf_release_owner(&buf);
+    ++conn->buf_stats.app_release;
+  }
   if (rv != 0) {
     return NGTCP2_ERR_CALLBACK_FAILURE;
   }

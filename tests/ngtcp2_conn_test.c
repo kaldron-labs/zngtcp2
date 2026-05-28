@@ -1021,14 +1021,15 @@ static int begin_path_validation(ngtcp2_conn *conn, uint32_t flags,
   return 0;
 }
 
-static int recv_new_token(ngtcp2_conn *conn, const uint8_t *token,
-                          size_t tokenlen, void *user_data) {
+static int recv_new_token(ngtcp2_conn *conn, const ngtcp2_buf *token,
+                          void *user_data) {
   my_user_data *ud = user_data;
+  size_t tokenlen = ngtcp2_buf_len(token);
   (void)conn;
 
   assert_size(sizeof(ud->new_token.token), >=, tokenlen);
 
-  memcpy(ud->new_token.token, token, tokenlen);
+  memcpy(ud->new_token.token, token->pos, tokenlen);
   ud->new_token.tokenlen = tokenlen;
 
   return 0;

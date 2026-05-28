@@ -3387,14 +3387,14 @@ typedef enum ngtcp2_connection_id_status_type {
  * called when new token is received from server.  This callback is
  * client use only.
  *
- * |token| is the received token of length |tokenlen| bytes long.
+ * |token| is the received token.
  *
  * The callback function must return 0 if it succeeds.  Returning
  * :macro:`NGTCP2_ERR_CALLBACK_FAILURE` makes the library call return
  * immediately.
  */
-typedef int (*ngtcp2_recv_new_token)(ngtcp2_conn *conn, const uint8_t *token,
-                                     size_t tokenlen, void *user_data);
+typedef int (*ngtcp2_recv_new_token)(ngtcp2_conn *conn,
+                                     const ngtcp2_buf *token, void *user_data);
 
 /**
  * @functypedef

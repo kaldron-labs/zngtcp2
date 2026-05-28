@@ -323,9 +323,11 @@ int handshake_confirmed(ngtcp2_conn *conn, void *user_data) {
 } // namespace
 
 namespace {
-int recv_new_token(ngtcp2_conn *conn, const uint8_t *token, size_t tokenlen,
+int recv_new_token(ngtcp2_conn *conn, const ngtcp2_buf *token,
                    void *user_data) {
   auto fuzzed_data_provider = static_cast<FuzzedDataProvider *>(user_data);
+  (void)conn;
+  (void)token;
 
   return fuzzed_data_provider->ConsumeBool() ? NGTCP2_ERR_CALLBACK_FAILURE : 0;
 }

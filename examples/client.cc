@@ -574,13 +574,16 @@ std::expected<void, Error> Client::extend_max_stream_data(int64_t stream_id,
 }
 
 namespace {
-int recv_new_token(ngtcp2_conn *conn, const uint8_t *token, size_t tokenlen,
+int recv_new_token(ngtcp2_conn *conn, const ngtcp2_buf *token,
                    void *user_data) {
+  (void)conn;
+  (void)user_data;
+
   if (config.token_file.empty()) {
     return 0;
   }
 
-  util::write_token(config.token_file, {token, tokenlen});
+  util::write_token(config.token_file, {token->pos, ngtcp2_buf_len(token)});
 
   return 0;
 }

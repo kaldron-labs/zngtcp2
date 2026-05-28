@@ -273,11 +273,10 @@ static int handshake_confirmed(ngtcp2_conn *conn, void *user_data) {
   return 0;
 }
 
-static int recv_new_token(ngtcp2_conn *conn, const uint8_t *token,
-                          size_t tokenlen, void *user_data) {
+static int recv_new_token(ngtcp2_conn *conn, const ngtcp2_buf *token,
+                          void *user_data) {
   (void)conn;
   (void)token;
-  (void)tokenlen;
   (void)user_data;
 
   return 0;
