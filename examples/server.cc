@@ -1007,12 +1007,15 @@ std::expected<void, Error> Handler::write_streams() {
   auto ts = util::timestamp();
   auto txbuf = std::span{txbuf_};
   auto buflen = util::clamp_buffer_size(conn_, txbuf.size(), config.gso_burst);
+  ngtcp2_buf pkt;
 
   ngtcp2_path_storage_zero(&ps);
+  ngtcp2_buf_init(&pkt, txbuf.data(), buflen, NGTCP2_BUF_ORIGIN_APPLICATION,
+                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_PACKET_TX, nullptr,
+                  nullptr, nullptr);
 
   auto nwrite = ngtcp2_conn_write_aggregate_pkt2(
-    conn_, &ps.path, &pi, txbuf.data(), buflen, &gso_size, ::write_pkt,
-    config.gso_burst, ts);
+    conn_, &ps.path, &pi, &pkt, &gso_size, ::write_pkt, config.gso_burst, ts);
   if (nwrite < 0) {
     return handle_error();
   }

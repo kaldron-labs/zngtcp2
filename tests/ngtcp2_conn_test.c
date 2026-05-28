@@ -18519,6 +18519,7 @@ static ngtcp2_ssize write_pkt(ngtcp2_conn *conn, ngtcp2_path *path,
 void test_ngtcp2_conn_write_aggregate_pkt(void) {
   ngtcp2_conn *conn;
   uint8_t buf[65536];
+  ngtcp2_buf pkt;
   ngtcp2_ssize spktlen;
   ngtcp2_path_storage ps;
   ngtcp2_pkt_info pi;
@@ -18547,8 +18548,9 @@ void test_ngtcp2_conn_write_aggregate_pkt(void) {
   ud.write_pkt.stream_id = stream_id;
   ud.write_pkt.num_write_left = 10;
 
-  spktlen = ngtcp2_conn_write_aggregate_pkt(conn, &ps.path, &pi, buf,
-                                            sizeof(buf), &gsolen, write_pkt, t);
+  pkt = ngtcp2_t_make_packet_tx_buf(buf, sizeof(buf));
+  spktlen = ngtcp2_conn_write_aggregate_pkt(conn, &ps.path, &pi, &pkt, &gsolen,
+                                            write_pkt, t);
 
   /* Due to CWND, only 8 packets are written. */
   assert_ptrdiff(
@@ -18578,8 +18580,9 @@ void test_ngtcp2_conn_write_aggregate_pkt(void) {
   ud.write_pkt.stream_id = stream_id;
   ud.write_pkt.num_write_left = 10;
 
+  pkt = ngtcp2_t_make_packet_tx_buf(buf, sizeof(buf));
   spktlen = ngtcp2_conn_write_aggregate_pkt2(
-    conn, &ps.path, &pi, buf, sizeof(buf), &gsolen, write_pkt, 1, t);
+    conn, &ps.path, &pi, &pkt, &gsolen, write_pkt, 1, t);
 
   assert_ptrdiff(
     (ngtcp2_ssize)ngtcp2_conn_get_path_max_tx_udp_payload_size2(conn), ==,
@@ -18608,8 +18611,9 @@ void test_ngtcp2_conn_write_aggregate_pkt(void) {
   ud.write_pkt.stream_id = stream_id;
   ud.write_pkt.num_write_left = 10;
 
+  pkt = ngtcp2_t_make_packet_tx_buf(buf, sizeof(buf));
   spktlen = ngtcp2_conn_write_aggregate_pkt2(
-    conn, &ps.path, &pi, buf, sizeof(buf), &gsolen, write_pkt, 3, t);
+    conn, &ps.path, &pi, &pkt, &gsolen, write_pkt, 3, t);
 
   assert_ptrdiff(
     (ngtcp2_ssize)ngtcp2_conn_get_path_max_tx_udp_payload_size2(conn) * 3, ==,
@@ -18665,8 +18669,9 @@ void test_ngtcp2_conn_write_aggregate_pkt(void) {
   ud.write_pkt.stream_id = 0;
   ud.write_pkt.num_write_left = 2;
 
+  pkt = ngtcp2_t_make_packet_tx_buf(buf, sizeof(buf));
   spktlen = ngtcp2_conn_write_aggregate_pkt(
-    conn, &ps.path, &pi, buf, sizeof(buf), &gsolen, write_pkt, ++t);
+    conn, &ps.path, &pi, &pkt, &gsolen, write_pkt, ++t);
 
   /* We have not validated new path, and server is subject to
      anti-amplification limit. */
@@ -18685,8 +18690,9 @@ void test_ngtcp2_conn_write_aggregate_pkt(void) {
   ud.write_pkt.stream_id = 0;
   ud.write_pkt.num_write_left = 2;
 
-  spktlen = ngtcp2_conn_write_aggregate_pkt(conn, &ps.path, &pi, buf,
-                                            sizeof(buf), &gsolen, write_pkt, t);
+  pkt = ngtcp2_t_make_packet_tx_buf(buf, sizeof(buf));
+  spktlen = ngtcp2_conn_write_aggregate_pkt(conn, &ps.path, &pi, &pkt, &gsolen,
+                                            write_pkt, t);
 
   assert_ptrdiff(
     (ngtcp2_ssize)ngtcp2_conn_get_path_max_tx_udp_payload_size2(conn) * 2, ==,
@@ -18714,9 +18720,10 @@ void test_ngtcp2_conn_write_aggregate_pkt(void) {
   ud.write_pkt.stream_id = stream_id;
   ud.write_pkt.num_write_left = 10;
 
+  pkt = ngtcp2_t_make_packet_tx_buf(
+    buf, ngtcp2_conn_get_path_max_tx_udp_payload_size2(conn));
   spktlen = ngtcp2_conn_write_aggregate_pkt(
-    conn, &ps.path, &pi, buf,
-    ngtcp2_conn_get_path_max_tx_udp_payload_size2(conn), &gsolen, write_pkt, t);
+    conn, &ps.path, &pi, &pkt, &gsolen, write_pkt, t);
 
   assert_ptrdiff(
     (ngtcp2_ssize)ngtcp2_conn_get_path_max_tx_udp_payload_size2(conn), ==,
