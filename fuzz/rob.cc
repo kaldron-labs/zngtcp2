@@ -23,12 +23,12 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 #include <algorithm>
-#include <cassert>
 #include <cstdint>
-#include <memory>
 #include <vector>
 
 #include <fuzzer/FuzzedDataProvider.h>
+
+#include "buf_owner.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -41,54 +41,23 @@ extern "C" {
 #endif // defined(__cplusplus)
 
 namespace {
-struct BufOwner {
-  std::vector<uint8_t> data;
-  size_t retaincnt;
-  size_t releasecnt;
-};
-
-struct ReleaseState {
-  size_t allocator_releasecnt;
-};
-
-int retain_buf(void *owner) {
-  ++static_cast<BufOwner *>(owner)->retaincnt;
-
-  return 0;
-}
-
-void release_buf(void *owner) {
-  ++static_cast<BufOwner *>(owner)->releasecnt;
-}
-
 void release_reorder_buf(ngtcp2_buf *buf, int allocator_owned,
                          void *user_data) {
-  auto state = static_cast<ReleaseState *>(user_data);
+  (void)user_data;
 
-  if (allocator_owned) {
-    ++state->allocator_releasecnt;
-    return;
-  }
-
-  ngtcp2_buf_release_owner(buf);
-}
-
-void check_owners_balanced(
-  const std::vector<std::unique_ptr<BufOwner>> &owners) {
-  for (const auto &owner : owners) {
-    assert(owner->retaincnt == owner->releasecnt);
+  if (!allocator_owned) {
+    ngtcp2_buf_release_owner(buf);
   }
 }
 } // namespace
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
   FuzzedDataProvider fuzzed_data_provider(data, size);
-  ReleaseState release_state{};
-  std::vector<std::unique_ptr<BufOwner>> owners;
+  FuzzBufOwners owners;
   ngtcp2_reorder reorder;
   uint64_t cont_offset = 0;
 
-  ngtcp2_reorder_init(&reorder, release_reorder_buf, &release_state,
+  ngtcp2_reorder_init(&reorder, release_reorder_buf, nullptr,
                       ngtcp2_mem_default());
 
   while (fuzzed_data_provider.remaining_bytes()) {
@@ -96,18 +65,17 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     case 0: {
       auto datalen = fuzzed_data_provider.ConsumeIntegralInRange<size_t>(
         0, std::min<size_t>(512, fuzzed_data_provider.remaining_bytes()));
-      auto owner = std::make_unique<BufOwner>();
+      auto data = fuzzed_data_provider.ConsumeBytes<uint8_t>(datalen);
+      auto owner = fuzz_buf_owner_add(owners, data.data(), data.size());
       uint8_t empty = 0;
       ngtcp2_buf buf;
       size_t nwrite;
       int rv;
 
-      owner->data = fuzzed_data_provider.ConsumeBytes<uint8_t>(datalen);
-
       ngtcp2_buf_init(&buf, owner->data.empty() ? &empty : owner->data.data(),
                       owner->data.size(), NGTCP2_BUF_ORIGIN_APPLICATION,
-                      NGTCP2_BUF_DIR_RX, NGTCP2_BUF_PURPOSE_REORDER_RX,
-                      owner.get(), retain_buf, release_buf);
+                      NGTCP2_BUF_DIR_RX, NGTCP2_BUF_PURPOSE_REORDER_RX, owner,
+                      fuzz_buf_retain, fuzz_buf_release);
       buf.last = buf.end;
 
       rv = ngtcp2_buf_retain_owner(&buf);
@@ -115,11 +83,9 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         break;
       }
 
-      owners.push_back(std::move(owner));
-
-      rv = ngtcp2_reorder_push(
-        &reorder, &buf, fuzzed_data_provider.ConsumeIntegral<uint64_t>(),
-        cont_offset, 0, &nwrite);
+      rv = ngtcp2_reorder_push(&reorder, &buf,
+                               fuzzed_data_provider.ConsumeIntegral<uint64_t>(),
+                               cont_offset, 0, &nwrite);
       if (rv != 0) {
         ngtcp2_buf_release_owner(&buf);
       }
@@ -136,9 +102,9 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
       auto datalen = ngtcp2_reorder_data_at(&reorder, &buf, offset);
 
       if (datalen) {
-        ngtcp2_reorder_pop(&reorder, offset,
-                           fuzzed_data_provider.ConsumeIntegralInRange<size_t>(
-                             1, datalen));
+        ngtcp2_reorder_pop(
+          &reorder, offset,
+          fuzzed_data_provider.ConsumeIntegralInRange<size_t>(1, datalen));
       }
 
       break;
@@ -146,8 +112,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     case 3: {
       const ngtcp2_buf *buf;
 
-      ngtcp2_reorder_data_at(
-        &reorder, &buf, fuzzed_data_provider.ConsumeIntegral<uint64_t>());
+      ngtcp2_reorder_data_at(&reorder, &buf,
+                             fuzzed_data_provider.ConsumeIntegral<uint64_t>());
       break;
     }
     case 4:
@@ -157,9 +123,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
   }
 
   ngtcp2_reorder_free(&reorder);
-  check_owners_balanced(owners);
-
-  (void)release_state;
+  fuzz_buf_owners_check_balanced(owners);
 
   return 0;
 }

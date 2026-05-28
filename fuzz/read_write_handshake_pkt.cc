@@ -29,8 +29,9 @@
 #include <cassert>
 #include <cstring>
 #include <array>
-#include <memory>
 #include <vector>
+
+#include "buf_owner.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -51,51 +52,24 @@ const uint8_t null_secret[32]{};
 const uint8_t null_iv[16]{};
 const uint8_t null_data[2048]{};
 
-struct CryptoTxOwner {
-  std::vector<uint8_t> data;
-  size_t retaincnt;
-  size_t releasecnt;
-};
-
-int crypto_tx_retain(void *owner) {
-  ++static_cast<CryptoTxOwner *>(owner)->retaincnt;
-
-  return 0;
-}
-
-void crypto_tx_release(void *owner) {
-  ++static_cast<CryptoTxOwner *>(owner)->releasecnt;
-}
-
-void assert_crypto_tx_owners_balanced(
-  const std::vector<std::unique_ptr<CryptoTxOwner>> &owners) {
-  for (const auto &owner : owners) {
-    assert(owner->retaincnt == owner->releasecnt);
-  }
-}
-
 int submit_crypto_data(ngtcp2_conn *conn,
                        ngtcp2_encryption_level encryption_level,
-                       std::vector<std::unique_ptr<CryptoTxOwner>> &owners,
-                       const uint8_t *data, size_t datalen) {
+                       FuzzBufOwners &owners, const uint8_t *data,
+                       size_t datalen) {
   ngtcp2_buf buf;
   uint8_t empty = 0;
   uint8_t *buf_data = &empty;
-  CryptoTxOwner *owner = nullptr;
+  FuzzBufOwner *owner = nullptr;
 
   if (datalen) {
-    auto owner_storage = std::make_unique<CryptoTxOwner>();
-
-    owner_storage->data.assign(data, data + datalen);
-    owner = owner_storage.get();
+    owner = fuzz_buf_owner_add(owners, data, datalen);
     buf_data = owner->data.data();
-    owners.push_back(std::move(owner_storage));
   }
 
   ngtcp2_buf_init(&buf, buf_data, datalen, NGTCP2_BUF_ORIGIN_LIBRARY,
                   NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_CRYPTO_TX, owner,
-                  owner ? crypto_tx_retain : nullptr,
-                  owner ? crypto_tx_release : nullptr);
+                  owner ? fuzz_buf_retain : nullptr,
+                  owner ? fuzz_buf_release : nullptr);
   buf.last = buf.end;
 
   return ngtcp2_conn_submit_crypto_data(conn, encryption_level, &buf);
@@ -105,7 +79,7 @@ int submit_crypto_data(ngtcp2_conn *conn,
 struct TLSState {
   bool keys_installed;
   bool handshake_completed;
-  std::vector<std::unique_ptr<CryptoTxOwner>> crypto_tx_owners;
+  FuzzBufOwners crypto_tx_owners;
 };
 
 namespace {
@@ -278,10 +252,10 @@ void genrand(ngtcp2_buf *dest, const ngtcp2_rand_ctx *rand_ctx) {
 } // namespace
 
 namespace {
-int update_key(ngtcp2_conn *conn, ngtcp2_buf *rx_secret,
-               ngtcp2_buf *tx_secret, ngtcp2_crypto_aead_ctx *rx_aead_ctx,
-               ngtcp2_buf *rx_iv, ngtcp2_crypto_aead_ctx *tx_aead_ctx,
-               ngtcp2_buf *tx_iv, const ngtcp2_buf *current_rx_secret,
+int update_key(ngtcp2_conn *conn, ngtcp2_buf *rx_secret, ngtcp2_buf *tx_secret,
+               ngtcp2_crypto_aead_ctx *rx_aead_ctx, ngtcp2_buf *rx_iv,
+               ngtcp2_crypto_aead_ctx *tx_aead_ctx, ngtcp2_buf *tx_iv,
+               const ngtcp2_buf *current_rx_secret,
                const ngtcp2_buf *current_tx_secret, void *user_data) {
   size_t secretlen = ngtcp2_buf_len(current_rx_secret);
 
@@ -500,7 +474,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
 
   ngtcp2_conn_del(conn);
 
-  assert_crypto_tx_owners_balanced(state.crypto_tx_owners);
+  fuzz_buf_owners_check_balanced(state.crypto_tx_owners);
 
   return 0;
 }

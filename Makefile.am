@@ -58,4 +58,4 @@ clang-format:
 	crypto/zpicotls/*.c \
 	crypto/includes/zngtcp2/*.h \
 	examples/*.{cc,c,h} \
-	fuzz/*.cc
+	fuzz/*.{cc,h}
