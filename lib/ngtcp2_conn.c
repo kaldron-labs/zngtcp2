@@ -2137,7 +2137,6 @@ void ngtcp2_conn_del(ngtcp2_conn *conn) {
 
   conn_vneg_crypto_free(conn);
 
-  ngtcp2_mem_free(conn->mem, conn->crypto.decrypt_hp_buf.base);
   ngtcp2_mem_free(conn->mem, (uint8_t *)conn->local.settings.token);
 
   ngtcp2_crypto_km_del(conn->crypto.key_update.old_rx_ckm, conn->mem);
