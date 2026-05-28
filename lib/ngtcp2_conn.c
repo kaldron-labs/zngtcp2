@@ -12820,7 +12820,7 @@ ngtcp2_ssize ngtcp2_conn_writev_stream_versioned(
                                       datav, datavcnt, NULL, ts);
 }
 
-ngtcp2_ssize ngtcp2_conn_write_datagram_versioned(
+ngtcp2_ssize ngtcp2_conn_write_datagram_legacy_versioned(
   ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
   ngtcp2_pkt_info *pi, uint8_t *dest, size_t destlen, int *paccepted,
   uint32_t flags, uint64_t dgram_id, const uint8_t *data, size_t datalen,
@@ -12838,12 +12838,12 @@ ngtcp2_ssize ngtcp2_conn_write_datagram_versioned(
     datacnt = 1;
   }
 
-  return ngtcp2_conn_writev_datagram_versioned(conn, path, pkt_info_version, pi,
-                                               dest, destlen, paccepted, flags,
-                                               dgram_id, v, datacnt, ts);
+  return ngtcp2_conn_writev_datagram_legacy_versioned(
+    conn, path, pkt_info_version, pi, dest, destlen, paccepted, flags, dgram_id,
+    v, datacnt, ts);
 }
 
-ngtcp2_ssize ngtcp2_conn_writev_datagram_versioned(
+ngtcp2_ssize ngtcp2_conn_writev_datagram_legacy_versioned(
   ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
   ngtcp2_pkt_info *pi, uint8_t *dest, size_t destlen, int *paccepted,
   uint32_t flags, uint64_t dgram_id, const ngtcp2_vec *datav, size_t datavcnt,

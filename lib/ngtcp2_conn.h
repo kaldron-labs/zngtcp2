@@ -58,8 +58,14 @@
 #undef ngtcp2_conn_read_pkt
 #undef ngtcp2_conn_write_pkt
 #undef ngtcp2_conn_write_stream
+#undef ngtcp2_conn_write_datagram
+#undef ngtcp2_conn_writev_datagram
 
 #define NGTCP2_WRITE_STREAM_FLAG_MORE 0x01U
+
+#define NGTCP2_WRITE_DATAGRAM_FLAG_NONE 0x00U
+#define NGTCP2_WRITE_DATAGRAM_FLAG_MORE 0x01U
+#define NGTCP2_WRITE_DATAGRAM_FLAG_PADDING 0x02U
 
 int ngtcp2_conn_read_pkt_legacy_versioned(ngtcp2_conn *conn,
                                           const ngtcp2_path *path,
@@ -103,6 +109,30 @@ ngtcp2_ssize ngtcp2_conn_writev_stream_versioned(
   ngtcp2_conn_writev_stream_versioned(                                         \
     (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (DEST), (DESTLEN),          \
     (PDATALEN), (FLAGS), (STREAM_ID), (DATAV), (DATAVCNT), (TS))
+
+ngtcp2_ssize ngtcp2_conn_write_datagram_legacy_versioned(
+  ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
+  ngtcp2_pkt_info *pi, uint8_t *dest, size_t destlen, int *paccepted,
+  uint32_t flags, uint64_t dgram_id, const uint8_t *data, size_t datalen,
+  ngtcp2_tstamp ts);
+
+#define ngtcp2_conn_write_datagram(CONN, PATH, PI, DEST, DESTLEN, PACCEPTED,   \
+                                   FLAGS, DGRAM_ID, DATA, DATALEN, TS)         \
+  ngtcp2_conn_write_datagram_legacy_versioned(                                 \
+    (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (DEST), (DESTLEN),          \
+    (PACCEPTED), (FLAGS), (DGRAM_ID), (DATA), (DATALEN), (TS))
+
+ngtcp2_ssize ngtcp2_conn_writev_datagram_legacy_versioned(
+  ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
+  ngtcp2_pkt_info *pi, uint8_t *dest, size_t destlen, int *paccepted,
+  uint32_t flags, uint64_t dgram_id, const ngtcp2_vec *datav, size_t datavcnt,
+  ngtcp2_tstamp ts);
+
+#define ngtcp2_conn_writev_datagram(CONN, PATH, PI, DEST, DESTLEN, PACCEPTED,  \
+                                    FLAGS, DGRAM_ID, DATAV, DATAVCNT, TS)      \
+  ngtcp2_conn_writev_datagram_legacy_versioned(                                \
+    (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (DEST), (DESTLEN),          \
+    (PACCEPTED), (FLAGS), (DGRAM_ID), (DATAV), (DATAVCNT), (TS))
 
 typedef enum {
   /* Client specific handshake states */

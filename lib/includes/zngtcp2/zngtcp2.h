@@ -3465,7 +3465,8 @@ typedef int (*ngtcp2_recv_datagram)(ngtcp2_conn *conn, uint32_t flags,
  *
  * :type:`ngtcp2_ack_datagram` is invoked when a packet which contains
  * DATAGRAM frame which is identified by |dgram_id| is acknowledged.
- * |dgram_id| is the valued passed to `ngtcp2_conn_writev_datagram`.
+ * |dgram_id| is the opaque identifier associated with the transmitted
+ * DATAGRAM frame.
  *
  * The callback function must return 0 if it succeeds, or
  * :macro:`NGTCP2_ERR_CALLBACK_FAILURE` which makes the library return
@@ -3479,8 +3480,8 @@ typedef int (*ngtcp2_ack_datagram)(ngtcp2_conn *conn, uint64_t dgram_id,
  *
  * :type:`ngtcp2_lost_datagram` is invoked when a packet which
  * contains DATAGRAM frame which is identified by |dgram_id| is
- * declared lost.  |dgram_id| is the valued passed to
- * `ngtcp2_conn_writev_datagram`.  Note that the loss might be
+ * declared lost.  |dgram_id| is the opaque identifier associated with
+ * the transmitted DATAGRAM frame.  Note that the loss might be
  * spurious, and DATAGRAM frame might be acknowledged later.
  *
  * The callback function must return 0 if it succeeds, or
@@ -5024,153 +5025,6 @@ NGTCP2_EXTERN ngtcp2_ssize ngtcp2_conn_write_stream_versioned(
   int64_t stream_id, const ngtcp2_buf *data, ngtcp2_tstamp ts);
 
 /**
- * @macrosection
- *
- * Write datagram flags
- */
-
-/**
- * @macro
- *
- * :macro:`NGTCP2_WRITE_DATAGRAM_FLAG_NONE` indicates no flag set.
- */
-#define NGTCP2_WRITE_DATAGRAM_FLAG_NONE 0x00U
-
-/**
- * @macro
- *
- * :macro:`NGTCP2_WRITE_DATAGRAM_FLAG_MORE` indicates that more data
- * may come, and should be coalesced into the same packet if possible.
- */
-#define NGTCP2_WRITE_DATAGRAM_FLAG_MORE 0x01U
-
-/**
- * @macro
- *
- * :macro:`NGTCP2_WRITE_DATAGRAM_FLAG_PADDING` indicates that a
- * non-empty 0 RTT or 1 RTT ack-eliciting packet is padded to the
- * minimum length of a sending path MTU or a given packet buffer when
- * finalizing it.  PATH_CHALLENGE, PATH_RESPONSE, CONNECTION_CLOSE
- * only packets and PMTUD packets are excluded.
- */
-#define NGTCP2_WRITE_DATAGRAM_FLAG_PADDING 0x02U
-
-/**
- * @function
- *
- * `ngtcp2_conn_write_datagram` is just like
- * `ngtcp2_conn_writev_datagram`.  The only difference is that it
- * conveniently accepts a single buffer.
- */
-NGTCP2_EXTERN ngtcp2_ssize ngtcp2_conn_write_datagram_versioned(
-  ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
-  ngtcp2_pkt_info *pi, uint8_t *dest, size_t destlen, int *paccepted,
-  uint32_t flags, uint64_t dgram_id, const uint8_t *data, size_t datalen,
-  ngtcp2_tstamp ts);
-
-/**
- * @function
- *
- * `ngtcp2_conn_writev_datagram` writes a packet containing unreliable
- * data in DATAGRAM frame.  The buffer of the packet is pointed by
- * |dest| of length |destlen|.  This function performs QUIC handshake
- * as well.
- *
- * |destlen| should be at least
- * :member:`ngtcp2_settings.max_tx_udp_payload_size`.  It must be at
- * least :macro:`NGTCP2_MAX_UDP_PAYLOAD_SIZE`.
- *
- * For |path| and |pi| parameters, refer to
- * `ngtcp2_conn_write_stream`.
- *
- * Stream data is specified as vector of data |datav|.  |datavcnt|
- * specifies the number of :type:`ngtcp2_vec` that |datav| includes.
- *
- * If the given data is written to the buffer, nonzero value is
- * assigned to |*paccepted| if it is not NULL.  The data in DATAGRAM
- * frame cannot be fragmented; writing partial data is not possible.
- *
- * |dgram_id| is an opaque identifier which should uniquely identify
- * the given DATAGRAM data.  It is passed to
- * :member:`ngtcp2_callbacks.ack_datagram` callback when a packet that
- * contains DATAGRAM frame is acknowledged.  It is also passed to
- * :member:`ngtcp2_callbacks.lost_datagram` callback when a packet
- * that contains DATAGRAM frame is declared lost.  If an application
- * uses neither of those callbacks, it can sets 0 to this parameter.
- *
- * This function might write frames other than DATAGRAM frame, just
- * like `ngtcp2_conn_write_stream`.
- *
- * If the function returns 0, it means that no more data cannot be
- * sent because of congestion control limit; or, data does not fit
- * into the provided buffer; or, a local endpoint, as a server, is
- * unable to send data because of its amplification limit.  In this
- * case, |*paccepted| is assigned zero if it is not NULL.
- *
- * If :macro:`NGTCP2_WRITE_DATAGRAM_FLAG_MORE` is set in |flags|,
- * there are 3 outcomes:
- *
- * - The function returns the written length of packet just like
- *   without :macro:`NGTCP2_WRITE_DATAGRAM_FLAG_MORE`.  This is
- *   because packet is nearly full and the library decided to make a
- *   complete packet.  |*paccepted| might be zero or nonzero.
- *
- * - The function returns :macro:`NGTCP2_ERR_WRITE_MORE`.  In this
- *   case, |*paccepted| != 0 is asserted.  This indicates that
- *   application can call this function with another unreliable data
- *   (or `ngtcp2_conn_write_stream` if it has stream data to send) to
- *   pack them into the same packet.  Application has to specify the
- *   same |conn|, |path|, |pi|, |dest|, |destlen|, and |ts|
- *   parameters, otherwise the behaviour is undefined.  The
- *   application can change |flags|.
- *
- * - The other error might be returned just like without
- *   :macro:`NGTCP2_WRITE_DATAGRAM_FLAG_MORE`.
- *
- * When application sees :macro:`NGTCP2_ERR_WRITE_MORE`, it must not
- * call other ngtcp2 API functions (application can still call
- * `ngtcp2_conn_write_connection_close` to handle error from this
- * function.  It can also call `ngtcp2_conn_shutdown_stream_read`,
- * `ngtcp2_conn_shutdown_stream_write`, and
- * `ngtcp2_conn_shutdown_stream`).  Just keep calling this function
- * (or `ngtcp2_conn_write_stream`) until it returns a positive number
- * (which indicates a complete packet is ready).
- *
- * If :macro:`NGTCP2_WRITE_DATAGRAM_FLAG_PADDING` is set in |flags|
- * when finalizing a non-empty 0 RTT or 1 RTT ack-eliciting packet,
- * the packet is padded to the minimum length of a sending path MTU or
- * a given packet buffer.
- *
- * This function returns the number of bytes written in |dest| if it
- * succeeds, or one of the following negative error codes:
- *
- * :macro:`NGTCP2_ERR_NOMEM`
- *     Out of memory
- * :macro:`NGTCP2_ERR_PKT_NUM_EXHAUSTED`
- *     Packet number is exhausted, and cannot send any more packet.
- * :macro:`NGTCP2_ERR_CALLBACK_FAILURE`
- *     User callback failed
- * :macro:`NGTCP2_ERR_WRITE_MORE`
- *     (Only when :macro:`NGTCP2_WRITE_DATAGRAM_FLAG_MORE` is
- *     specified) Application can call this function to pack more data
- *     into the same packet.  See above to know how it works.
- * :macro:`NGTCP2_ERR_INVALID_STATE`
- *     A remote endpoint did not express the DATAGRAM frame support.
- * :macro:`NGTCP2_ERR_INVALID_ARGUMENT`
- *     The provisional DATAGRAM frame size exceeds the maximum
- *     DATAGRAM frame size that a remote endpoint can receive.
- *
- * If any other negative error is returned, call
- * `ngtcp2_conn_write_connection_close` to get terminal packet, and
- * sending it makes QUIC connection enter the closing state.
- */
-NGTCP2_EXTERN ngtcp2_ssize ngtcp2_conn_writev_datagram_versioned(
-  ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
-  ngtcp2_pkt_info *pi, uint8_t *dest, size_t destlen, int *paccepted,
-  uint32_t flags, uint64_t dgram_id, const ngtcp2_vec *datav, size_t datavcnt,
-  ngtcp2_tstamp ts);
-
-/**
  * @function
  *
  * .. warning::
@@ -6624,9 +6478,8 @@ NGTCP2_EXTERN size_t ngtcp2_conn_get_stream_loss_count2(const ngtcp2_conn *conn,
  * return 0.
  *
  * Because GSO requires that the aggregated packets have the same
- * length, :macro:`NGTCP2_WRITE_STREAM_FLAG_PADDING` (or
- * :macro:`NGTCP2_WRITE_DATAGRAM_FLAG_PADDING` if
- * `ngtcp2_conn_writev_datagram` is used) is recommended.
+ * length, :macro:`NGTCP2_WRITE_STREAM_FLAG_PADDING` is recommended
+ * when writing stream packets.
  *
  * .. version-added:: 1.15.0
  */
@@ -7005,28 +6858,6 @@ NGTCP2_EXTERN void ngtcp2_secure_clear(void *data, size_t len);
   ngtcp2_conn_write_stream_versioned(                                          \
     (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (DEST), (PDATALEN),         \
     (FLAGS), (STREAM_ID), (DATA), (TS))
-
-/*
- * `ngtcp2_conn_write_datagram` is a wrapper around
- * `ngtcp2_conn_write_datagram_versioned` to set the correct struct
- * version.
- */
-#define ngtcp2_conn_write_datagram(CONN, PATH, PI, DEST, DESTLEN, PACCEPTED,   \
-                                   FLAGS, DGRAM_ID, DATA, DATALEN, TS)         \
-  ngtcp2_conn_write_datagram_versioned(                                        \
-    (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (DEST), (DESTLEN),          \
-    (PACCEPTED), (FLAGS), (DGRAM_ID), (DATA), (DATALEN), (TS))
-
-/*
- * `ngtcp2_conn_writev_datagram` is a wrapper around
- * `ngtcp2_conn_writev_datagram_versioned` to set the correct struct
- * version.
- */
-#define ngtcp2_conn_writev_datagram(CONN, PATH, PI, DEST, DESTLEN, PACCEPTED,  \
-                                    FLAGS, DGRAM_ID, DATAV, DATAVCNT, TS)      \
-  ngtcp2_conn_writev_datagram_versioned(                                       \
-    (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (DEST), (DESTLEN),          \
-    (PACCEPTED), (FLAGS), (DGRAM_ID), (DATAV), (DATAVCNT), (TS))
 
 /*
  * `ngtcp2_conn_write_connection_close` is a wrapper around
