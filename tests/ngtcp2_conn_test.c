@@ -929,11 +929,11 @@ static int recv_retry(ngtcp2_conn *conn, const ngtcp2_pkt_hd *hd,
   return 0;
 }
 
-static void genrand(uint8_t *dest, size_t destlen,
-                    const ngtcp2_rand_ctx *rand_ctx) {
+static void genrand(ngtcp2_buf *dest, const ngtcp2_rand_ctx *rand_ctx) {
   (void)rand_ctx;
 
-  memset(dest, 0, destlen);
+  memset(dest->pos, 0, ngtcp2_buf_cap(dest));
+  dest->last = dest->end;
 }
 
 static int recv_datagram(ngtcp2_conn *conn, uint32_t flags,

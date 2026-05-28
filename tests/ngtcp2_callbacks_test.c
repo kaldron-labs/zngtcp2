@@ -162,10 +162,8 @@ static int extend_max_local_streams_uni(ngtcp2_conn *conn, uint64_t max_streams,
   return 0;
 }
 
-static void rand_cb(uint8_t *dest, size_t destlen,
-                    const ngtcp2_rand_ctx *rand_ctx) {
+static void rand_cb(ngtcp2_buf *dest, const ngtcp2_rand_ctx *rand_ctx) {
   (void)dest;
-  (void)destlen;
   (void)rand_ctx;
 }
 

@@ -236,11 +236,11 @@ static int client_gnutls_init(struct client *c) {
   return 0;
 }
 
-static void rand_cb(uint8_t *dest, size_t destlen,
-                    const ngtcp2_rand_ctx *rand_ctx) {
+static void rand_cb(ngtcp2_buf *dest, const ngtcp2_rand_ctx *rand_ctx) {
   (void)rand_ctx;
 
-  (void)gnutls_rnd(GNUTLS_RND_RANDOM, dest, destlen);
+  (void)gnutls_rnd(GNUTLS_RND_RANDOM, dest->pos, ngtcp2_buf_cap(dest));
+  dest->last = dest->end;
 }
 
 static int get_new_connection_id_cb(ngtcp2_conn *conn, ngtcp2_cid *cid,

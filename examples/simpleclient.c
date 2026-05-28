@@ -193,16 +193,17 @@ static int client_ssl_init(struct client *c) {
   return 0;
 }
 
-static void rand_cb(uint8_t *dest, size_t destlen,
-                    const ngtcp2_rand_ctx *rand_ctx) {
+static void rand_cb(ngtcp2_buf *dest, const ngtcp2_rand_ctx *rand_ctx) {
   int rv;
   (void)rand_ctx;
 
-  rv = RAND_bytes(dest, (int)destlen);
+  rv = RAND_bytes(dest->pos, (int)ngtcp2_buf_cap(dest));
   if (rv != 1) {
     assert(0);
     abort();
   }
+
+  dest->last = dest->end;
 }
 
 static int get_new_connection_id_cb(ngtcp2_conn *conn, ngtcp2_cid *cid,

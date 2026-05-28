@@ -457,8 +457,11 @@ void rand_bytes(uint8_t *dest, size_t destlen) {
 } // namespace
 
 namespace {
-void rand(uint8_t *dest, size_t destlen, const ngtcp2_rand_ctx *rand_ctx) {
-  rand_bytes(dest, destlen);
+void rand(ngtcp2_buf *dest, const ngtcp2_rand_ctx *rand_ctx) {
+  (void)rand_ctx;
+
+  rand_bytes(dest->pos, ngtcp2_buf_cap(dest));
+  dest->last = dest->end;
 }
 } // namespace
 

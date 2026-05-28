@@ -540,11 +540,15 @@ std::expected<void, Error> Handler::on_stream_stop_sending(int64_t stream_id) {
 }
 
 namespace {
-void rand(uint8_t *dest, size_t destlen, const ngtcp2_rand_ctx *rand_ctx) {
-  if (!util::generate_secure_random({dest, destlen})) {
+void rand(ngtcp2_buf *dest, const ngtcp2_rand_ctx *rand_ctx) {
+  (void)rand_ctx;
+
+  if (!util::generate_secure_random({dest->pos, ngtcp2_buf_cap(dest)})) {
     assert(0);
     abort();
   }
+
+  dest->last = dest->end;
 }
 } // namespace
 

@@ -210,8 +210,11 @@ int extend_max_local_streams_uni(ngtcp2_conn *conn, uint64_t max_streams,
 } // namespace
 
 namespace {
-void genrand(uint8_t *dest, size_t destlen, const ngtcp2_rand_ctx *rand_ctx) {
-  memset(dest, 0, destlen);
+void genrand(ngtcp2_buf *dest, const ngtcp2_rand_ctx *rand_ctx) {
+  (void)rand_ctx;
+
+  memset(dest->pos, 0, ngtcp2_buf_cap(dest));
+  dest->last = dest->end;
 }
 } // namespace
 

@@ -134,6 +134,20 @@ static int conn_buf_can_retain_owner(const ngtcp2_buf *buf) {
   return buf->owner && buf->retain && buf->release;
 }
 
+static void conn_call_rand(const ngtcp2_callbacks *callbacks, uint8_t *dest,
+                           size_t destlen,
+                           const ngtcp2_rand_ctx *rand_ctx) {
+  ngtcp2_buf buf;
+
+  ngtcp2_buf_init(&buf, dest, destlen, NGTCP2_BUF_ORIGIN_LIBRARY,
+                  NGTCP2_BUF_DIR_INTERNAL, NGTCP2_BUF_PURPOSE_SCRATCH, NULL,
+                  NULL, NULL);
+
+  callbacks->rand(&buf, rand_ctx);
+
+  buf.last = buf.end;
+}
+
 static ngtcp2_ssize conn_writev_stream_versioned(
   ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
   ngtcp2_pkt_info *pi, uint8_t *dest, size_t destlen,
@@ -1420,7 +1434,7 @@ static void conn_update_skip_pkt(ngtcp2_conn *conn, ngtcp2_pktns *pktns) {
 
   assert(INT64_MAX != pktns->tx.skip_pkt.next_pkt_num);
 
-  conn->callbacks.rand(&r, 1, &conn->local.settings.rand_ctx);
+  conn_call_rand(&conn->callbacks, &r, 1, &conn->local.settings.rand_ctx);
 
   if (1LL << pktns->tx.skip_pkt.exponent >
       (NGTCP2_MAX_PKT_NUM - min_gap) / ((int64_t)r + 1)) {
@@ -1619,10 +1633,12 @@ static int conn_new(ngtcp2_conn **pconn, const ngtcp2_cid *dcid,
 
   ngtcp2_pq_init(&(*pconn)->scid.used, retired_ts_less, mem);
 
-  callbacks->rand((uint8_t *)&seed, sizeof(seed), &settings->rand_ctx);
+  conn_call_rand(callbacks, (uint8_t *)&seed, sizeof(seed),
+                 &settings->rand_ctx);
   ngtcp2_map_init(&(*pconn)->strms, seed, mem);
 
-  callbacks->rand((uint8_t *)&seed, sizeof(seed), &settings->rand_ctx);
+  conn_call_rand(callbacks, (uint8_t *)&seed, sizeof(seed),
+                 &settings->rand_ctx);
   ngtcp2_pcg32_init(&(*pconn)->pcg, seed);
 
   ngtcp2_pq_init(&(*pconn)->tx.strmq, cycle_less, mem);
@@ -1845,7 +1861,7 @@ static int conn_new(ngtcp2_conn **pconn, const ngtcp2_cid *dcid,
 
   conn_set_local_transport_params(*pconn, params);
 
-  callbacks->rand(&fixed_bit_byte, 1, &settings->rand_ctx);
+  conn_call_rand(callbacks, &fixed_bit_byte, 1, &settings->rand_ctx);
   if (fixed_bit_byte & 1) {
     (*pconn)->flags |= NGTCP2_CONN_FLAG_CLEAR_FIXED_BIT;
   }

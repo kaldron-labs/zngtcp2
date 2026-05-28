@@ -55,11 +55,13 @@ std::expected<void, Error> generate_secure_random(std::span<uint8_t> data) {
   return {};
 }
 
-void rand_bytes(uint8_t *dest, size_t destlen,
-                const ngtcp2_rand_ctx *rand_ctx) {
-  auto rv = generate_secure_random({dest, destlen});
+void rand_bytes(ngtcp2_buf *dest, const ngtcp2_rand_ctx *rand_ctx) {
+  (void)rand_ctx;
+
+  auto rv = generate_secure_random({dest->pos, ngtcp2_buf_cap(dest)});
   (void)rv;
   assert(rv);
+  dest->last = dest->end;
 }
 
 int get_new_connection_id(ngtcp2_conn *conn, ngtcp2_cid *cid,

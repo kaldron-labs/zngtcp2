@@ -3195,13 +3195,13 @@ typedef int (*ngtcp2_extend_max_stream_data)(ngtcp2_conn *conn,
 /**
  * @functypedef
  *
- * :type:`ngtcp2_rand` is a callback function to get random data of
- * length |destlen|.  Application must fill random |destlen| bytes to
- * the buffer pointed by |dest|.  The generated data is used only in
- * non-cryptographic context.  But it is strongly recommended to use a
- * secure random number generator.
+ * :type:`ngtcp2_rand` is a callback function to get random data.
+ * Application must fill the writable range in |dest|.  |dest| is a
+ * library-origin, mutable, internal scratch buffer.  The generated
+ * data is used only in non-cryptographic context.  But it is strongly
+ * recommended to use a secure random number generator.
  */
-typedef void (*ngtcp2_rand)(uint8_t *dest, size_t destlen,
+typedef void (*ngtcp2_rand)(ngtcp2_buf *dest,
                             const ngtcp2_rand_ctx *rand_ctx);
 
 /**
