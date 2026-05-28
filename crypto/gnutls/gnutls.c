@@ -635,7 +635,7 @@ static int read_func(gnutls_session_t session,
     return 0;
   }
 
-  rv = ngtcp2_conn_submit_crypto_data(conn, level, data, datalen);
+  rv = ngtcp2_crypto_submit_crypto_data(conn, level, data, datalen);
   if (rv != 0) {
     ngtcp2_conn_set_tls_error(conn, rv);
     return -1;

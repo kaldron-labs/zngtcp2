@@ -1804,3 +1804,20 @@ int ngtcp2_crypto_recv_crypto_data_cb(ngtcp2_conn *conn,
 
   return 0;
 }
+
+int ngtcp2_crypto_submit_crypto_data(ngtcp2_conn *conn,
+                                     ngtcp2_encryption_level encryption_level,
+                                     const uint8_t *data, size_t datalen) {
+  ngtcp2_buf buf;
+
+  if (datalen == 0) {
+    return ngtcp2_conn_submit_crypto_data(conn, encryption_level, NULL);
+  }
+
+  ngtcp2_buf_init(&buf, (uint8_t *)data, datalen, NGTCP2_BUF_ORIGIN_BORROWED,
+                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_CRYPTO_TX, NULL, NULL,
+                  NULL);
+  buf.last = buf.end;
+
+  return ngtcp2_conn_submit_crypto_data(conn, encryption_level, &buf);
+}

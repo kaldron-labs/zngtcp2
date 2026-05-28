@@ -422,7 +422,7 @@ int ngtcp2_crypto_read_write_crypto_data(
 
     assert(i != 1);
 
-    if (ngtcp2_conn_submit_crypto_data(
+    if (ngtcp2_crypto_submit_crypto_data(
           conn, ngtcp2_crypto_picotls_from_epoch(i),
           sendbuf.base + epoch_offsets[i], epoch_datalen) != 0) {
       rv = -1;

@@ -49,6 +49,19 @@ constexpr size_t NGTCP2_FAKE_AEAD_OVERHEAD = NGTCP2_INITIAL_AEAD_OVERHEAD;
 const uint8_t null_secret[32]{};
 const uint8_t null_iv[16]{};
 const uint8_t null_data[2048]{};
+
+int submit_crypto_data(ngtcp2_conn *conn,
+                       ngtcp2_encryption_level encryption_level,
+                       const uint8_t *data, size_t datalen) {
+  ngtcp2_buf buf;
+
+  ngtcp2_buf_init(&buf, const_cast<uint8_t *>(data), datalen,
+                  NGTCP2_BUF_ORIGIN_BORROWED, NGTCP2_BUF_DIR_TX,
+                  NGTCP2_BUF_PURPOSE_CRYPTO_TX, nullptr, nullptr, nullptr);
+  buf.last = buf.end;
+
+  return ngtcp2_conn_submit_crypto_data(conn, encryption_level, &buf);
+}
 } // namespace
 
 struct TLSState {
@@ -153,10 +166,9 @@ int recv_crypto_data(ngtcp2_conn *conn,
 
       ngtcp2_conn_set_remote_transport_params(conn, &remote_params);
 
-      ngtcp2_conn_submit_crypto_data(conn, NGTCP2_ENCRYPTION_LEVEL_INITIAL,
-                                     null_data, 123);
-      ngtcp2_conn_submit_crypto_data(conn, NGTCP2_ENCRYPTION_LEVEL_HANDSHAKE,
-                                     null_data, 1999);
+      submit_crypto_data(conn, NGTCP2_ENCRYPTION_LEVEL_INITIAL, null_data, 123);
+      submit_crypto_data(conn, NGTCP2_ENCRYPTION_LEVEL_HANDSHAKE, null_data,
+                         1999);
     }
 
     break;

@@ -532,7 +532,7 @@ static int add_handshake_data(WOLFSSL *ssl,
 
   DEBUG_MSG("WOLFSSL: add handshake data, level=%d len=%lu\n", wolfssl_level,
             datalen);
-  rv = ngtcp2_conn_submit_crypto_data(conn, level, data, datalen);
+  rv = ngtcp2_crypto_submit_crypto_data(conn, level, data, datalen);
   if (rv != 0) {
     ngtcp2_conn_set_tls_error(conn, rv);
     return 0;

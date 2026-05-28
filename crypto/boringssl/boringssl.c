@@ -644,7 +644,7 @@ static int add_handshake_data(SSL *ssl, enum ssl_encryption_level_t bssl_level,
     ngtcp2_crypto_boringssl_from_ssl_encryption_level(bssl_level);
   int rv;
 
-  rv = ngtcp2_conn_submit_crypto_data(conn, level, data, datalen);
+  rv = ngtcp2_crypto_submit_crypto_data(conn, level, data, datalen);
   if (rv != 0) {
     ngtcp2_conn_set_tls_error(conn, rv);
     return 0;

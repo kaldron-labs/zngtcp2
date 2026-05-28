@@ -1071,7 +1071,7 @@ static int ossl_crypto_send(SSL *ssl, const unsigned char *buf, size_t buflen,
   conn = conn_ref->get_conn(conn_ref);
   ossl_ctx = ngtcp2_conn_get_tls_native_handle2(conn);
 
-  rv = ngtcp2_conn_submit_crypto_data(conn, ossl_ctx->tx_level, buf, buflen);
+  rv = ngtcp2_crypto_submit_crypto_data(conn, ossl_ctx->tx_level, buf, buflen);
   if (rv != 0) {
     ngtcp2_conn_set_tls_error(conn, rv);
     return 0;

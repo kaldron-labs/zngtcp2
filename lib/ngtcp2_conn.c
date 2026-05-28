@@ -14183,10 +14183,26 @@ static int conn_buffer_crypto_data(ngtcp2_conn *conn, const uint8_t **pdata,
 
 int ngtcp2_conn_submit_crypto_data(ngtcp2_conn *conn,
                                    ngtcp2_encryption_level encryption_level,
-                                   const uint8_t *data, const size_t datalen) {
+                                   const ngtcp2_buf *data) {
   ngtcp2_pktns *pktns;
   ngtcp2_frame_chain *frc;
+  const uint8_t *datap;
+  size_t datalen;
   int rv;
+
+  if (data == NULL) {
+    return 0;
+  }
+
+  rv =
+    ngtcp2_buf_validate(data, NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_CRYPTO_TX);
+  if (rv != 0) {
+    ++conn->buf_stats.buf_contract_failure;
+    return NGTCP2_ERR_BUF_CONTRACT;
+  }
+
+  datap = data->pos;
+  datalen = ngtcp2_buf_len(data);
 
   if (datalen == 0) {
     return 0;
@@ -14208,7 +14224,7 @@ int ngtcp2_conn_submit_crypto_data(ngtcp2_conn *conn,
     return NGTCP2_ERR_INVALID_ARGUMENT;
   }
 
-  rv = conn_buffer_crypto_data(conn, &data, pktns, data, datalen);
+  rv = conn_buffer_crypto_data(conn, &datap, pktns, datap, datalen);
   if (rv != 0) {
     return rv;
   }
@@ -14226,7 +14242,7 @@ int ngtcp2_conn_submit_crypto_data(ngtcp2_conn *conn,
   frc->fr.stream.offset = pktns->crypto.tx.offset;
   frc->fr.stream.datacnt = 1;
   frc->fr.stream.data[0] = (ngtcp2_vec){
-    .base = (uint8_t *)data,
+    .base = (uint8_t *)datap,
     .len = datalen,
   };
 

@@ -570,6 +570,7 @@ int ngtcp2_crypto_read_write_crypto_data(
   size_t epoch_datalen;
   const uint8_t *datap = data ? data->pos : NULL;
   size_t datalen = data ? ngtcp2_buf_len(data) : 0;
+  ngtcp2_buf crypto_tx;
   size_t i;
   int rv;
 
@@ -611,9 +612,13 @@ int ngtcp2_crypto_read_write_crypto_data(
 
     assert(i != 1);
 
+    ngtcp2_buf_init(&crypto_tx, sendbuf.base + epoch_offsets[i], epoch_datalen,
+                    NGTCP2_BUF_ORIGIN_LIBRARY, NGTCP2_BUF_DIR_TX,
+                    NGTCP2_BUF_PURPOSE_CRYPTO_TX, NULL, NULL, NULL);
+    crypto_tx.last = crypto_tx.end;
+
     if (ngtcp2_conn_submit_crypto_data(
-          conn, ngtcp2_crypto_zpicotls_from_epoch(i),
-          sendbuf.base + epoch_offsets[i], epoch_datalen) != 0) {
+          conn, ngtcp2_crypto_zpicotls_from_epoch(i), &crypto_tx) != 0) {
       rv = -1;
       goto fin;
     }

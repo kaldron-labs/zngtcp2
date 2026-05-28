@@ -5860,17 +5860,18 @@ NGTCP2_EXTERN void ngtcp2_conn_reset_buf_stats(ngtcp2_conn *conn);
 /**
  * @function
  *
- * `ngtcp2_conn_submit_crypto_data` submits crypto data |data| of
- * length |datalen| to the library for transmission.
+ * `ngtcp2_conn_submit_crypto_data` submits crypto data |data| to the
+ * library for transmission.  |data| must be a
+ * :enum:`NGTCP2_BUF_PURPOSE_CRYPTO_TX` buffer.
  * |encryption_level| specifies the encryption level of data.
  *
- * The library makes a copy of the buffer pointed by |data| of length
- * |datalen|.  Application can discard |data|.
+ * The library makes a copy of the bytes referenced by |data|.
+ * Application can discard |data|.
  */
 NGTCP2_EXTERN int
 ngtcp2_conn_submit_crypto_data(ngtcp2_conn *conn,
                                ngtcp2_encryption_level encryption_level,
-                               const uint8_t *data, const size_t datalen);
+                               const ngtcp2_buf *data);
 
 /**
  * @function
