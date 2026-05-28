@@ -927,18 +927,6 @@ ngtcp2_crypto_quictls_from_ngtcp2_encryption_level(
   }
 }
 
-int ngtcp2_crypto_get_path_challenge_data_cb(ngtcp2_conn *conn, uint8_t *data,
-                                             void *user_data) {
-  (void)conn;
-  (void)user_data;
-
-  if (RAND_bytes(data, NGTCP2_PATH_CHALLENGE_DATALEN) != 1) {
-    return NGTCP2_ERR_CALLBACK_FAILURE;
-  }
-
-  return 0;
-}
-
 int ngtcp2_crypto_get_path_challenge_data2_cb(ngtcp2_conn *conn,
                                               ngtcp2_path_challenge_data *data,
                                               void *user_data) {
