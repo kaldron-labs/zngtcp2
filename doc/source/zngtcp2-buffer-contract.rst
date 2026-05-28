@@ -64,8 +64,12 @@ The installed packet receive, stream transmit, ``recv_crypto_data``, and
 STREAM send entry points are transitional internals used only while building
 library tests.
 
-Public STREAM transmit with non-empty data currently fails closed with
-``NGTCP2_ERR_BUF_CONTRACT`` until retained Tx frame/RTB ownership lands.
+Public STREAM transmit with non-empty data requires application-origin
+``stream_tx`` buffers with retain/release owner callbacks.  zngtcp2 retains the
+consumed range in the STREAM frame chain and releases it after ACK accounting,
+retransmission cleanup, stream teardown, or connection deletion.  Reclaimed and
+split STREAM frame chains take their own owner retain so every frame-chain
+lifetime has a matching release.
 
 The target receive path decrypts header protection and payloads in place when
 zpicotls packet crypto ops are installed.  Internal legacy tests without

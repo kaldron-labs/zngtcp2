@@ -134,6 +134,13 @@ static int conn_buf_can_retain_owner(const ngtcp2_buf *buf) {
   return buf->owner && buf->retain && buf->release;
 }
 
+static ngtcp2_ssize conn_writev_stream_versioned(
+  ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
+  ngtcp2_pkt_info *pi, uint8_t *dest, size_t destlen,
+  ngtcp2_ssize *pdatalen, uint32_t flags, int64_t stream_id,
+  const ngtcp2_vec *datav, size_t datavcnt, const ngtcp2_buf *txbuf,
+  ngtcp2_tstamp ts);
+
 static int conn_make_rx_callback_buf(ngtcp2_conn *conn, ngtcp2_buf *dest,
                                      int *pretained, const uint8_t *data,
                                      size_t datalen, ngtcp2_buf_purpose purpose,
@@ -4553,6 +4560,21 @@ static ngtcp2_ssize conn_write_pkt(ngtcp2_conn *conn, ngtcp2_pkt_info *pi,
 
     nfrc->fr.stream.fin = (vmsg->stream.flags & NGTCP2_WRITE_STREAM_FLAG_FIN) &&
                           ndatalen == datalen;
+
+    if (vmsg->stream.txbuf && ndatalen) {
+      ngtcp2_buf txbuf = *vmsg->stream.txbuf;
+
+      txbuf.last = txbuf.pos + ndatalen;
+      rv = ngtcp2_frame_chain_set_txbuf(nfrc, &txbuf,
+                                        &conn->buf_stats);
+      if (rv != 0) {
+        ngtcp2_frame_chain_objalloc_del(nfrc, &conn->frc_objalloc, conn->mem);
+        if (rv == NGTCP2_ERR_BUF_CONTRACT) {
+          ++conn->buf_stats.buf_contract_failure;
+        }
+        return rv;
+      }
+    }
 
     rv = conn_ppe_write_frame_hd_log(conn, ppe, &hd_logged, hd, &nfrc->fr);
     if (rv != 0) {
@@ -12635,8 +12657,8 @@ ngtcp2_ssize ngtcp2_conn_write_stream_versioned(
   int64_t stream_id, const ngtcp2_buf *data, ngtcp2_tstamp ts) {
   int rv;
   ngtcp2_ssize nwrite;
-  const uint8_t *datap = NULL;
-  size_t datalen = 0;
+  ngtcp2_vec datav, *v = NULL;
+  size_t datacnt = 0;
 
   rv =
     ngtcp2_buf_validate(dest, NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_PACKET_TX);
@@ -12658,13 +12680,17 @@ ngtcp2_ssize ngtcp2_conn_write_stream_versioned(
       return NGTCP2_ERR_BUF_CONTRACT;
     }
 
-    datap = data->pos;
-    datalen = ngtcp2_buf_len(data);
-  }
+    if (ngtcp2_buf_len(data)) {
+      if (stream_id == -1 || !conn_buf_can_retain_owner(data)) {
+        ++conn->buf_stats.buf_contract_failure;
+        return NGTCP2_ERR_BUF_CONTRACT;
+      }
 
-  if (datalen) {
-    ++conn->buf_stats.buf_contract_failure;
-    return NGTCP2_ERR_BUF_CONTRACT;
+      datav.base = data->pos;
+      datav.len = ngtcp2_buf_len(data);
+      v = &datav;
+      datacnt = 1;
+    }
   }
 
   rv = conn_require_crypto_ops(conn);
@@ -12672,10 +12698,10 @@ ngtcp2_ssize ngtcp2_conn_write_stream_versioned(
     return rv;
   }
 
-  nwrite = ngtcp2_conn_write_stream_legacy_versioned(
+  nwrite = conn_writev_stream_versioned(
     conn, path, pkt_info_version, pi, dest->pos,
-    (size_t)(dest->end - dest->pos), pdatalen, flags, stream_id, datap, datalen,
-    ts);
+    (size_t)(dest->end - dest->pos), pdatalen, flags, stream_id, v, datacnt,
+    data, ts);
   if (nwrite > 0) {
     dest->last = dest->pos + nwrite;
   }
@@ -12701,9 +12727,9 @@ ngtcp2_ssize ngtcp2_conn_write_stream_legacy_versioned(
     datacnt = 1;
   }
 
-  return ngtcp2_conn_writev_stream_versioned(conn, path, pkt_info_version, pi,
-                                             dest, destlen, pdatalen, flags,
-                                             stream_id, v, datacnt, ts);
+  return conn_writev_stream_versioned(conn, path, pkt_info_version, pi, dest,
+                                      destlen, pdatalen, flags, stream_id, v,
+                                      datacnt, NULL, ts);
 }
 
 static ngtcp2_ssize
@@ -12739,11 +12765,11 @@ conn_write_vmsg_wrapper(ngtcp2_conn *conn, ngtcp2_path *path,
   return nwrite;
 }
 
-ngtcp2_ssize ngtcp2_conn_writev_stream_versioned(
+static ngtcp2_ssize conn_writev_stream_versioned(
   ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
   ngtcp2_pkt_info *pi, uint8_t *dest, size_t destlen, ngtcp2_ssize *pdatalen,
   uint32_t flags, int64_t stream_id, const ngtcp2_vec *datav, size_t datavcnt,
-  ngtcp2_tstamp ts) {
+  const ngtcp2_buf *txbuf, ngtcp2_tstamp ts) {
   ngtcp2_vmsg vmsg, *pvmsg;
   ngtcp2_strm *strm;
   int64_t datalen;
@@ -12784,6 +12810,7 @@ ngtcp2_ssize ngtcp2_conn_writev_stream_versioned(
             .strm = strm,
             .data = datav,
             .datacnt = datavcnt,
+            .txbuf = txbuf,
             .pdatalen = pdatalen,
             .flags = flags,
           },
@@ -12803,6 +12830,16 @@ ngtcp2_ssize ngtcp2_conn_writev_stream_versioned(
 
   return conn_write_vmsg_wrapper(conn, path, pkt_info_version, pi, dest,
                                  destlen, wflags, pvmsg, ts);
+}
+
+ngtcp2_ssize ngtcp2_conn_writev_stream_versioned(
+  ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
+  ngtcp2_pkt_info *pi, uint8_t *dest, size_t destlen, ngtcp2_ssize *pdatalen,
+  uint32_t flags, int64_t stream_id, const ngtcp2_vec *datav, size_t datavcnt,
+  ngtcp2_tstamp ts) {
+  return conn_writev_stream_versioned(conn, path, pkt_info_version, pi, dest,
+                                      destlen, pdatalen, flags, stream_id,
+                                      datav, datavcnt, NULL, ts);
 }
 
 ngtcp2_ssize ngtcp2_conn_write_datagram_versioned(

@@ -5235,7 +5235,10 @@ NGTCP2_EXTERN int ngtcp2_conn_shutdown_stream_read(ngtcp2_conn *conn,
  * application-origin, mutable, contiguous
  * :enum:`NGTCP2_BUF_PURPOSE_PACKET_TX` buffer.  If |data| is not
  * ``NULL``, it must be an application-origin
- * :enum:`NGTCP2_BUF_PURPOSE_STREAM_TX` buffer.
+ * :enum:`NGTCP2_BUF_PURPOSE_STREAM_TX` buffer.  Non-empty |data| must
+ * have retain/release owner callbacks; the library retains the
+ * consumed range until ACK, retransmission cleanup, stream teardown, or
+ * connection deletion.
  */
 NGTCP2_EXTERN ngtcp2_ssize ngtcp2_conn_write_stream_versioned(
   ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,

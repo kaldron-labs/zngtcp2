@@ -120,6 +120,8 @@ void ngtcp2_frame_chain_objalloc_del(ngtcp2_frame_chain *frc,
   }
 
   binder = frc->binder;
+  ngtcp2_frame_chain_release_txbuf(frc);
+
   if (binder && --binder->refcount == 0) {
     ngtcp2_mem_free(mem, binder);
   }
@@ -136,6 +138,53 @@ void ngtcp2_frame_chain_init(ngtcp2_frame_chain *frc, uint32_t flags) {
   frc->next = NULL;
   frc->binder = NULL;
   frc->flags = flags;
+  frc->txbuf_present = 0;
+  frc->txbuf = (ngtcp2_buf){0};
+  frc->txbuf_stats = NULL;
+}
+
+int ngtcp2_frame_chain_set_txbuf(ngtcp2_frame_chain *frc,
+                                 const ngtcp2_buf *buf,
+                                 ngtcp2_conn_buf_stats *stats) {
+  int rv;
+
+  assert(!frc->txbuf_present);
+
+  rv = ngtcp2_buf_retain_owner(buf);
+  if (rv != 0) {
+    return rv;
+  }
+
+  frc->txbuf = *buf;
+  frc->txbuf_present = 1;
+  frc->txbuf_stats = stats;
+  if (stats) {
+    ++stats->app_retain;
+  }
+
+  return 0;
+}
+
+int ngtcp2_frame_chain_copy_txbuf(ngtcp2_frame_chain *dest,
+                                  const ngtcp2_frame_chain *src) {
+  if (!src->txbuf_present) {
+    return 0;
+  }
+
+  return ngtcp2_frame_chain_set_txbuf(dest, &src->txbuf, src->txbuf_stats);
+}
+
+void ngtcp2_frame_chain_release_txbuf(ngtcp2_frame_chain *frc) {
+  if (!frc->txbuf_present) {
+    return;
+  }
+
+  ngtcp2_buf_release_owner(&frc->txbuf);
+  if (frc->txbuf_stats) {
+    ++frc->txbuf_stats->app_release;
+  }
+  frc->txbuf_present = 0;
+  frc->txbuf_stats = NULL;
 }
 
 void ngtcp2_frame_chain_list_objalloc_del(ngtcp2_frame_chain *frc,

@@ -84,6 +84,7 @@ static const MunitTest tests[] = {
   munit_void_test(test_ngtcp2_conn_recv_compound_pkt),
   munit_void_test(test_ngtcp2_conn_pkt_payloadlen),
   munit_void_test(test_ngtcp2_conn_writev_stream),
+  munit_void_test(test_ngtcp2_conn_write_stream_buf_retain_ack_release),
   munit_void_test(test_ngtcp2_conn_writev_datagram),
   munit_void_test(test_ngtcp2_conn_recv_datagram),
   munit_void_test(test_ngtcp2_conn_recv_new_connection_id),
@@ -9707,6 +9708,118 @@ void test_ngtcp2_conn_writev_stream(void) {
   assert_ptrdiff(900, ==, spktlen);
 
   ngtcp2_conn_del(conn);
+}
+
+void test_ngtcp2_conn_write_stream_buf_retain_ack_release(void) {
+  ngtcp2_conn *conn;
+  uint8_t buf[1200];
+  uint8_t stream[128] = {0};
+  ngtcp2_buf pkt, data;
+  ngtcp2_ssize spktlen, datalen;
+  ngtcp2_tstamp t = 0;
+  int64_t stream_id;
+  buf_owner owner = {0};
+  ngtcp2_tpe tpe;
+  ngtcp2_frame fr;
+  size_t pktlen;
+  ngtcp2_ksl_it it;
+  ngtcp2_rtb_entry *ent;
+  ngtcp2_frame_chain *frc;
+  ngtcp2_conn_buf_stats stats;
+  int rv;
+
+  setup_default_client(&conn);
+  ngtcp2_tpe_init_conn(&tpe, conn);
+
+  spktlen = ngtcp2_conn_write_pkt(conn, NULL, NULL, buf, sizeof(buf), ++t);
+
+  assert_ptrdiff(0, <, spktlen);
+
+  fr.ack = (ngtcp2_ack){
+    .type = NGTCP2_FRAME_ACK,
+    .largest_ack = conn->pktns.tx.last_pkt_num,
+  };
+
+  pktlen = ngtcp2_tpe_write_1rtt(&tpe, buf, sizeof(buf), &fr, 1);
+
+  rv = ngtcp2_conn_read_pkt(conn, &null_path.path, NULL, buf, pktlen, ++t);
+
+  assert_int(0, ==, rv);
+  assert_true(ngtcp2_rtb_empty(&conn->pktns.rtb));
+
+  rv = ngtcp2_conn_open_bidi_stream(conn, &stream_id, NULL);
+
+  assert_int(0, ==, rv);
+
+  ngtcp2_buf_init(&pkt, buf, sizeof(buf), NGTCP2_BUF_ORIGIN_APPLICATION,
+                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_PACKET_TX, NULL, NULL,
+                  NULL);
+  ngtcp2_buf_init(&data, stream, sizeof(stream),
+                  NGTCP2_BUF_ORIGIN_APPLICATION, NGTCP2_BUF_DIR_TX,
+                  NGTCP2_BUF_PURPOSE_STREAM_TX, &owner, retain_buf_owner,
+                  release_buf_owner);
+  data.last = data.end;
+
+  spktlen = ngtcp2_conn_write_stream_versioned(
+    conn, NULL, NGTCP2_PKT_INFO_VERSION, NULL, &pkt, &datalen,
+    NGTCP2_WRITE_STREAM_FLAG_NONE, stream_id, &data, ++t);
+
+  assert_ptrdiff(0, <, spktlen);
+  assert_ptrdiff((ngtcp2_ssize)sizeof(stream), ==, datalen);
+  assert_ptr_equal(pkt.pos + spktlen, pkt.last);
+  assert_int(1, ==, owner.retaincnt);
+  assert_int(0, ==, owner.releasecnt);
+
+  ngtcp2_conn_get_buf_stats(conn, &stats);
+
+  assert_uint64(1, ==, stats.app_retain);
+  assert_uint64(0, ==, stats.app_release);
+
+  it = ngtcp2_rtb_head(&conn->pktns.rtb);
+
+  assert_false(ngtcp2_ksl_it_end(&it));
+
+  ent = ngtcp2_ksl_it_get(&it);
+  frc = ent->frc;
+
+  assert_int64(conn->pktns.tx.last_pkt_num, ==, ent->hd.pkt_num);
+  assert_uint64(NGTCP2_FRAME_STREAM, ==, frc->fr.hd.type);
+  assert_true(frc->txbuf_present);
+  assert_ptr_equal(stream, frc->txbuf.pos);
+  assert_size(sizeof(stream), ==, ngtcp2_buf_len(&frc->txbuf));
+
+  spktlen = ngtcp2_rtb_reclaim_on_pto(&conn->pktns.rtb, conn, &conn->pktns, 1);
+
+  assert_ptrdiff(1, ==, spktlen);
+  assert_int(2, ==, owner.retaincnt);
+  assert_int(0, ==, owner.releasecnt);
+
+  ngtcp2_conn_get_buf_stats(conn, &stats);
+
+  assert_uint64(2, ==, stats.app_retain);
+  assert_uint64(0, ==, stats.app_release);
+
+  fr.ack = (ngtcp2_ack){
+    .type = NGTCP2_FRAME_ACK,
+    .largest_ack = conn->pktns.tx.last_pkt_num,
+  };
+
+  pktlen = ngtcp2_tpe_write_1rtt(&tpe, buf, sizeof(buf), &fr, 1);
+
+  rv = ngtcp2_conn_read_pkt(conn, &null_path.path, NULL, buf, pktlen, ++t);
+
+  assert_int(0, ==, rv);
+  assert_int(2, ==, owner.retaincnt);
+  assert_int(1, ==, owner.releasecnt);
+
+  ngtcp2_conn_get_buf_stats(conn, &stats);
+
+  assert_uint64(2, ==, stats.app_retain);
+  assert_uint64(1, ==, stats.app_release);
+
+  ngtcp2_conn_del(conn);
+
+  assert_int(2, ==, owner.releasecnt);
 }
 
 void test_ngtcp2_conn_writev_datagram(void) {

@@ -711,6 +711,9 @@ typedef struct ngtcp2_vmsg_stream {
   const ngtcp2_vec *data;
   /* datacnt is the number of ngtcp2_vec pointed by data. */
   size_t datacnt;
+  /* txbuf is the retained owner source for buffer-based public STREAM
+     data.  It is NULL for legacy/vector internal send paths. */
+  const ngtcp2_buf *txbuf;
   /* pdatalen is the pointer to the variable which the number of bytes
      written is assigned to if pdatalen is not NULL. */
   ngtcp2_ssize *pdatalen;
