@@ -81,7 +81,7 @@ ngtcp2_crypto_md *ngtcp2_crypto_md_sha256(ngtcp2_crypto_md *md) {
 ngtcp2_crypto_ctx *ngtcp2_crypto_ctx_initial(ngtcp2_crypto_ctx *ctx) {
   ngtcp2_crypto_aead_init(&ctx->aead, (void *)&ptls_openssl_aes128gcm);
   ctx->md.native_handle = (void *)&ptls_openssl_sha256;
-  ctx->hp.native_handle = (void *)&ptls_openssl_aes128ecb;
+  ctx->hp.native_handle = (void *)&ptls_openssl_aes128ctr;
   ctx->max_encryption = 0;
   ctx->max_decryption_failure = 0;
   return ctx;
@@ -135,11 +135,11 @@ crypto_cipher_suite_get_aead_max_decryption_failure(ptls_cipher_suite_t *cs) {
 static const ptls_cipher_algorithm_t *
 crypto_cipher_suite_get_hp(ptls_cipher_suite_t *cs) {
   if (cs->aead == &ptls_openssl_aes128gcm) {
-    return &ptls_openssl_aes128ecb;
+    return &ptls_openssl_aes128ctr;
   }
 
   if (cs->aead == &ptls_openssl_aes256gcm) {
-    return &ptls_openssl_aes256ecb;
+    return &ptls_openssl_aes256ctr;
   }
 
 #ifdef PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
@@ -436,6 +436,8 @@ static int zpicotls_encrypt_pkt(
   const ngtcp2_crypto_cipher *hp, const ngtcp2_crypto_cipher_ctx *hp_ctx,
   size_t hp_sample_offset, uint8_t *mask, void *ctx) {
   ptls_aead_context_t *actx = aead_ctx->native_handle;
+  ptls_aead_supplementary_encryption_t supp;
+  ptls_aead_supplementary_encryption_t *psupp = NULL;
   uint8_t *payload;
   size_t outlen;
   int rv;
@@ -457,9 +459,31 @@ static int zpicotls_encrypt_pkt(
 
   payload = pkt->pos + payload_offset;
 
+  if (mask) {
+    if (hp == NULL || hp_ctx == NULL ||
+        hp_sample_offset > payload_offset + plaintextlen + aead->max_overhead ||
+        NGTCP2_HP_SAMPLELEN >
+          payload_offset + plaintextlen + aead->max_overhead -
+            hp_sample_offset) {
+      return NGTCP2_ERR_BUF_CONTRACT;
+    }
+
+    supp = (ptls_aead_supplementary_encryption_t){
+      .ctx = hp_ctx->native_handle,
+      .input = pkt->pos + hp_sample_offset,
+    };
+    psupp = &supp;
+  }
+
   ptls_aead_xor_iv(actx, nonce, noncelen);
-  outlen =
-    ptls_aead_encrypt(actx, payload, payload, plaintextlen, 0, aad, aadlen);
+  if (psupp) {
+    ptls_aead_encrypt_s(actx, payload, payload, plaintextlen, 0, aad, aadlen,
+                        psupp);
+    outlen = plaintextlen + aead->max_overhead;
+  } else {
+    outlen =
+      ptls_aead_encrypt(actx, payload, payload, plaintextlen, 0, aad, aadlen);
+  }
   ptls_aead_xor_iv(actx, nonce, noncelen);
 
   if (pkt->last < payload + outlen) {
@@ -467,14 +491,7 @@ static int zpicotls_encrypt_pkt(
   }
 
   if (mask) {
-    if (hp == NULL || hp_ctx == NULL ||
-        hp_sample_offset > (size_t)(pkt->last - pkt->pos) ||
-        NGTCP2_HP_SAMPLELEN >
-          (size_t)(pkt->last - pkt->pos) - hp_sample_offset) {
-      return NGTCP2_ERR_BUF_CONTRACT;
-    }
-
-    return ngtcp2_crypto_hp_mask(mask, hp, hp_ctx, pkt->pos + hp_sample_offset);
+    memcpy(mask, supp.output, sizeof(supp.output));
   }
 
   return 0;
