@@ -84,6 +84,11 @@ data-path allocator before callbacks can expose current-packet ownership.  The
 copied byte count is recorded in ``rx_trailing_copy``.  Missing allocator
 support or allocator policy rejection returns ``NGTCP2_ERR_BUF_CONTRACT``.
 
+Out-of-order STREAM and CRYPTO receive currently fail closed on the public
+buffer path with ``NGTCP2_ERR_BUF_CONTRACT`` instead of using the legacy
+byte-copy reorder buffer.  Internal transitional paths still count legacy
+reorder copies in ``reorder_copy`` until the buffer-aware reorder module lands.
+
 Rebase Checklist
 ----------------
 

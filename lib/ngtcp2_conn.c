@@ -6275,6 +6275,24 @@ conn_emit_pending_crypto_data(ngtcp2_conn *conn,
   }
 }
 
+static ngtcp2_ssize conn_recv_reordering(ngtcp2_conn *conn, ngtcp2_strm *strm,
+                                         const uint8_t *data, size_t datalen,
+                                         uint64_t offset) {
+  ngtcp2_ssize nwrite;
+
+  if (conn->rx_pkt_buf_ctx) {
+    ++conn->buf_stats.buf_contract_failure;
+    return NGTCP2_ERR_BUF_CONTRACT;
+  }
+
+  nwrite = ngtcp2_strm_recv_reordering(strm, data, datalen, offset);
+  if (nwrite > 0) {
+    conn->buf_stats.reorder_copy += (uint64_t)nwrite;
+  }
+
+  return nwrite;
+}
+
 /*
  * conn_recv_connection_close is called when CONNECTION_CLOSE or
  * APPLICATION_CLOSE frame is received.
@@ -7660,8 +7678,8 @@ static int conn_recv_crypto(ngtcp2_conn *conn,
     return NGTCP2_ERR_CRYPTO_BUFFER_EXCEEDED;
   }
 
-  nwrite = ngtcp2_strm_recv_reordering(crypto, fr->data[0].base,
-                                       fr->data[0].len, fr->offset);
+  nwrite = conn_recv_reordering(conn, crypto, fr->data[0].base,
+                                fr->data[0].len, fr->offset);
   if (nwrite < 0) {
     return (int)nwrite;
   }
@@ -7912,8 +7930,8 @@ static int conn_recv_stream(ngtcp2_conn *conn, const ngtcp2_stream *fr,
       return rv;
     }
   } else if (fr->datacnt && !(strm->flags & NGTCP2_STRM_FLAG_STOP_SENDING)) {
-    nwrite = ngtcp2_strm_recv_reordering(strm, fr->data[0].base,
-                                         fr->data[0].len, fr->offset);
+    nwrite = conn_recv_reordering(conn, strm, fr->data[0].base, fr->data[0].len,
+                                  fr->offset);
     if (nwrite < 0) {
       return (int)nwrite;
     }
