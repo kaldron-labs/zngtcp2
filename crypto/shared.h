@@ -360,6 +360,22 @@ ngtcp2_crypto_aead *ngtcp2_crypto_aead_aes_128_gcm(ngtcp2_crypto_aead *aead);
  */
 int ngtcp2_crypto_random(uint8_t *data, size_t datalen);
 
+int ngtcp2_crypto_encrypt(uint8_t *dest, const ngtcp2_crypto_aead *aead,
+                          const ngtcp2_crypto_aead_ctx *aead_ctx,
+                          const uint8_t *plaintext, size_t plaintextlen,
+                          const uint8_t *nonce, size_t noncelen,
+                          const uint8_t *aad, size_t aadlen);
+
+int ngtcp2_crypto_decrypt(uint8_t *dest, const ngtcp2_crypto_aead *aead,
+                          const ngtcp2_crypto_aead_ctx *aead_ctx,
+                          const uint8_t *ciphertext, size_t ciphertextlen,
+                          const uint8_t *nonce, size_t noncelen,
+                          const uint8_t *aad, size_t aadlen);
+
+int ngtcp2_crypto_hp_mask(uint8_t *dest, const ngtcp2_crypto_cipher *hp,
+                          const ngtcp2_crypto_cipher_ctx *hp_ctx,
+                          const uint8_t *sample);
+
 int ngtcp2_crypto_submit_crypto_data(ngtcp2_conn *conn,
                                      ngtcp2_encryption_level encryption_level,
                                      const uint8_t *data, size_t datalen);

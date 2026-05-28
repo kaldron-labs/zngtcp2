@@ -204,65 +204,6 @@ ngtcp2_crypto_packet_protection_ivlen(const ngtcp2_crypto_aead *aead);
 /**
  * @function
  *
- * `ngtcp2_crypto_encrypt` encrypts |plaintext| of length
- * |plaintextlen| and writes the ciphertext into the buffer pointed by
- * |dest|.  The length of ciphertext is |plaintextlen| +
- * :member:`aead->max_overhead <ngtcp2_crypto_aead.max_overhead>`
- * bytes long.  |dest| must have enough capacity to store the
- * ciphertext.  |dest| and |plaintext| may point to the same buffer.
- *
- * This function returns 0 if it succeeds, or -1.
- */
-NGTCP2_EXTERN int ngtcp2_crypto_encrypt(uint8_t *dest,
-                                        const ngtcp2_crypto_aead *aead,
-                                        const ngtcp2_crypto_aead_ctx *aead_ctx,
-                                        const uint8_t *plaintext,
-                                        size_t plaintextlen,
-                                        const uint8_t *nonce, size_t noncelen,
-                                        const uint8_t *aad, size_t aadlen);
-
-/**
- * @function
- *
- * `ngtcp2_crypto_decrypt` decrypts |ciphertext| of length
- * |ciphertextlen| and writes the plaintext into the buffer pointed by
- * |dest|.  The length of plaintext is |ciphertextlen| -
- * :member:`aead->max_overhead <ngtcp2_crypto_aead.max_overhead>`
- * bytes long.  |dest| must have enough capacity to store the
- * plaintext.  |dest| and |ciphertext| may point to the same buffer.
- *
- * This function returns 0 if it succeeds, or -1.
- */
-NGTCP2_EXTERN int ngtcp2_crypto_decrypt(uint8_t *dest,
-                                        const ngtcp2_crypto_aead *aead,
-                                        const ngtcp2_crypto_aead_ctx *aead_ctx,
-                                        const uint8_t *ciphertext,
-                                        size_t ciphertextlen,
-                                        const uint8_t *nonce, size_t noncelen,
-                                        const uint8_t *aad, size_t aadlen);
-
-/**
- * @function
- *
- * `ngtcp2_crypto_hp_mask` generates a mask which is used in packet
- * header encryption.  The mask is written to the buffer pointed by
- * |dest|.  The sample is passed as |sample| which is
- * :macro:`NGTCP2_HP_SAMPLELEN` bytes long.  The length of mask must
- * be at least :macro:`NGTCP2_HP_MASKLEN`.  The library only uses the
- * first :macro:`NGTCP2_HP_MASKLEN` bytes of the produced mask.  The
- * buffer pointed by |dest| must have at least
- * :macro:`NGTCP2_HP_SAMPLELEN` bytes available.
- *
- * This function returns 0 if it succeeds, or -1.
- */
-NGTCP2_EXTERN int ngtcp2_crypto_hp_mask(uint8_t *dest,
-                                        const ngtcp2_crypto_cipher *hp,
-                                        const ngtcp2_crypto_cipher_ctx *hp_ctx,
-                                        const uint8_t *sample);
-
-/**
- * @function
- *
  * `ngtcp2_crypto_derive_and_install_rx_key` derives the decryption
  * keying materials from |secret|, and installs them to |conn|.
  *
