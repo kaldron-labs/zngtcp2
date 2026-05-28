@@ -411,8 +411,13 @@ static int client_read(struct client *c) {
     path.remote.addrlen = msg.msg_namelen;
     path.remote.addr = msg.msg_name;
 
-    rv = ngtcp2_conn_read_pkt(c->conn, &path, &pi, buf, (size_t)nread,
-                              timestamp());
+    ngtcp2_buf pkt;
+    ngtcp2_buf_init(&pkt, buf, (size_t)nread, NGTCP2_BUF_ORIGIN_APPLICATION,
+                    NGTCP2_BUF_DIR_RX, NGTCP2_BUF_PURPOSE_PACKET_RX, NULL, NULL,
+                    NULL);
+    pkt.last = pkt.end;
+
+    rv = ngtcp2_conn_read_pkt(c->conn, &path, &pi, &pkt, timestamp());
     if (rv != 0) {
       fprintf(stderr, "ngtcp2_conn_read_pkt: %s\n", ngtcp2_strerror(rv));
       if (!c->last_error.error_code) {
@@ -455,27 +460,24 @@ static int client_send_packet(struct client *c, const uint8_t *data,
   return 0;
 }
 
-static size_t client_get_message(struct client *c, int64_t *pstream_id,
-                                 int *pfin, ngtcp2_vec *datav,
-                                 size_t datavcnt) {
-  if (datavcnt == 0) {
-    return 0;
-  }
-
+static ngtcp2_buf *client_get_message(struct client *c, int64_t *pstream_id,
+                                      int *pfin, ngtcp2_buf *data) {
   if (c->stream.stream_id != -1 && c->stream.nwrite < c->stream.datalen) {
     *pstream_id = c->stream.stream_id;
     *pfin = 1;
-    datav->base = (uint8_t *)c->stream.data + c->stream.nwrite;
-    datav->len = c->stream.datalen - c->stream.nwrite;
-    return 1;
+    ngtcp2_buf_init(data, (uint8_t *)c->stream.data + c->stream.nwrite,
+                    c->stream.datalen - c->stream.nwrite,
+                    NGTCP2_BUF_ORIGIN_APPLICATION, NGTCP2_BUF_DIR_TX,
+                    NGTCP2_BUF_PURPOSE_STREAM_TX, NULL, NULL, NULL);
+    data->last = data->end;
+
+    return data;
   }
 
   *pstream_id = -1;
   *pfin = 0;
-  datav->base = NULL;
-  datav->len = 0;
 
-  return 0;
+  return NULL;
 }
 
 static int client_write_streams(struct client *c) {
@@ -483,9 +485,10 @@ static int client_write_streams(struct client *c) {
   ngtcp2_pkt_info pi;
   ngtcp2_ssize nwrite;
   uint8_t buf[1452];
+  ngtcp2_buf pkt;
   ngtcp2_path_storage ps;
-  ngtcp2_vec datav;
-  size_t datavcnt;
+  ngtcp2_buf data;
+  ngtcp2_buf *pdata;
   int64_t stream_id;
   ngtcp2_ssize wdatalen;
   uint32_t flags;
@@ -494,23 +497,26 @@ static int client_write_streams(struct client *c) {
   ngtcp2_path_storage_zero(&ps);
 
   for (;;) {
-    datavcnt = client_get_message(c, &stream_id, &fin, &datav, 1);
+    pdata = client_get_message(c, &stream_id, &fin, &data);
 
-    flags = NGTCP2_WRITE_STREAM_FLAG_MORE;
+    flags = NGTCP2_WRITE_STREAM_FLAG_NONE;
     if (fin) {
       flags |= NGTCP2_WRITE_STREAM_FLAG_FIN;
     }
 
-    nwrite = ngtcp2_conn_writev_stream(c->conn, &ps.path, &pi, buf, sizeof(buf),
-                                       &wdatalen, flags, stream_id, &datav,
-                                       datavcnt, ts);
+    ngtcp2_buf_init(&pkt, buf, sizeof(buf), NGTCP2_BUF_ORIGIN_APPLICATION,
+                    NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_PACKET_TX, NULL, NULL,
+                    NULL);
+
+    nwrite = ngtcp2_conn_write_stream(c->conn, &ps.path, &pi, &pkt, &wdatalen,
+                                      flags, stream_id, pdata, ts);
     if (nwrite < 0) {
       switch (nwrite) {
       case NGTCP2_ERR_WRITE_MORE:
         c->stream.nwrite += (size_t)wdatalen;
         continue;
       default:
-        fprintf(stderr, "ngtcp2_conn_writev_stream: %s\n",
+        fprintf(stderr, "ngtcp2_conn_write_stream: %s\n",
                 ngtcp2_strerror((int)nwrite));
         ngtcp2_ccerr_set_liberr(&c->last_error, (int)nwrite, NULL, 0);
         return -1;

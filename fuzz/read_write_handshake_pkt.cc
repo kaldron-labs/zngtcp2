@@ -29,6 +29,7 @@
 #include <cassert>
 #include <cstring>
 #include <array>
+#include <vector>
 
 #ifdef __cplusplus
 extern "C" {
@@ -390,7 +391,21 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
   for (size_t i = 0; i < 10; ++i) {
     ts = i * NGTCP2_MILLISECONDS;
 
-    auto rv = ngtcp2_conn_read_pkt(conn, &ps.path, &pi, data, size, ts);
+    std::vector<uint8_t> rxpkt_storage;
+    if (size) {
+      rxpkt_storage.assign(data, data + size);
+    }
+    uint8_t empty_rxpkt = 0;
+    auto rxpkt_data =
+      rxpkt_storage.empty() ? &empty_rxpkt : rxpkt_storage.data();
+    ngtcp2_buf rxpkt;
+    ngtcp2_buf_init(&rxpkt, rxpkt_data, rxpkt_storage.size(),
+                    NGTCP2_BUF_ORIGIN_APPLICATION, NGTCP2_BUF_DIR_RX,
+                    NGTCP2_BUF_PURPOSE_PACKET_RX, nullptr, nullptr, nullptr);
+    rxpkt.last = rxpkt.end;
+
+    auto rv = ngtcp2_conn_read_pkt_versioned(
+      conn, &ps.path, NGTCP2_PKT_INFO_VERSION, &pi, &rxpkt, ts);
     if (rv != 0) {
       break;
     }
@@ -401,9 +416,14 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
 
     ngtcp2_pkt_info pi{};
 
-    auto spktlen = ngtcp2_conn_writev_stream(
-      conn, &ps.path, &pi, pkt.data(), pkt.size(), nullptr,
-      NGTCP2_WRITE_STREAM_FLAG_NONE, -1, nullptr, 0, ts);
+    ngtcp2_buf txpkt;
+    ngtcp2_buf_init(&txpkt, pkt.data(), pkt.size(),
+                    NGTCP2_BUF_ORIGIN_APPLICATION, NGTCP2_BUF_DIR_TX,
+                    NGTCP2_BUF_PURPOSE_PACKET_TX, nullptr, nullptr, nullptr);
+
+    auto spktlen = ngtcp2_conn_write_stream_versioned(
+      conn, &ps.path, NGTCP2_PKT_INFO_VERSION, &pi, &txpkt, nullptr,
+      NGTCP2_WRITE_STREAM_FLAG_NONE, -1, nullptr, ts);
     if (spktlen < 0) {
       break;
     }

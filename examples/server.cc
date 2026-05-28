@@ -895,8 +895,15 @@ std::expected<void, Error> Handler::feed_data(const Endpoint &ep,
     .user_data = const_cast<Endpoint *>(&ep),
   };
 
-  if (auto rv = ngtcp2_conn_read_pkt(conn_, &path, pi, data.data(), data.size(),
-                                     util::timestamp());
+  uint8_t empty = 0;
+  auto pkt_data = data.empty() ? &empty : const_cast<uint8_t *>(data.data());
+  ngtcp2_buf pkt;
+  ngtcp2_buf_init(&pkt, pkt_data, data.size(), NGTCP2_BUF_ORIGIN_APPLICATION,
+                  NGTCP2_BUF_DIR_RX, NGTCP2_BUF_PURPOSE_PACKET_RX, nullptr,
+                  nullptr, nullptr);
+  pkt.last = pkt.end;
+
+  if (auto rv = ngtcp2_conn_read_pkt(conn_, &path, pi, &pkt, util::timestamp());
       rv != 0) {
     std::println(stderr, "ngtcp2_conn_read_pkt: {}", ngtcp2_strerror(rv));
     switch (rv) {

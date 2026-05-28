@@ -473,8 +473,15 @@ std::expected<void, Error> Endpoint::on_read(const NetworkPath &path,
   auto ts = to_ngtcp2_tstamp(ctx.ts);
   auto cpath = to_ngtcp2_path(path);
 
-  auto rv =
-    ngtcp2_conn_read_pkt(conn_, &cpath, nullptr, pkt.data(), pkt.size(), ts);
+  uint8_t empty = 0;
+  auto pkt_data = pkt.empty() ? &empty : const_cast<uint8_t *>(pkt.data());
+  ngtcp2_buf rxpkt;
+  ngtcp2_buf_init(&rxpkt, pkt_data, pkt.size(), NGTCP2_BUF_ORIGIN_APPLICATION,
+                  NGTCP2_BUF_DIR_RX, NGTCP2_BUF_PURPOSE_PACKET_RX, nullptr,
+                  nullptr, nullptr);
+  rxpkt.last = rxpkt.end;
+
+  auto rv = ngtcp2_conn_read_pkt(conn_, &cpath, nullptr, &rxpkt, ts);
   if (rv != 0) {
     if (rv == NGTCP2_ERR_RETRY) {
       assert(ngtcp2_conn_is_server(conn_));
@@ -1030,25 +1037,28 @@ UniStreamApp::extend_max_local_streams_uni(ngtcp2_conn *conn) {
 std::expected<void, Error> UniStreamApp::on_write(ngtcp2_conn *conn,
                                                   const Context &ctx) {
   std::array<uint8_t, MAX_UDP_PAYLOAD_SIZE> buf;
+  ngtcp2_buf pkt;
 
   int64_t stream_id;
-  ngtcp2_vec vec;
-  size_t veccnt;
+  ngtcp2_buf data;
+  ngtcp2_buf *pdata = nullptr;
   uint32_t flags = NGTCP2_WRITE_STREAM_FLAG_NONE;
 
   if (stream_id_ != -1 && max_bytes_ > bytes_sent_) {
     stream_id = stream_id_;
-    vec.base = nulldata.data();
-    vec.len = static_cast<size_t>(
+    auto datalen = static_cast<size_t>(
       std::min(static_cast<uint64_t>(buf.size()), max_bytes_ - bytes_sent_));
-    veccnt = 1;
+    ngtcp2_buf_init(&data, nulldata.data(), datalen,
+                    NGTCP2_BUF_ORIGIN_APPLICATION, NGTCP2_BUF_DIR_TX,
+                    NGTCP2_BUF_PURPOSE_STREAM_TX, nullptr, nullptr, nullptr);
+    data.last = data.end;
+    pdata = &data;
 
-    if (bytes_sent_ + vec.len == max_bytes_) {
+    if (bytes_sent_ + datalen == max_bytes_) {
       flags |= NGTCP2_WRITE_STREAM_FLAG_FIN;
     }
   } else {
     stream_id = -1;
-    veccnt = 0;
   }
 
   auto ts = to_ngtcp2_tstamp(ctx.ts);
@@ -1058,15 +1068,18 @@ std::expected<void, Error> UniStreamApp::on_write(ngtcp2_conn *conn,
 
   ngtcp2_ssize ndatalen;
 
-  auto nwrite =
-    ngtcp2_conn_writev_stream(conn, &ps.path, nullptr, buf.data(), buf.size(),
-                              &ndatalen, flags, stream_id, &vec, veccnt, ts);
+  ngtcp2_buf_init(&pkt, buf.data(), buf.size(), NGTCP2_BUF_ORIGIN_APPLICATION,
+                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_PACKET_TX, nullptr,
+                  nullptr, nullptr);
+
+  auto nwrite = ngtcp2_conn_write_stream(
+    conn, &ps.path, nullptr, &pkt, &ndatalen, flags, stream_id, pdata, ts);
   if (nwrite < 0) {
     if (nwrite == NGTCP2_ERR_STREAM_DATA_BLOCKED) {
       return {};
     }
 
-    std::println(stderr, "ngtcp2_conn_writev_stream: {}",
+    std::println(stderr, "ngtcp2_conn_write_stream: {}",
                  ngtcp2_strerror(static_cast<int>(nwrite)));
 
     return std::unexpected{Error::QUIC};

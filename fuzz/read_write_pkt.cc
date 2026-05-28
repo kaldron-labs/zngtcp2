@@ -853,8 +853,16 @@ int read_write(ngtcp2_conn *conn, FuzzedDataProvider &fuzzed_data_provider,
 
     auto recv_pkt = fuzzed_data_provider.ConsumeBytes<uint8_t>(recv_pkt_len);
 
-    auto rv = ngtcp2_conn_read_pkt(conn, path, &pi, recv_pkt.data(),
-                                   recv_pkt.size(), ts);
+    uint8_t empty_rxpkt = 0;
+    auto rxpkt_data = recv_pkt.empty() ? &empty_rxpkt : recv_pkt.data();
+    ngtcp2_buf rxpkt;
+    ngtcp2_buf_init(&rxpkt, rxpkt_data, recv_pkt.size(),
+                    NGTCP2_BUF_ORIGIN_APPLICATION, NGTCP2_BUF_DIR_RX,
+                    NGTCP2_BUF_PURPOSE_PACKET_RX, nullptr, nullptr, nullptr);
+    rxpkt.last = rxpkt.end;
+
+    auto rv = ngtcp2_conn_read_pkt_versioned(
+      conn, path, NGTCP2_PKT_INFO_VERSION, &pi, &rxpkt, ts);
     if (rv != 0) {
       return -1;
     }
@@ -916,9 +924,24 @@ int read_write(ngtcp2_conn *conn, FuzzedDataProvider &fuzzed_data_provider,
 
         ngtcp2_ssize ndatalen;
 
-        auto spktlen = ngtcp2_conn_write_stream(
-          conn, &ps.path, &pi, pkt.data(), pkt.size(), &ndatalen, flags,
-          stream_id, chunk.data(), chunk.size(), ts);
+        ngtcp2_buf txpkt;
+        ngtcp2_buf_init(&txpkt, pkt.data(), pkt.size(),
+                        NGTCP2_BUF_ORIGIN_APPLICATION, NGTCP2_BUF_DIR_TX,
+                        NGTCP2_BUF_PURPOSE_PACKET_TX, nullptr, nullptr,
+                        nullptr);
+
+        uint8_t empty_stream = 0;
+        auto stream_data = chunk.empty() ? &empty_stream : chunk.data();
+        ngtcp2_buf streambuf;
+        ngtcp2_buf_init(&streambuf, stream_data, chunk.size(),
+                        NGTCP2_BUF_ORIGIN_APPLICATION, NGTCP2_BUF_DIR_TX,
+                        NGTCP2_BUF_PURPOSE_STREAM_TX, nullptr, nullptr,
+                        nullptr);
+        streambuf.last = streambuf.end;
+
+        auto spktlen = ngtcp2_conn_write_stream_versioned(
+          conn, &ps.path, NGTCP2_PKT_INFO_VERSION, &pi, &txpkt, &ndatalen,
+          flags, stream_id, &streambuf, ts);
         if (spktlen < 0) {
           switch (spktlen) {
           case NGTCP2_ERR_WRITE_MORE:

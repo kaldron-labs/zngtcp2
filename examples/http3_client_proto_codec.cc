@@ -215,7 +215,9 @@ std::expected<void, Error> ProtoCodec::submit_request(const Stream *stream) {
 ngtcp2_ssize ProtoCodec::write_pkt(ngtcp2_path *path, ngtcp2_pkt_info *pi,
                                    uint8_t *dest, size_t destlen,
                                    ngtcp2_tstamp ts) {
-  std::array<nghttp3_vec, 16> vec;
+  std::array<nghttp3_vec, 1> vec;
+  ngtcp2_buf pkt;
+  ngtcp2_buf data;
 
   for (;;) {
     int64_t stream_id = -1;
@@ -239,15 +241,29 @@ ngtcp2_ssize ProtoCodec::write_pkt(ngtcp2_path *path, ngtcp2_pkt_info *pi,
     ngtcp2_ssize ndatalen;
     auto v = vec.data();
     auto vcnt = static_cast<size_t>(sveccnt);
+    ngtcp2_buf *pdata = nullptr;
+    uint8_t empty = 0;
 
-    uint32_t flags = NGTCP2_WRITE_STREAM_FLAG_MORE;
+    uint32_t flags = NGTCP2_WRITE_STREAM_FLAG_NONE;
     if (fin) {
       flags |= NGTCP2_WRITE_STREAM_FLAG_FIN;
     }
 
-    auto nwrite = ngtcp2_conn_writev_stream(
-      conn_, path, pi, dest, destlen, &ndatalen, flags, stream_id,
-      reinterpret_cast<const ngtcp2_vec *>(v), vcnt, ts);
+    if (vcnt) {
+      auto base = v[0].len ? v[0].base : &empty;
+      ngtcp2_buf_init(&data, base, v[0].len, NGTCP2_BUF_ORIGIN_APPLICATION,
+                      NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_STREAM_TX, nullptr,
+                      nullptr, nullptr);
+      data.last = data.end;
+      pdata = &data;
+    }
+
+    ngtcp2_buf_init(&pkt, dest, destlen, NGTCP2_BUF_ORIGIN_APPLICATION,
+                    NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_PACKET_TX, nullptr,
+                    nullptr, nullptr);
+
+    auto nwrite = ngtcp2_conn_write_stream(conn_, path, pi, &pkt, &ndatalen,
+                                           flags, stream_id, pdata, ts);
     if (nwrite < 0) {
       switch (nwrite) {
       case NGTCP2_ERR_STREAM_DATA_BLOCKED:
@@ -275,7 +291,7 @@ ngtcp2_ssize ProtoCodec::write_pkt(ngtcp2_path *path, ngtcp2_pkt_info *pi,
 
       assert(ndatalen == -1);
 
-      std::println(stderr, "ngtcp2_conn_writev_stream: {}",
+      std::println(stderr, "ngtcp2_conn_write_stream: {}",
                    ngtcp2_strerror(static_cast<int>(nwrite)));
       ngtcp2_ccerr_set_liberr(&last_error_, static_cast<int>(nwrite), nullptr,
                               0);
