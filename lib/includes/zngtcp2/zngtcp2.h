@@ -726,9 +726,8 @@ typedef struct NGTCP2_ALIGN(8) ngtcp2_pkt_info {
 /**
  * @macro
  *
- * :macro:`NGTCP2_ERR_WRITE_MORE` indicates
- * :macro:`NGTCP2_WRITE_STREAM_FLAG_MORE` is used and a function call
- * succeeded.
+ * :macro:`NGTCP2_ERR_WRITE_MORE` indicates that a packet coalescing
+ * call succeeded and expects more data before finalizing the packet.
  */
 #define NGTCP2_ERR_WRITE_MORE -230
 /**
@@ -4355,9 +4354,8 @@ NGTCP2_EXTERN int ngtcp2_conn_read_pkt_legacy_versioned(
 /**
  * @function
  *
- * `ngtcp2_conn_write_pkt` is equivalent to calling
- * `ngtcp2_conn_writev_stream` with -1 as |stream_id|, no stream data,
- * and :macro:`NGTCP2_WRITE_STREAM_FLAG_NONE` as flags.
+ * `ngtcp2_conn_write_pkt` writes a packet without submitting new
+ * stream data.
  */
 NGTCP2_EXTERN ngtcp2_ssize ngtcp2_conn_write_pkt_versioned(
   ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
@@ -4774,13 +4772,13 @@ NGTCP2_EXTERN ngtcp2_tstamp ngtcp2_conn_get_expiry2(const ngtcp2_conn *conn);
  * `ngtcp2_conn_write_connection_close`.  If it returns any of the
  * other negative error codes, close the connection by sending the
  * terminal packet produced by `ngtcp2_conn_write_connection_close`.
- * Otherwise, schedule `ngtcp2_conn_writev_stream` call.  An
+ * Otherwise, schedule `ngtcp2_conn_write_stream` or
+ * `ngtcp2_conn_write_pkt` call.  An
  * application may call any number of additional
  * `ngtcp2_conn_read_pkt` and `ngtcp2_conn_handle_expiry` before
- * calling `ngtcp2_conn_writev_stream`.  After calling
- * `ngtcp2_conn_writev_stream`, new expiry is set.  The application
- * should call `ngtcp2_conn_get_expiry2` to get a new deadline and set
- * the timer.
+ * writing a packet.  After writing a packet, new expiry is set.  The
+ * application should call `ngtcp2_conn_get_expiry2` to get a new
+ * deadline and set the timer.
  */
 NGTCP2_EXTERN int ngtcp2_conn_handle_expiry(ngtcp2_conn *conn,
                                             ngtcp2_tstamp ts);
@@ -5217,13 +5215,15 @@ NGTCP2_EXTERN int ngtcp2_conn_shutdown_stream_read(ngtcp2_conn *conn,
  */
 #define NGTCP2_WRITE_STREAM_FLAG_NONE 0x00U
 
+#if defined(BUILDING_NGTCP2)
 /**
  * @macro
  *
- * :macro:`NGTCP2_WRITE_STREAM_FLAG_MORE` indicates that more data may
- * come, and should be coalesced into the same packet if possible.
+ * :macro:`NGTCP2_WRITE_STREAM_FLAG_MORE` is an internal transitional
+ * flag used by legacy tests.
  */
-#define NGTCP2_WRITE_STREAM_FLAG_MORE 0x01U
+#  define NGTCP2_WRITE_STREAM_FLAG_MORE 0x01U
+#endif /* defined(BUILDING_NGTCP2) */
 
 /**
  * @macro
@@ -5247,9 +5247,12 @@ NGTCP2_EXTERN int ngtcp2_conn_shutdown_stream_read(ngtcp2_conn *conn,
 /**
  * @function
  *
- * `ngtcp2_conn_write_stream` is just like
- * `ngtcp2_conn_writev_stream`.  The only difference is that it
- * conveniently accepts a single buffer.
+ * `ngtcp2_conn_write_stream` writes a packet into |dest| and may
+ * encode stream data from |data| for |stream_id|.  |dest| must be an
+ * application-origin, mutable, contiguous
+ * :enum:`NGTCP2_BUF_PURPOSE_PACKET_TX` buffer.  If |data| is not
+ * ``NULL``, it must be an application-origin
+ * :enum:`NGTCP2_BUF_PURPOSE_STREAM_TX` buffer.
  */
 NGTCP2_EXTERN ngtcp2_ssize ngtcp2_conn_write_stream_versioned(
   ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
@@ -5481,7 +5484,7 @@ NGTCP2_EXTERN ngtcp2_ssize ngtcp2_conn_write_datagram_versioned(
  * least :macro:`NGTCP2_MAX_UDP_PAYLOAD_SIZE`.
  *
  * For |path| and |pi| parameters, refer to
- * `ngtcp2_conn_writev_stream`.
+ * `ngtcp2_conn_write_stream`.
  *
  * Stream data is specified as vector of data |datav|.  |datavcnt|
  * specifies the number of :type:`ngtcp2_vec` that |datav| includes.
@@ -5498,8 +5501,8 @@ NGTCP2_EXTERN ngtcp2_ssize ngtcp2_conn_write_datagram_versioned(
  * that contains DATAGRAM frame is declared lost.  If an application
  * uses neither of those callbacks, it can sets 0 to this parameter.
  *
- * This function might write other frames other than DATAGRAM frame,
- * just like `ngtcp2_conn_writev_stream`.
+ * This function might write frames other than DATAGRAM frame, just
+ * like `ngtcp2_conn_write_stream`.
  *
  * If the function returns 0, it means that no more data cannot be
  * sent because of congestion control limit; or, data does not fit
@@ -5518,7 +5521,7 @@ NGTCP2_EXTERN ngtcp2_ssize ngtcp2_conn_write_datagram_versioned(
  * - The function returns :macro:`NGTCP2_ERR_WRITE_MORE`.  In this
  *   case, |*paccepted| != 0 is asserted.  This indicates that
  *   application can call this function with another unreliable data
- *   (or `ngtcp2_conn_writev_stream` if it has stream data to send) to
+ *   (or `ngtcp2_conn_write_stream` if it has stream data to send) to
  *   pack them into the same packet.  Application has to specify the
  *   same |conn|, |path|, |pi|, |dest|, |destlen|, and |ts|
  *   parameters, otherwise the behaviour is undefined.  The
@@ -5533,7 +5536,7 @@ NGTCP2_EXTERN ngtcp2_ssize ngtcp2_conn_write_datagram_versioned(
  * function.  It can also call `ngtcp2_conn_shutdown_stream_read`,
  * `ngtcp2_conn_shutdown_stream_write`, and
  * `ngtcp2_conn_shutdown_stream`).  Just keep calling this function
- * (or `ngtcp2_conn_writev_stream`) until it returns a positive number
+ * (or `ngtcp2_conn_write_stream`) until it returns a positive number
  * (which indicates a complete packet is ready).
  *
  * If :macro:`NGTCP2_WRITE_DATAGRAM_FLAG_PADDING` is set in |flags|
@@ -6940,10 +6943,10 @@ NGTCP2_EXTERN void *ngtcp2_conn_get_stream_user_data2(const ngtcp2_conn *conn,
  *
  * `ngtcp2_conn_update_pkt_tx_time` sets the time instant of the next
  * packet transmission to pace packets.  This function must be called
- * after (multiple invocation of) `ngtcp2_conn_writev_stream`.  If
- * packet aggregation (e.g., packet batching, GSO) is used, call this
- * function after all aggregated datagrams are sent, which indicates
- * multiple invocation of `ngtcp2_conn_writev_stream`.
+ * after writing packets with `ngtcp2_conn_write_stream` or
+ * `ngtcp2_conn_write_pkt`.  If packet aggregation (e.g., packet
+ * batching, GSO) is used, call this function after all aggregated
+ * datagrams are sent.
  */
 NGTCP2_EXTERN void ngtcp2_conn_update_pkt_tx_time(ngtcp2_conn *conn,
                                                   ngtcp2_tstamp ts);
@@ -7008,8 +7011,8 @@ NGTCP2_EXTERN size_t ngtcp2_conn_get_stream_loss_count2(const ngtcp2_conn *conn,
  * :type:`ngtcp2_write_pkt` is a callback function to write a single
  * packet in the buffer pointed by |dest| of length |destlen|.  The
  * implementation should use `ngtcp2_conn_write_pkt`,
- * `ngtcp2_conn_writev_stream`, `ngtcp2_conn_writev_datagram`, or
- * their variants to write the packet.  |path|, |pi|, |dest|,
+ * `ngtcp2_conn_write_stream`, `ngtcp2_conn_writev_datagram`, or their
+ * variants to write the packet.  |path|, |pi|, |dest|,
  * |destlen|, and |ts| should be directly passed to those functions.
  * If the callback succeeds, it should return the number of bytes
  * written to the buffer.  In general, this callback function should

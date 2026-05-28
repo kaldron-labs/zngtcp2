@@ -60,9 +60,9 @@ Current Phase Checkpoints
 -------------------------
 
 The installed packet receive, stream transmit, ``recv_crypto_data``, and
-``recv_stream_data`` surfaces use buffer signatures by default.  The raw pointer
-and vectored STREAM send API is available only while building the library or
-tests.
+``recv_stream_data`` surfaces use buffer signatures.  Raw pointer and vectored
+STREAM send entry points are transitional internals used only while building
+library tests.
 
 The target receive path decrypts header protection and payloads in place when
 zpicotls packet crypto ops are installed.  Internal legacy tests without
