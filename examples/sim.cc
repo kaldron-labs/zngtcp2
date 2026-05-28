@@ -930,14 +930,18 @@ void HandshakeApp::configure(EndpointConfig &config) {
   config.on_write = [](ngtcp2_conn *conn,
                        const Context &ctx) -> std::expected<void, Error> {
     std::array<uint8_t, MAX_UDP_PAYLOAD_SIZE> buf;
+    ngtcp2_buf pkt;
 
     auto ts = to_ngtcp2_tstamp(ctx.ts);
 
     ngtcp2_path_storage ps;
     ngtcp2_path_storage_zero(&ps);
 
-    auto nwrite = ngtcp2_conn_write_pkt(conn, &ps.path, nullptr, buf.data(),
-                                        buf.size(), ts);
+    ngtcp2_buf_init(&pkt, buf.data(), buf.size(), NGTCP2_BUF_ORIGIN_APPLICATION,
+                    NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_PACKET_TX, nullptr,
+                    nullptr, nullptr);
+
+    auto nwrite = ngtcp2_conn_write_pkt(conn, &ps.path, nullptr, &pkt, ts);
     if (nwrite < 0) {
       std::println(stderr, "ngtcp2_conn_write_pkt: {}",
                    ngtcp2_strerror(static_cast<int>(nwrite)));

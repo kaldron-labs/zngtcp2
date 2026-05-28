@@ -56,6 +56,7 @@
 #include "ngtcp2_ratelim.h"
 
 #undef ngtcp2_conn_read_pkt
+#undef ngtcp2_conn_write_pkt
 #undef ngtcp2_conn_write_stream
 
 #define NGTCP2_WRITE_STREAM_FLAG_MORE 0x01U
@@ -70,6 +71,14 @@ int ngtcp2_conn_read_pkt_legacy_versioned(ngtcp2_conn *conn,
 #define ngtcp2_conn_read_pkt(CONN, PATH, PI, PKT, PKTLEN, TS)                  \
   ngtcp2_conn_read_pkt_legacy_versioned(                                       \
     (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (PKT), (PKTLEN), (TS))
+
+ngtcp2_ssize ngtcp2_conn_write_pkt_legacy_versioned(
+  ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
+  ngtcp2_pkt_info *pi, uint8_t *dest, size_t destlen, ngtcp2_tstamp ts);
+
+#define ngtcp2_conn_write_pkt(CONN, PATH, PI, DEST, DESTLEN, TS)               \
+  ngtcp2_conn_write_pkt_legacy_versioned(                                      \
+    (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (DEST), (DESTLEN), (TS))
 
 ngtcp2_ssize ngtcp2_conn_write_stream_legacy_versioned(
   ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,

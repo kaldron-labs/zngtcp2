@@ -340,9 +340,9 @@ Read and write packets
 
 `ngtcp2_conn_read_pkt()` processes the incoming QUIC packets.  In
 order to write QUIC packets, call `ngtcp2_conn_write_stream()` or
-`ngtcp2_conn_write_pkt()`.  The *destlen* parameter should be at least
-:member:`ngtcp2_settings.max_tx_udp_payload_size`, and must be at
-least 1200 bytes.
+`ngtcp2_conn_write_pkt()`.  The destination packet buffer capacity
+should be at least :member:`ngtcp2_settings.max_tx_udp_payload_size`,
+and must be at least 1200 bytes.
 
 In order to send stream data, the application has to first open a
 stream.  In earliest, clients can open streams after installing 1RTT

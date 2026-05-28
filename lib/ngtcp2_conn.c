@@ -155,6 +155,8 @@ static ngtcp2_ssize conn_writev_stream_versioned(
   const ngtcp2_vec *datav, size_t datavcnt, const ngtcp2_buf *txbuf,
   ngtcp2_tstamp ts);
 
+static int conn_require_crypto_ops(ngtcp2_conn *conn);
+
 static int conn_make_rx_callback_buf(ngtcp2_conn *conn, ngtcp2_buf *dest,
                                      int *pretained, const uint8_t *data,
                                      size_t datalen, ngtcp2_buf_purpose purpose,
@@ -5732,16 +5734,45 @@ static ngtcp2_ssize conn_write_path_response(ngtcp2_conn *conn,
   return nwrite;
 }
 
-ngtcp2_ssize ngtcp2_conn_write_pkt_versioned(ngtcp2_conn *conn,
-                                             ngtcp2_path *path,
-                                             int pkt_info_version,
-                                             ngtcp2_pkt_info *pi, uint8_t *dest,
-                                             size_t destlen, ngtcp2_tstamp ts) {
+ngtcp2_ssize ngtcp2_conn_write_pkt_legacy_versioned(
+  ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
+  ngtcp2_pkt_info *pi, uint8_t *dest, size_t destlen, ngtcp2_tstamp ts) {
   return ngtcp2_conn_writev_stream_versioned(
     conn, path, pkt_info_version, pi, dest, destlen,
     /* pdatalen = */ NULL, NGTCP2_WRITE_STREAM_FLAG_NONE,
     /* stream_id = */ -1,
     /* datav = */ NULL, /* datavcnt = */ 0, ts);
+}
+
+ngtcp2_ssize ngtcp2_conn_write_pkt_versioned(ngtcp2_conn *conn,
+                                             ngtcp2_path *path,
+                                             int pkt_info_version,
+                                             ngtcp2_pkt_info *pi,
+                                             ngtcp2_buf *dest,
+                                             ngtcp2_tstamp ts) {
+  int rv;
+  ngtcp2_ssize nwrite;
+
+  rv =
+    ngtcp2_buf_validate(dest, NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_PACKET_TX);
+  if (rv != 0 || dest->origin != NGTCP2_BUF_ORIGIN_APPLICATION) {
+    ++conn->buf_stats.buf_contract_failure;
+    return NGTCP2_ERR_BUF_CONTRACT;
+  }
+
+  rv = conn_require_crypto_ops(conn);
+  if (rv != 0) {
+    return rv;
+  }
+
+  nwrite = ngtcp2_conn_write_pkt_legacy_versioned(
+    conn, path, pkt_info_version, pi, dest->pos,
+    (size_t)(dest->end - dest->pos), ts);
+  if (nwrite > 0) {
+    dest->last = dest->pos + nwrite;
+  }
+
+  return nwrite;
 }
 
 /*

@@ -4125,11 +4125,12 @@ ngtcp2_conn_read_pkt_versioned(ngtcp2_conn *conn, const ngtcp2_path *path,
  * @function
  *
  * `ngtcp2_conn_write_pkt` writes a packet without submitting new
- * stream data.
+ * stream data.  |dest| must be an application-origin, mutable,
+ * contiguous :enum:`NGTCP2_BUF_PURPOSE_PACKET_TX` buffer.
  */
 NGTCP2_EXTERN ngtcp2_ssize ngtcp2_conn_write_pkt_versioned(
   ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
-  ngtcp2_pkt_info *pi, uint8_t *dest, size_t destlen, ngtcp2_tstamp ts);
+  ngtcp2_pkt_info *pi, ngtcp2_buf *dest, ngtcp2_tstamp ts);
 
 /**
  * @function
@@ -6990,9 +6991,9 @@ NGTCP2_EXTERN void ngtcp2_secure_clear(void *data, size_t len);
  * `ngtcp2_conn_write_pkt_versioned` to set the correct struct
  * version.
  */
-#define ngtcp2_conn_write_pkt(CONN, PATH, PI, DEST, DESTLEN, TS)               \
+#define ngtcp2_conn_write_pkt(CONN, PATH, PI, DEST, TS)                        \
   ngtcp2_conn_write_pkt_versioned((CONN), (PATH), NGTCP2_PKT_INFO_VERSION,     \
-                                  (PI), (DEST), (DESTLEN), (TS))
+                                  (PI), (DEST), (TS))
 
 /*
  * `ngtcp2_conn_write_stream` is a wrapper around
