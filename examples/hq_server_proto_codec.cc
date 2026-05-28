@@ -120,9 +120,7 @@ ProtoCodec::extend_max_stream_data(int64_t stream_id, uint64_t max_data) {
 }
 
 ngtcp2_ssize ProtoCodec::write_pkt(ngtcp2_path *path, ngtcp2_pkt_info *pi,
-                                   uint8_t *dest, size_t destlen,
-                                   ngtcp2_tstamp ts) {
-  ngtcp2_buf pkt;
+                                   ngtcp2_buf *dest, ngtcp2_tstamp ts) {
   ngtcp2_buf data;
   ngtcp2_buf *pdata;
 
@@ -150,11 +148,7 @@ ngtcp2_ssize ProtoCodec::write_pkt(ngtcp2_path *path, ngtcp2_pkt_info *pi,
 
     ngtcp2_ssize ndatalen;
 
-    ngtcp2_buf_init(&pkt, dest, destlen, NGTCP2_BUF_ORIGIN_APPLICATION,
-                    NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_PACKET_TX, nullptr,
-                    nullptr, nullptr);
-
-    auto nwrite = ngtcp2_conn_write_stream(conn_, path, pi, &pkt, &ndatalen,
+    auto nwrite = ngtcp2_conn_write_stream(conn_, path, pi, dest, &ndatalen,
                                            flags, stream_id, pdata, ts);
     if (nwrite < 0) {
       switch (nwrite) {

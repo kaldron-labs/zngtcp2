@@ -110,10 +110,8 @@ std::expected<void, Error> ProtoCodec::on_app_tx_ready() {
 }
 
 ngtcp2_ssize ProtoCodec::write_pkt(ngtcp2_path *path, ngtcp2_pkt_info *pi,
-                                   uint8_t *dest, size_t destlen,
-                                   ngtcp2_tstamp ts) {
+                                   ngtcp2_buf *dest, ngtcp2_tstamp ts) {
   std::array<nghttp3_vec, 1> vec;
-  ngtcp2_buf pkt;
   ngtcp2_buf data;
 
   for (;;) {
@@ -155,11 +153,7 @@ ngtcp2_ssize ProtoCodec::write_pkt(ngtcp2_path *path, ngtcp2_pkt_info *pi,
       pdata = &data;
     }
 
-    ngtcp2_buf_init(&pkt, dest, destlen, NGTCP2_BUF_ORIGIN_APPLICATION,
-                    NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_PACKET_TX, nullptr,
-                    nullptr, nullptr);
-
-    auto nwrite = ngtcp2_conn_write_stream(conn_, path, pi, &pkt, &ndatalen,
+    auto nwrite = ngtcp2_conn_write_stream(conn_, path, pi, dest, &ndatalen,
                                            flags, stream_id, pdata, ts);
     if (nwrite < 0) {
       switch (nwrite) {

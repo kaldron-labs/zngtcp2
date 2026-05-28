@@ -14886,6 +14886,7 @@ ngtcp2_ssize ngtcp2_conn_write_aggregate_pkt2_versioned(
   ngtcp2_ssize nwrite;
   uint8_t *wbuf = buf;
   size_t wbuflen;
+  ngtcp2_buf pkt;
   ngtcp2_ecn_state ecn_state;
   int first_pkt;
   ngtcp2_pkt_info pi_discard;
@@ -14904,7 +14905,11 @@ ngtcp2_ssize ngtcp2_conn_write_aggregate_pkt2_versioned(
     wbuflen = buflen >= max_udp_payloadlen ? max_udp_payloadlen
                                            : path_max_udp_payloadlen;
 
-    nwrite = write_pkt(conn, path, pi, wbuf, wbuflen, ts, conn->user_data);
+    ngtcp2_buf_init(&pkt, wbuf, wbuflen, NGTCP2_BUF_ORIGIN_APPLICATION,
+                    NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_PACKET_TX, NULL,
+                    NULL, NULL);
+
+    nwrite = write_pkt(conn, path, pi, &pkt, ts, conn->user_data);
     if (nwrite < 0) {
       break;
     }

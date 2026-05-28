@@ -18463,19 +18463,25 @@ void test_ngtcp2_conn_recv_ack(void) {
 }
 
 static ngtcp2_ssize write_pkt(ngtcp2_conn *conn, ngtcp2_path *path,
-                              ngtcp2_pkt_info *pi, uint8_t *buf, size_t buflen,
+                              ngtcp2_pkt_info *pi, ngtcp2_buf *dest,
                               ngtcp2_tstamp ts, void *user_data) {
   my_user_data *ud = user_data;
   ngtcp2_ssize nwrite;
   ngtcp2_ssize datalen;
+  size_t destlen = ngtcp2_buf_cap(dest);
 
   if (ud->write_pkt.num_write_left == 0) {
     return 0;
   }
 
-  nwrite = ngtcp2_conn_write_stream(
-    conn, path, pi, buf, buflen, &datalen, NGTCP2_WRITE_STREAM_FLAG_PADDING,
-    ud->write_pkt.stream_id, null_data, buflen, ts);
+  nwrite = ngtcp2_conn_write_stream_legacy_versioned(
+    conn, path, NGTCP2_PKT_INFO_VERSION, pi, dest->pos, destlen, &datalen,
+    NGTCP2_WRITE_STREAM_FLAG_PADDING, ud->write_pkt.stream_id, null_data,
+    destlen, ts);
+
+  if (nwrite > 0) {
+    dest->last = dest->pos + nwrite;
+  }
 
   if (nwrite == NGTCP2_ERR_STREAM_DATA_BLOCKED) {
     return 0;

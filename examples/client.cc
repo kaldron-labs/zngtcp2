@@ -1010,18 +1010,17 @@ std::expected<void, Error> Client::on_write() {
 
 namespace {
 ngtcp2_ssize write_pkt(ngtcp2_conn *conn, ngtcp2_path *path,
-                       ngtcp2_pkt_info *pi, uint8_t *dest, size_t destlen,
+                       ngtcp2_pkt_info *pi, ngtcp2_buf *dest,
                        ngtcp2_tstamp ts, void *user_data) {
   auto c = static_cast<Client *>(user_data);
 
-  return c->write_pkt(path, pi, dest, destlen, ts);
+  return c->write_pkt(path, pi, dest, ts);
 }
 } // namespace
 
 ngtcp2_ssize Client::write_pkt(ngtcp2_path *path, ngtcp2_pkt_info *pi,
-                               uint8_t *dest, size_t destlen,
-                               ngtcp2_tstamp ts) {
-  return proto_codec_->write_pkt(path, pi, dest, destlen, ts);
+                               ngtcp2_buf *dest, ngtcp2_tstamp ts) {
+  return proto_codec_->write_pkt(path, pi, dest, ts);
 }
 
 std::expected<void, Error> Client::write_streams() {

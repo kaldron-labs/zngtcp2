@@ -6604,15 +6604,15 @@ NGTCP2_EXTERN size_t ngtcp2_conn_get_stream_loss_count2(const ngtcp2_conn *conn,
  * @functypedef
  *
  * :type:`ngtcp2_write_pkt` is a callback function to write a single
- * packet in the buffer pointed by |dest| of length |destlen|.  The
- * implementation should use `ngtcp2_conn_write_pkt`,
- * `ngtcp2_conn_write_stream`, `ngtcp2_conn_writev_datagram`, or their
- * variants to write the packet.  |path|, |pi|, |dest|,
- * |destlen|, and |ts| should be directly passed to those functions.
- * If the callback succeeds, it should return the number of bytes
- * written to the buffer.  In general, this callback function should
- * return the value that the above mentioned functions returned except
- * for the following error codes:
+ * packet in |dest|.  |dest| is an application-origin, mutable,
+ * contiguous :enum:`NGTCP2_BUF_PURPOSE_PACKET_TX` buffer.  The
+ * implementation should use `ngtcp2_conn_write_stream` or another
+ * packet-writing function to write the packet.  |path|, |pi|,
+ * |dest|, and |ts| should be directly passed to buffer-based
+ * functions.  If the callback succeeds, it should return the number of
+ * bytes written to the buffer.  In general, this callback function
+ * should return the value that the above mentioned functions returned
+ * except for the following error codes:
  *
  * - :macro:`NGTCP2_ERR_STREAM_DATA_BLOCKED`
  * - :macro:`NGTCP2_ERR_STREAM_SHUT_WR`
@@ -6631,9 +6631,8 @@ NGTCP2_EXTERN size_t ngtcp2_conn_get_stream_loss_count2(const ngtcp2_conn *conn,
  * .. version-added:: 1.15.0
  */
 typedef ngtcp2_ssize (*ngtcp2_write_pkt)(ngtcp2_conn *conn, ngtcp2_path *path,
-                                         ngtcp2_pkt_info *pi, uint8_t *dest,
-                                         size_t destlen, ngtcp2_tstamp ts,
-                                         void *user_data);
+                                         ngtcp2_pkt_info *pi, ngtcp2_buf *dest,
+                                         ngtcp2_tstamp ts, void *user_data);
 
 /**
  * @function

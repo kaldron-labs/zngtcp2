@@ -206,8 +206,8 @@ public:
                                          size_t gso_size);
   void send_blocked_packet();
 
-  ngtcp2_ssize write_pkt(ngtcp2_path *path, ngtcp2_pkt_info *pi, uint8_t *dest,
-                         size_t destlen, ngtcp2_tstamp ts);
+  ngtcp2_ssize write_pkt(ngtcp2_path *path, ngtcp2_pkt_info *pi,
+                         ngtcp2_buf *dest, ngtcp2_tstamp ts);
 
   std::expected<void, Error> on_app_tx_ready();
 

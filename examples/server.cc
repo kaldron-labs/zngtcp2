@@ -983,18 +983,17 @@ std::expected<void, Error> Handler::on_write() {
 
 namespace {
 ngtcp2_ssize write_pkt(ngtcp2_conn *conn, ngtcp2_path *path,
-                       ngtcp2_pkt_info *pi, uint8_t *dest, size_t destlen,
+                       ngtcp2_pkt_info *pi, ngtcp2_buf *dest,
                        ngtcp2_tstamp ts, void *user_data) {
   auto h = static_cast<Handler *>(user_data);
 
-  return h->write_pkt(path, pi, dest, destlen, ts);
+  return h->write_pkt(path, pi, dest, ts);
 }
 } // namespace
 
 ngtcp2_ssize Handler::write_pkt(ngtcp2_path *path, ngtcp2_pkt_info *pi,
-                                uint8_t *dest, size_t destlen,
-                                ngtcp2_tstamp ts) {
-  return proto_codec_->write_pkt(path, pi, dest, destlen, ts);
+                                ngtcp2_buf *dest, ngtcp2_tstamp ts) {
+  return proto_codec_->write_pkt(path, pi, dest, ts);
 }
 
 std::expected<void, Error> Handler::write_streams() {
