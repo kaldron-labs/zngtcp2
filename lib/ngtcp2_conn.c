@@ -5841,8 +5841,8 @@ static int conn_on_retry(ngtcp2_conn *conn, const ngtcp2_pkt_hd *hd,
   }
 
   rv = ngtcp2_pkt_verify_retry_tag(conn->client_chosen_version, &retry, pkt,
-                                   pktlen, conn->crypto.ops.encrypt_retry,
-                                   &conn->crypto.retry_aead,
+                                   pktlen, &conn->crypto.ops,
+                                   conn->crypto.ops_ctx, &conn->crypto.retry_aead,
                                    &conn->crypto.retry_aead_ctx);
   if (rv != 0) {
     ngtcp2_log_info(&conn->log, NGTCP2_LOG_EVENT_PKT,

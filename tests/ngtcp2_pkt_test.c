@@ -87,28 +87,45 @@ const MunitSuite pkt_suite = {
 
 static uint8_t null_data[4096];
 
-static int null_retry_encrypt(uint8_t *dest, const ngtcp2_crypto_aead *aead,
+static int null_retry_encrypt(ngtcp2_buf *dest,
+                              const ngtcp2_crypto_aead *aead,
                               const ngtcp2_crypto_aead_ctx *aead_ctx,
-                              const uint8_t *plaintext, size_t plaintextlen,
+                              const ngtcp2_buf *plaintext,
                               const uint8_t *nonce, size_t noncelen,
-                              const uint8_t *aad, size_t aadlen) {
-  (void)dest;
+                              const ngtcp2_buf *aad, void *ctx) {
+  size_t plaintextlen;
+
   (void)aead;
   (void)aead_ctx;
-  (void)plaintext;
-  (void)plaintextlen;
   (void)nonce;
   (void)noncelen;
   (void)aad;
-  (void)aadlen;
+  (void)ctx;
 
-  if (plaintextlen && plaintext != dest) {
-    memcpy(dest, plaintext, plaintextlen);
+  if (dest == NULL || plaintext == NULL || aad == NULL) {
+    return NGTCP2_ERR_BUF_CONTRACT;
   }
-  memset(dest + plaintextlen, 0, NGTCP2_RETRY_TAGLEN);
+
+  plaintextlen = ngtcp2_buf_len(plaintext);
+
+  if (ngtcp2_buf_cap(dest) < plaintextlen + NGTCP2_RETRY_TAGLEN) {
+    return NGTCP2_ERR_BUF_CONTRACT;
+  }
+
+  if (plaintextlen && plaintext->pos != dest->pos) {
+    memcpy(dest->pos, plaintext->pos, plaintextlen);
+  }
+  memset(dest->pos + plaintextlen, 0, NGTCP2_RETRY_TAGLEN);
+
+  dest->last = dest->pos + plaintextlen + NGTCP2_RETRY_TAGLEN;
 
   return 0;
 }
+
+static const ngtcp2_crypto_ops null_retry_crypto_ops = {
+  .version = 1,
+  .encrypt_retry = null_retry_encrypt,
+};
 
 void test_ngtcp2_pkt_decode_version_cid(void) {
   uint8_t buf[NGTCP2_MAX_UDP_PAYLOAD_SIZE];
@@ -2032,7 +2049,9 @@ void test_ngtcp2_pkt_write_retry(void) {
   ngtcp2_pkt_retry retry;
   ngtcp2_ssize nread;
   int rv;
-  static const ngtcp2_crypto_aead aead = {0};
+  static const ngtcp2_crypto_aead aead = {
+    .max_overhead = NGTCP2_RETRY_TAGLEN,
+  };
   static const ngtcp2_crypto_aead_ctx aead_ctx = {0};
   static const uint8_t tag[NGTCP2_RETRY_TAGLEN] = {0};
 
@@ -2042,7 +2061,8 @@ void test_ngtcp2_pkt_write_retry(void) {
 
   spktlen = ngtcp2_pkt_write_retry(buf, sizeof(buf), NGTCP2_PROTO_VER_V1, &dcid,
                                    &scid, &odcid, token, sizeof(token),
-                                   null_retry_encrypt, &aead, &aead_ctx);
+                                   &null_retry_crypto_ops, NULL, &aead,
+                                   &aead_ctx);
 
   assert_ptrdiff(0, <, spktlen);
 

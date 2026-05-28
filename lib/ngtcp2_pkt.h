@@ -1225,7 +1225,7 @@ ngtcp2_ssize ngtcp2_pkt_encode_pseudo_retry(
  */
 int ngtcp2_pkt_verify_retry_tag(uint32_t version, const ngtcp2_pkt_retry *retry,
                                 const uint8_t *pkt, size_t pktlen,
-                                ngtcp2_encrypt encrypt,
+                                const ngtcp2_crypto_ops *ops, void *ops_ctx,
                                 const ngtcp2_crypto_aead *aead,
                                 const ngtcp2_crypto_aead_ctx *aead_ctx);
 

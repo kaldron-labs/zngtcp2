@@ -2457,11 +2457,10 @@ typedef struct ngtcp2_crypto_ops {
   int (*hp_mask)(ngtcp2_buf *dest, const ngtcp2_crypto_cipher *hp,
                  const ngtcp2_crypto_cipher_ctx *hp_ctx,
                  const ngtcp2_buf *sample, void *ctx);
-  int (*encrypt_retry)(uint8_t *dest, const ngtcp2_crypto_aead *aead,
+  int (*encrypt_retry)(ngtcp2_buf *dest, const ngtcp2_crypto_aead *aead,
                        const ngtcp2_crypto_aead_ctx *aead_ctx,
-                       const uint8_t *plaintext, size_t plaintextlen,
-                       const uint8_t *nonce, size_t noncelen,
-                       const uint8_t *aad, size_t aadlen);
+                       const ngtcp2_buf *plaintext, const uint8_t *nonce,
+                       size_t noncelen, const ngtcp2_buf *aad, void *ctx);
 } ngtcp2_crypto_ops;
 
 /**
@@ -4184,9 +4183,11 @@ NGTCP2_EXTERN ngtcp2_ssize ngtcp2_pkt_write_connection_close(
  * client.  |scid| is a server chosen Source Connection ID.  |odcid|
  * specifies Original Destination Connection ID which appeared in a
  * packet as a Destination Connection ID sent by client.  |token|
- * specifies Retry Token, and |tokenlen| specifies its length.  |aead|
- * must be AEAD_AES_128_GCM.  |aead_ctx| must be initialized with
- * :macro:`NGTCP2_RETRY_KEY` as an encryption key.
+ * specifies Retry Token, and |tokenlen| specifies its length.
+ * |ops->encrypt_retry| is invoked to encrypt Retry integrity tag
+ * using buffer based arguments, and |ops_ctx| is passed to it.
+ * |aead| must be AEAD_AES_128_GCM.  |aead_ctx| must be initialized
+ * with :macro:`NGTCP2_RETRY_KEY` as an encryption key.
  *
  * This function returns the number of bytes written to the buffer, or
  * one of the following negative error codes:
@@ -4195,6 +4196,9 @@ NGTCP2_EXTERN ngtcp2_ssize ngtcp2_pkt_write_connection_close(
  *     Buffer is too small.
  * :macro:`NGTCP2_ERR_CALLBACK_FAILURE`
  *     Callback function failed.
+ * :macro:`NGTCP2_ERR_BUF_CONTRACT`
+ *     |ops->encrypt_retry| is not set, or it violated the buffer
+ *     contract.
  * :macro:`NGTCP2_ERR_INVALID_ARGUMENT`
  *     :member:`odcid->datalen <ngtcp2_cid.datalen>` is less than
  *     :macro:`NGTCP2_MIN_INITIAL_DCIDLEN`.
@@ -4202,8 +4206,8 @@ NGTCP2_EXTERN ngtcp2_ssize ngtcp2_pkt_write_connection_close(
 NGTCP2_EXTERN ngtcp2_ssize ngtcp2_pkt_write_retry(
   uint8_t *dest, size_t destlen, uint32_t version, const ngtcp2_cid *dcid,
   const ngtcp2_cid *scid, const ngtcp2_cid *odcid, const uint8_t *token,
-  size_t tokenlen, ngtcp2_encrypt encrypt, const ngtcp2_crypto_aead *aead,
-  const ngtcp2_crypto_aead_ctx *aead_ctx);
+  size_t tokenlen, const ngtcp2_crypto_ops *ops, void *ops_ctx,
+  const ngtcp2_crypto_aead *aead, const ngtcp2_crypto_aead_ctx *aead_ctx);
 
 /**
  * @function

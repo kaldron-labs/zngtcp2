@@ -2280,14 +2280,16 @@ ngtcp2_pkt_write_stateless_reset2(uint8_t *dest, size_t destlen,
 ngtcp2_ssize ngtcp2_pkt_write_retry(
   uint8_t *dest, size_t destlen, uint32_t version, const ngtcp2_cid *dcid,
   const ngtcp2_cid *scid, const ngtcp2_cid *odcid, const uint8_t *token,
-  size_t tokenlen, ngtcp2_encrypt encrypt, const ngtcp2_crypto_aead *aead,
-  const ngtcp2_crypto_aead_ctx *aead_ctx) {
+  size_t tokenlen, const ngtcp2_crypto_ops *ops, void *ops_ctx,
+  const ngtcp2_crypto_aead *aead, const ngtcp2_crypto_aead_ctx *aead_ctx) {
   ngtcp2_pkt_hd hd;
   uint8_t pseudo_retry[1500];
   ngtcp2_ssize pseudo_retrylen;
   uint8_t tag[NGTCP2_RETRY_TAGLEN];
+  ngtcp2_buf tagbuf, plaintext, aad;
   int rv;
   uint8_t *p;
+  uint8_t empty = 0;
   size_t offset;
   const uint8_t *nonce;
   size_t noncelen;
@@ -2300,6 +2302,10 @@ ngtcp2_ssize ngtcp2_pkt_write_retry(
      which is at least NGTCP2_MIN_INITIAL_DCIDLEN bytes long. */
   if (odcid->datalen < NGTCP2_MIN_INITIAL_DCIDLEN) {
     return NGTCP2_ERR_INVALID_ARGUMENT;
+  }
+
+  if (ops == NULL || ops->encrypt_retry == NULL) {
+    return NGTCP2_ERR_BUF_CONTRACT;
   }
 
   ngtcp2_pkt_hd_init(&hd, NGTCP2_PKT_FLAG_LONG_FORM, NGTCP2_PKT_RETRY, dcid,
@@ -2324,11 +2330,24 @@ ngtcp2_ssize ngtcp2_pkt_write_retry(
     break;
   }
 
-  /* OpenSSL does not like NULL plaintext. */
-  rv = encrypt(tag, aead, aead_ctx, (const uint8_t *)"", 0, nonce, noncelen,
-               pseudo_retry, (size_t)pseudo_retrylen);
+  ngtcp2_buf_init(&tagbuf, tag, sizeof(tag), NGTCP2_BUF_ORIGIN_LIBRARY,
+                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_SCRATCH, NULL, NULL,
+                  NULL);
+  ngtcp2_buf_init(&plaintext, &empty, 0, NGTCP2_BUF_ORIGIN_BORROWED,
+                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_SCRATCH, NULL, NULL,
+                  NULL);
+  ngtcp2_buf_init(&aad, pseudo_retry, (size_t)pseudo_retrylen,
+                  NGTCP2_BUF_ORIGIN_BORROWED, NGTCP2_BUF_DIR_TX,
+                  NGTCP2_BUF_PURPOSE_PACKET_TX, NULL, NULL, NULL);
+  aad.last = aad.end;
+
+  rv = ops->encrypt_retry(&tagbuf, aead, aead_ctx, &plaintext, nonce, noncelen,
+                          &aad, ops_ctx);
   if (rv != 0) {
-    return rv;
+    return rv == NGTCP2_ERR_BUF_CONTRACT ? rv : NGTCP2_ERR_CALLBACK_FAILURE;
+  }
+  if (ngtcp2_buf_len(&tagbuf) != sizeof(tag)) {
+    return NGTCP2_ERR_BUF_CONTRACT;
   }
 
   offset = 1 + odcid->datalen;
@@ -2378,7 +2397,7 @@ ngtcp2_ssize ngtcp2_pkt_encode_pseudo_retry(
 
 int ngtcp2_pkt_verify_retry_tag(uint32_t version, const ngtcp2_pkt_retry *retry,
                                 const uint8_t *pkt, size_t pktlen,
-                                ngtcp2_encrypt encrypt,
+                                const ngtcp2_crypto_ops *ops, void *ops_ctx,
                                 const ngtcp2_crypto_aead *aead,
                                 const ngtcp2_crypto_aead_ctx *aead_ctx) {
   uint8_t pseudo_retry[1500];
@@ -2386,6 +2405,8 @@ int ngtcp2_pkt_verify_retry_tag(uint32_t version, const ngtcp2_pkt_retry *retry,
   uint8_t *p = pseudo_retry;
   int rv;
   uint8_t tag[NGTCP2_RETRY_TAGLEN];
+  ngtcp2_buf tagbuf, plaintext, aad;
+  uint8_t empty = 0;
   const uint8_t *nonce;
   size_t noncelen;
 
@@ -2394,6 +2415,10 @@ int ngtcp2_pkt_verify_retry_tag(uint32_t version, const ngtcp2_pkt_retry *retry,
   if (sizeof(pseudo_retry) <
       1 + retry->odcid.datalen + pktlen - sizeof(retry->tag)) {
     return NGTCP2_ERR_PROTO;
+  }
+
+  if (ops == NULL || ops->encrypt_retry == NULL) {
+    return NGTCP2_ERR_BUF_CONTRACT;
   }
 
   *p++ = (uint8_t)retry->odcid.datalen;
@@ -2414,11 +2439,24 @@ int ngtcp2_pkt_verify_retry_tag(uint32_t version, const ngtcp2_pkt_retry *retry,
     break;
   }
 
-  /* OpenSSL does not like NULL plaintext. */
-  rv = encrypt(tag, aead, aead_ctx, (const uint8_t *)"", 0, nonce, noncelen,
-               pseudo_retry, pseudo_retrylen);
+  ngtcp2_buf_init(&tagbuf, tag, sizeof(tag), NGTCP2_BUF_ORIGIN_LIBRARY,
+                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_SCRATCH, NULL, NULL,
+                  NULL);
+  ngtcp2_buf_init(&plaintext, &empty, 0, NGTCP2_BUF_ORIGIN_BORROWED,
+                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_SCRATCH, NULL, NULL,
+                  NULL);
+  ngtcp2_buf_init(&aad, pseudo_retry, pseudo_retrylen,
+                  NGTCP2_BUF_ORIGIN_BORROWED, NGTCP2_BUF_DIR_TX,
+                  NGTCP2_BUF_PURPOSE_PACKET_TX, NULL, NULL, NULL);
+  aad.last = aad.end;
+
+  rv = ops->encrypt_retry(&tagbuf, aead, aead_ctx, &plaintext, nonce, noncelen,
+                          &aad, ops_ctx);
   if (rv != 0) {
-    return rv;
+    return rv == NGTCP2_ERR_BUF_CONTRACT ? rv : NGTCP2_ERR_CALLBACK_FAILURE;
+  }
+  if (ngtcp2_buf_len(&tagbuf) != sizeof(tag)) {
+    return NGTCP2_ERR_BUF_CONTRACT;
   }
 
   if (0 != memcmp(retry->tag, tag, sizeof(retry->tag))) {

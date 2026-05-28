@@ -1641,9 +1641,49 @@ static int shared_encrypt_pkt(
                                pkt->pos + hp_sample_offset);
 }
 
+static int shared_encrypt_retry(ngtcp2_buf *dest,
+                                const ngtcp2_crypto_aead *aead,
+                                const ngtcp2_crypto_aead_ctx *aead_ctx,
+                                const ngtcp2_buf *plaintext,
+                                const uint8_t *nonce, size_t noncelen,
+                                const ngtcp2_buf *aad, void *ctx) {
+  size_t plaintextlen;
+  int rv;
+
+  (void)ctx;
+
+  if (ngtcp2_buf_validate(dest, NGTCP2_BUF_DIR_TX,
+                          NGTCP2_BUF_PURPOSE_SCRATCH) != 0 ||
+      ngtcp2_buf_validate(plaintext, NGTCP2_BUF_DIR_TX,
+                          NGTCP2_BUF_PURPOSE_SCRATCH) != 0 ||
+      ngtcp2_buf_validate(aad, NGTCP2_BUF_DIR_TX,
+                          NGTCP2_BUF_PURPOSE_PACKET_TX) != 0) {
+    return NGTCP2_ERR_BUF_CONTRACT;
+  }
+
+  plaintextlen = ngtcp2_buf_len(plaintext);
+
+  if (aead->max_overhead > ngtcp2_buf_cap(dest) ||
+      plaintextlen > ngtcp2_buf_cap(dest) - aead->max_overhead) {
+    return NGTCP2_ERR_BUF_CONTRACT;
+  }
+
+  rv = ngtcp2_crypto_encrypt(dest->pos, aead, aead_ctx, plaintext->pos,
+                             plaintextlen, nonce, noncelen, aad->pos,
+                             ngtcp2_buf_len(aad));
+  if (rv != 0) {
+    return rv;
+  }
+
+  dest->last = dest->pos + plaintextlen + aead->max_overhead;
+
+  return 0;
+}
+
 static const ngtcp2_crypto_ops shared_crypto_ops = {
   .version = 1,
   .encrypt_pkt = shared_encrypt_pkt,
+  .encrypt_retry = shared_encrypt_retry,
 };
 
 ngtcp2_ssize ngtcp2_crypto_write_connection_close(
@@ -1731,7 +1771,7 @@ ngtcp2_ssize ngtcp2_crypto_write_retry(uint8_t *dest, size_t destlen,
   }
 
   spktlen = ngtcp2_pkt_write_retry(dest, destlen, version, dcid, scid, odcid,
-                                   token, tokenlen, ngtcp2_crypto_encrypt_cb,
+                                   token, tokenlen, &shared_crypto_ops, NULL,
                                    &aead, &aead_ctx);
   if (spktlen < 0) {
     spktlen = -1;

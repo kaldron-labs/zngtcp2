@@ -319,12 +319,45 @@ static int null_ops_hp_mask(ngtcp2_buf *dest, const ngtcp2_crypto_cipher *hp,
   return 0;
 }
 
+static int null_encrypt_retry(ngtcp2_buf *dest,
+                              const ngtcp2_crypto_aead *aead,
+                              const ngtcp2_crypto_aead_ctx *aead_ctx,
+                              const ngtcp2_buf *plaintext,
+                              const uint8_t *nonce, size_t noncelen,
+                              const ngtcp2_buf *aad, void *ctx) {
+  size_t plaintextlen;
+  int rv;
+
+  (void)ctx;
+
+  if (dest == NULL || plaintext == NULL || aad == NULL) {
+    return NGTCP2_ERR_BUF_CONTRACT;
+  }
+
+  plaintextlen = ngtcp2_buf_len(plaintext);
+
+  if (NGTCP2_FAKE_AEAD_OVERHEAD > ngtcp2_buf_cap(dest) ||
+      plaintextlen > ngtcp2_buf_cap(dest) - NGTCP2_FAKE_AEAD_OVERHEAD) {
+    return NGTCP2_ERR_BUF_CONTRACT;
+  }
+
+  rv = null_encrypt(dest->pos, aead, aead_ctx, plaintext->pos, plaintextlen,
+                    nonce, noncelen, aad->pos, ngtcp2_buf_len(aad));
+  if (rv != 0) {
+    return rv;
+  }
+
+  dest->last = dest->pos + plaintextlen + NGTCP2_FAKE_AEAD_OVERHEAD;
+
+  return 0;
+}
+
 static const ngtcp2_crypto_ops null_crypto_ops = {
   .version = 1,
   .encrypt_pkt = null_encrypt_pkt,
   .decrypt_pkt = null_decrypt_pkt,
   .hp_mask = null_ops_hp_mask,
-  .encrypt_retry = null_encrypt,
+  .encrypt_retry = null_encrypt_retry,
 };
 
 static const ngtcp2_crypto_ops fail_crypto_ops = {
@@ -332,7 +365,7 @@ static const ngtcp2_crypto_ops fail_crypto_ops = {
   .encrypt_pkt = null_encrypt_pkt,
   .decrypt_pkt = fail_decrypt_pkt,
   .hp_mask = null_ops_hp_mask,
-  .encrypt_retry = null_encrypt,
+  .encrypt_retry = null_encrypt_retry,
 };
 
 static int get_new_connection_id(ngtcp2_conn *conn, ngtcp2_cid *cid,
@@ -4317,8 +4350,8 @@ void test_ngtcp2_conn_recv_retry(void) {
 
   spktlen = ngtcp2_pkt_write_retry(
     buf, sizeof(buf), NGTCP2_PROTO_VER_V1, &conn->oscid, &dcid,
-    ngtcp2_conn_get_dcid2(conn), token, ngtcp2_strlen_lit(token), null_encrypt,
-    &fake_aead, &null_aead_ctx);
+    ngtcp2_conn_get_dcid2(conn), token, ngtcp2_strlen_lit(token),
+    &null_crypto_ops, NULL, &fake_aead, &null_aead_ctx);
 
   assert_ptrdiff(0, <, spktlen);
 
@@ -4360,8 +4393,8 @@ void test_ngtcp2_conn_recv_retry(void) {
 
   spktlen = ngtcp2_pkt_write_retry(
     buf, sizeof(buf), NGTCP2_PROTO_VER_V1, &conn->oscid, &dcid,
-    ngtcp2_conn_get_dcid2(conn), token, ngtcp2_strlen_lit(token), null_encrypt,
-    &fake_aead, &null_aead_ctx);
+    ngtcp2_conn_get_dcid2(conn), token, ngtcp2_strlen_lit(token),
+    &null_crypto_ops, NULL, &fake_aead, &null_aead_ctx);
 
   assert_ptrdiff(0, <, spktlen);
 
@@ -4409,8 +4442,8 @@ void test_ngtcp2_conn_recv_retry(void) {
 
   spktlen = ngtcp2_pkt_write_retry(
     buf, sizeof(buf), NGTCP2_PROTO_VER_V1, &conn->oscid, &dcid,
-    ngtcp2_conn_get_dcid2(conn), token, ngtcp2_strlen_lit(token), null_encrypt,
-    &fake_aead, &null_aead_ctx);
+    ngtcp2_conn_get_dcid2(conn), token, ngtcp2_strlen_lit(token),
+    &null_crypto_ops, NULL, &fake_aead, &null_aead_ctx);
 
   assert_ptrdiff(0, <, spktlen);
 
@@ -4473,8 +4506,8 @@ void test_ngtcp2_conn_recv_retry(void) {
 
   spktlen = ngtcp2_pkt_write_retry(
     buf, sizeof(buf), NGTCP2_PROTO_VER_V1, &conn->oscid, &dcid,
-    ngtcp2_conn_get_dcid2(conn), token, ngtcp2_strlen_lit(token), null_encrypt,
-    &fake_aead, &null_aead_ctx);
+    ngtcp2_conn_get_dcid2(conn), token, ngtcp2_strlen_lit(token),
+    &null_crypto_ops, NULL, &fake_aead, &null_aead_ctx);
 
   assert_ptrdiff(0, <, spktlen);
 
@@ -4531,8 +4564,8 @@ void test_ngtcp2_conn_recv_retry(void) {
 
   spktlen = ngtcp2_pkt_write_retry(
     buf, sizeof(buf), NGTCP2_PROTO_VER_V1, &conn->oscid, &dcid,
-    ngtcp2_conn_get_dcid2(conn), token, ngtcp2_strlen_lit(token), null_encrypt,
-    &fake_aead, &null_aead_ctx);
+    ngtcp2_conn_get_dcid2(conn), token, ngtcp2_strlen_lit(token),
+    &null_crypto_ops, NULL, &fake_aead, &null_aead_ctx);
 
   assert_ptrdiff(0, <, spktlen);
 
@@ -4622,8 +4655,8 @@ void test_ngtcp2_conn_recv_retry(void) {
 
   spktlen = ngtcp2_pkt_write_retry(
     buf, sizeof(buf), NGTCP2_PROTO_VER_V1, &conn->oscid, &dcid,
-    ngtcp2_conn_get_dcid2(conn), token, ngtcp2_strlen_lit(token), null_encrypt,
-    &fake_aead, &null_aead_ctx);
+    ngtcp2_conn_get_dcid2(conn), token, ngtcp2_strlen_lit(token),
+    &null_crypto_ops, NULL, &fake_aead, &null_aead_ctx);
 
   assert_ptrdiff(0, <, spktlen);
 
@@ -4711,8 +4744,8 @@ void test_ngtcp2_conn_recv_retry(void) {
 
   spktlen = ngtcp2_pkt_write_retry(
     buf, sizeof(buf), NGTCP2_PROTO_VER_V1, &conn->oscid, &dcid,
-    ngtcp2_conn_get_dcid2(conn), token, ngtcp2_strlen_lit(token), null_encrypt,
-    &fake_aead, &null_aead_ctx);
+    ngtcp2_conn_get_dcid2(conn), token, ngtcp2_strlen_lit(token),
+    &null_crypto_ops, NULL, &fake_aead, &null_aead_ctx);
 
   assert_ptrdiff(0, <, spktlen);
 
@@ -9668,8 +9701,8 @@ void test_ngtcp2_conn_writev_stream(void) {
 
   spktlen = ngtcp2_pkt_write_retry(
     buf, sizeof(buf), NGTCP2_PROTO_VER_V1, &conn->oscid, &dcid,
-    ngtcp2_conn_get_dcid2(conn), token, ngtcp2_strlen_lit(token), null_encrypt,
-    &fake_aead, &null_aead_ctx);
+    ngtcp2_conn_get_dcid2(conn), token, ngtcp2_strlen_lit(token),
+    &null_crypto_ops, NULL, &fake_aead, &null_aead_ctx);
 
   assert_ptrdiff(0, <, spktlen);
 
