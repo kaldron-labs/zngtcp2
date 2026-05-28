@@ -6248,10 +6248,10 @@ static ngtcp2_ssize decrypt_hp(ngtcp2_pkt_hd *hd, uint8_t *pkt, size_t pktlen,
                                size_t pkt_num_offset,
                                const ngtcp2_crypto_cipher *hp,
                                const ngtcp2_crypto_cipher_ctx *hp_ctx,
-                               const ngtcp2_crypto_ops *ops, void *ops_ctx,
-                               ngtcp2_hp_mask hp_mask) {
+                               const ngtcp2_crypto_ops *ops, void *ops_ctx) {
   size_t sample_offset;
   uint8_t mask[NGTCP2_HP_SAMPLELEN];
+  ngtcp2_buf maskbuf, sample;
   size_t i;
   int rv;
 
@@ -6261,16 +6261,21 @@ static ngtcp2_ssize decrypt_hp(ngtcp2_pkt_hd *hd, uint8_t *pkt, size_t pktlen,
 
   sample_offset = pkt_num_offset + 4;
 
-  if (ops->hp_mask) {
-    rv = ops->hp_mask(mask, hp, hp_ctx, pkt + sample_offset, ops_ctx);
-  } else {
-    if (!hp_mask) {
-      return NGTCP2_ERR_BUF_CONTRACT;
-    }
-    rv = hp_mask(mask, hp, hp_ctx, pkt + sample_offset);
+  if (!ops->hp_mask) {
+    return NGTCP2_ERR_BUF_CONTRACT;
   }
+
+  ngtcp2_buf_init(&maskbuf, mask, sizeof(mask), NGTCP2_BUF_ORIGIN_LIBRARY,
+                  NGTCP2_BUF_DIR_RX, NGTCP2_BUF_PURPOSE_SCRATCH, NULL, NULL,
+                  NULL);
+  ngtcp2_buf_init(&sample, pkt + sample_offset, NGTCP2_HP_SAMPLELEN,
+                  NGTCP2_BUF_ORIGIN_BORROWED, NGTCP2_BUF_DIR_RX,
+                  NGTCP2_BUF_PURPOSE_PACKET_RX, NULL, NULL, NULL);
+  sample.last = sample.end;
+
+  rv = ops->hp_mask(&maskbuf, hp, hp_ctx, &sample, ops_ctx);
   if (rv != 0) {
-    return NGTCP2_ERR_CALLBACK_FAILURE;
+    return rv == NGTCP2_ERR_BUF_CONTRACT ? rv : NGTCP2_ERR_CALLBACK_FAILURE;
   }
 
   if (hd->flags & NGTCP2_PKT_FLAG_LONG_FORM) {
@@ -6913,7 +6918,6 @@ conn_recv_handshake_pkt(ngtcp2_conn *conn, const ngtcp2_path *path,
   ngtcp2_crypto_cipher *hp;
   ngtcp2_crypto_km *ckm;
   ngtcp2_crypto_cipher_ctx *hp_ctx;
-  ngtcp2_hp_mask hp_mask = NULL;
   ngtcp2_decrypt decrypt = NULL;
   ngtcp2_pktns *pktns;
   ngtcp2_strm *crypto;
@@ -7216,7 +7220,7 @@ conn_recv_handshake_pkt(ngtcp2_conn *conn, const ngtcp2_path *path,
   assert(ckm);
 
   nwrite = decrypt_hp(&hd, (uint8_t *)pkt, pktlen, (size_t)nread, hp, hp_ctx,
-                      &conn->crypto.ops, conn->crypto.ops_ctx, hp_mask);
+                      &conn->crypto.ops, conn->crypto.ops_ctx);
   if (nwrite < 0) {
     if (ngtcp2_err_is_fatal((int)nwrite)) {
       return nwrite;
@@ -9757,7 +9761,6 @@ static ngtcp2_ssize conn_recv_pkt(ngtcp2_conn *conn, const ngtcp2_path *path,
   ngtcp2_crypto_cipher *hp;
   ngtcp2_crypto_km *ckm;
   ngtcp2_crypto_cipher_ctx *hp_ctx;
-  ngtcp2_hp_mask hp_mask = NULL;
   ngtcp2_decrypt decrypt = NULL;
   ngtcp2_pktns *pktns;
   int non_probing_pkt = 0;
@@ -9865,7 +9868,7 @@ static ngtcp2_ssize conn_recv_pkt(ngtcp2_conn *conn, const ngtcp2_path *path,
   }
 
   nwrite = decrypt_hp(&hd, (uint8_t *)pkt, pktlen, (size_t)nread, hp, hp_ctx,
-                      &conn->crypto.ops, conn->crypto.ops_ctx, hp_mask);
+                      &conn->crypto.ops, conn->crypto.ops_ctx);
   if (nwrite < 0) {
     if (ngtcp2_err_is_fatal((int)nwrite)) {
       return nwrite;

@@ -2454,9 +2454,9 @@ typedef struct ngtcp2_crypto_ops {
                      const ngtcp2_crypto_aead_ctx *aead_ctx, const uint8_t *aad,
                      size_t aadlen, const uint8_t *nonce, size_t noncelen,
                      void *ctx);
-  int (*hp_mask)(uint8_t *dest, const ngtcp2_crypto_cipher *hp,
-                 const ngtcp2_crypto_cipher_ctx *hp_ctx, const uint8_t *sample,
-                 void *ctx);
+  int (*hp_mask)(ngtcp2_buf *dest, const ngtcp2_crypto_cipher *hp,
+                 const ngtcp2_crypto_cipher_ctx *hp_ctx,
+                 const ngtcp2_buf *sample, void *ctx);
   int (*encrypt_retry)(uint8_t *dest, const ngtcp2_crypto_aead *aead,
                        const ngtcp2_crypto_aead_ctx *aead_ctx,
                        const uint8_t *plaintext, size_t plaintextlen,

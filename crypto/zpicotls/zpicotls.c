@@ -518,12 +518,39 @@ static int zpicotls_decrypt_pkt(ngtcp2_buf *pkt, size_t payload_offset,
   return 0;
 }
 
-static int zpicotls_hp_mask(uint8_t *dest, const ngtcp2_crypto_cipher *hp,
+static int zpicotls_hp_mask(ngtcp2_buf *dest, const ngtcp2_crypto_cipher *hp,
                             const ngtcp2_crypto_cipher_ctx *hp_ctx,
-                            const uint8_t *sample, void *ctx) {
+                            const ngtcp2_buf *sample, void *ctx) {
+  int rv;
+
   (void)ctx;
 
-  return ngtcp2_crypto_hp_mask(dest, hp, hp_ctx, sample);
+  if (dest == NULL || sample == NULL) {
+    return NGTCP2_ERR_BUF_CONTRACT;
+  }
+
+  rv = ngtcp2_buf_validate(dest, sample->dir, NGTCP2_BUF_PURPOSE_SCRATCH);
+  if (rv != 0) {
+    return rv;
+  }
+
+  if ((ngtcp2_buf_validate(sample, NGTCP2_BUF_DIR_TX,
+                           NGTCP2_BUF_PURPOSE_PACKET_TX) != 0 &&
+       ngtcp2_buf_validate(sample, NGTCP2_BUF_DIR_RX,
+                           NGTCP2_BUF_PURPOSE_PACKET_RX) != 0) ||
+      ngtcp2_buf_cap(dest) < NGTCP2_HP_SAMPLELEN ||
+      ngtcp2_buf_len(sample) < NGTCP2_HP_SAMPLELEN) {
+    return NGTCP2_ERR_BUF_CONTRACT;
+  }
+
+  rv = ngtcp2_crypto_hp_mask(dest->pos, hp, hp_ctx, sample->pos);
+  if (rv != 0) {
+    return rv;
+  }
+
+  dest->last = dest->pos + NGTCP2_HP_SAMPLELEN;
+
+  return 0;
 }
 
 static const ngtcp2_crypto_ops zpicotls_crypto_ops = {

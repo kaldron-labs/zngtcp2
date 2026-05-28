@@ -201,6 +201,7 @@ void test_zpicotls_hp_mask_op(void) {
   zpicotls_test_crypto crypto;
   uint8_t sample[NGTCP2_HP_SAMPLELEN];
   uint8_t mask[NGTCP2_HP_SAMPLELEN] = {0};
+  ngtcp2_buf samplebuf, maskbuf;
   size_t i;
 
   init_crypto(&crypto);
@@ -209,9 +210,23 @@ void test_zpicotls_hp_mask_op(void) {
     sample[i] = (uint8_t)(0xc0 + i);
   }
 
+  ngtcp2_buf_init(&samplebuf, sample, sizeof(sample),
+                  NGTCP2_BUF_ORIGIN_BORROWED, NGTCP2_BUF_DIR_RX,
+                  NGTCP2_BUF_PURPOSE_PACKET_RX, NULL, NULL, NULL);
+  samplebuf.last = samplebuf.end;
+  ngtcp2_buf_init(&maskbuf, mask, sizeof(mask), NGTCP2_BUF_ORIGIN_LIBRARY,
+                  NGTCP2_BUF_DIR_RX, NGTCP2_BUF_PURPOSE_SCRATCH, NULL, NULL,
+                  NULL);
+
   assert_int(0, ==,
-             ops->hp_mask(mask, &crypto.hp, &crypto.hp_ctx, sample, NULL));
+             ops->hp_mask(&maskbuf, &crypto.hp, &crypto.hp_ctx, &samplebuf,
+                          NULL));
   assert_false(is_zero(mask, NGTCP2_HP_MASKLEN));
+
+  samplebuf.purpose = NGTCP2_BUF_PURPOSE_STREAM_RX;
+  assert_int(NGTCP2_ERR_BUF_CONTRACT, ==,
+             ops->hp_mask(&maskbuf, &crypto.hp, &crypto.hp_ctx, &samplebuf,
+                          NULL));
 
   free_crypto(&crypto);
 }

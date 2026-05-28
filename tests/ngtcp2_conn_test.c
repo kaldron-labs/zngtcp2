@@ -296,12 +296,27 @@ static int fail_decrypt_pkt(ngtcp2_buf *pkt, size_t payload_offset,
   return NGTCP2_ERR_DECRYPT;
 }
 
-static int null_ops_hp_mask(uint8_t *dest, const ngtcp2_crypto_cipher *hp,
+static int null_ops_hp_mask(ngtcp2_buf *dest, const ngtcp2_crypto_cipher *hp,
                             const ngtcp2_crypto_cipher_ctx *hp_ctx,
-                            const uint8_t *sample, void *ctx) {
+                            const ngtcp2_buf *sample, void *ctx) {
+  int rv;
+
   (void)ctx;
 
-  return null_hp_mask(dest, hp, hp_ctx, sample);
+  if (dest == NULL || sample == NULL ||
+      ngtcp2_buf_cap(dest) < NGTCP2_HP_SAMPLELEN ||
+      ngtcp2_buf_len(sample) < NGTCP2_HP_SAMPLELEN) {
+    return NGTCP2_ERR_BUF_CONTRACT;
+  }
+
+  rv = null_hp_mask(dest->pos, hp, hp_ctx, sample->pos);
+  if (rv != 0) {
+    return rv;
+  }
+
+  dest->last = dest->pos + NGTCP2_HP_SAMPLELEN;
+
+  return 0;
 }
 
 static const ngtcp2_crypto_ops null_crypto_ops = {
