@@ -10,7 +10,7 @@ the examples/tests directory.
 .. code-block:: text
 
     examples/test> pytest
-    ngtcp2-examples: [0.9.0-DEV, crypto_libs=['quictls', 'wolfssl']]
+    ngtcp2-examples: [1.22.90, crypto_libs=['zpicotls']]
     ...
 
 Requirements
@@ -32,24 +32,21 @@ used. For example:
 
 .. code-block:: text
 
-    test_01_handshake.py::TestHandshake::test_01_01_get[quictls-quictls] PASSED                                                                                                  [ 16%]
-    test_01_handshake.py::TestHandshake::test_01_01_get[quictls-wolfssl] PASSED
+    test_01_handshake.py::TestHandshake::test_01_01_get[zpicotls-zpicotls] PASSED                                                                                                  [100%]
 
-Here, ``test_01_01`` is run first with the quictls server and client and then
-with the quictls server and wolfSSL client. By default, the test suite runs
-all combinations of servers and clients that have been configured in the project.
+Here, ``test_01_01`` is run with the zpicotls server and client. By default,
+the test suite runs all combinations of servers and clients that have been
+configured in the project.
 
 To track down problems, you can restrict the test cases that are run by
 matching patterns:
 
 .. code-block:: text
 
-    # only tests with wolfSSL example server
-    > pytest -v -k 'wolfssl-'
-    # only tests with wolfSSL example client
-    > pytest -v -k 'test and -wolfssl'
-    # tests with a specific combination
-    > pytest -v -k 'quictls-wolfssl'
+    # only tests with zpicotls example server
+    > pytest -v -k 'zpicotls-'
+    # only tests with zpicotls example client
+    > pytest -v -k 'test and -zpicotls'
 
 
 Analysing

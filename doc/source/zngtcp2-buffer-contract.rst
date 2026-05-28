@@ -72,9 +72,9 @@ split STREAM frame chains take their own owner retain so every frame-chain
 lifetime has a matching release.
 
 The target receive path decrypts header protection and payloads in place when
-zpicotls packet crypto ops are installed.  Internal legacy tests without
-provider ops fall back to the legacy decrypt buffer and increment
-``decrypt_buf_use``.
+zpicotls packet crypto ops are installed.  Packet receive/write entry points
+that require packet protection fail with ``NGTCP2_ERR_REQUIRED_CALLBACK`` when
+provider ops are missing.
 
 Target packet transmit encrypts the payload and applies header protection in
 the caller-owned ``packet_tx`` buffer through ``ngtcp2_crypto_ops.encrypt_pkt``.
@@ -108,7 +108,7 @@ Before rebasing on upstream ngtcp2:
 
 * verify installed headers stay under ``include/zngtcp2``;
 * verify pkg-config modules and installed libraries use ``libzngtcp2`` names;
-* verify unsupported provider build targets are not enabled by default;
+* verify zpicotls remains the only enabled provider build target;
 * run protocol tests and check buffer counters for forbidden target-path copies;
 * rerun public installed-header smoke tests for hidden raw STREAM vector APIs;
 * rerun zpicotls provider compile and packet crypto alias tests.

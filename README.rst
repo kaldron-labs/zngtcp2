@@ -48,26 +48,8 @@ required:
 - libev
 - `nghttp3 <https://github.com/zngtcp2/nghttp3>`_ for HTTP/3
 
-To enable `TLS Certificate Compression
-<https://datatracker.ietf.org/doc/html/rfc8879>`_ in bsslclient and
-bsslserver (BoringSSL (aws-lc) examples client and server), the
-following library is required:
-
-- libbrotli-dev >= 1.0.9
-
-ngtcp2 crypto helper library, and client and server under examples
-directory require at least one of the following TLS backends:
-
-- `quictls
-  <https://github.com/quictls/openssl/tree/OpenSSL_1_1_1w+quic>`_
-  (deprecated)
-- GnuTLS >= 3.7.5
-- BoringSSL (commit d03dbc3e5d7de44183ff17018af22323af650fbc);
-  or aws-lc >= 1.39.0
-- Picotls (commit 7c32032f91449d695b24b82955f20d04d47e6cff)
-- wolfSSL >= 5.5.0
-- LibreSSL >= v3.9.2
-- OpenSSL >= 3.5.0 (experimental)
+The crypto helper library and examples require zpicotls.  zpicotls uses
+OpenSSL-backed crypto primitives, so OpenSSL >= 1.1.1 is also required.
 
 Before building from git
 ------------------------
@@ -78,107 +60,15 @@ When build from git, run the following command to pull submodules:
 
    $ git submodule update --init
 
-Build with wolfSSL
-------------------
+Build with zpicotls
+-------------------
 
 .. code-block:: shell
 
-   $ git clone --depth 1 -b v5.9.1-stable https://github.com/wolfSSL/wolfssl
-   $ cd wolfssl
-   $ autoreconf -i
-   $ # For wolfSSL < v5.6.6, append --enable-quic.
-   $ ./configure --prefix=$PWD/build \
-       --enable-all --enable-aesni --enable-harden --enable-keylog-export \
-       --disable-ech --enable-mlkem
-   $ make -j$(nproc)
-   $ make install
-   $ cd ..
-   $ git clone --recursive https://github.com/zngtcp2/nghttp3
-   $ cd nghttp3
-   $ autoreconf -i
-   $ ./configure --prefix=$PWD/build --enable-lib-only
-   $ make -j$(nproc) check
-   $ make install
-   $ cd ..
-   $ git clone --recursive https://github.com/zngtcp2/ngtcp2
-   $ cd ngtcp2
-   $ autoreconf -i
-   $ # For Mac users who have installed libev with MacPorts, append
-   $ # LIBEV_CFLAGS="-I/opt/local/include" LIBEV_LIBS="-L/opt/local/lib -lev"
-   $ ./configure PKG_CONFIG_PATH=$PWD/../wolfssl/build/lib/pkgconfig:$PWD/../nghttp3/build/lib/pkgconfig \
-       --with-wolfssl
-   $ make -j$(nproc) check
-
-Build with BoringSSL
---------------------
-
-.. code-block:: shell
-
-   $ git clone https://boringssl.googlesource.com/boringssl
-   $ cd boringssl
-   $ git checkout d03dbc3e5d7de44183ff17018af22323af650fbc
-   $ cmake -B build -DCMAKE_POSITION_INDEPENDENT_CODE=ON
-   $ make -j$(nproc) -C build
-   $ cd ..
-   $ git clone --recursive https://github.com/zngtcp2/nghttp3
-   $ cd nghttp3
-   $ autoreconf -i
-   $ ./configure --prefix=$PWD/build --enable-lib-only
-   $ make -j$(nproc) check
-   $ make install
-   $ cd ..
-   $ git clone --recursive  https://github.com/zngtcp2/ngtcp2
-   $ cd ngtcp2
-   $ autoreconf -i
-   $ # For Mac users who have installed libev with MacPorts, append
-   $ # LIBEV_CFLAGS="-I/opt/local/include" LIBEV_LIBS="-L/opt/local/lib -lev"
-   $ ./configure PKG_CONFIG_PATH=$PWD/../nghttp3/build/lib/pkgconfig \
-       BORINGSSL_LIBS="-L$PWD/../boringssl/build -lssl -lcrypto" \
-       BORINGSSL_CFLAGS="-I$PWD/../boringssl/include" \
-       --with-boringssl
-   $ make -j$(nproc) check
-
-Build with aws-lc
------------------
-
-.. code-block:: shell
-
-   $ git clone --depth 1 -b v1.73.0 https://github.com/aws/aws-lc
-   $ cd aws-lc
-   $ cmake -B build -DDISABLE_GO=ON
-   $ make -j$(nproc) -C build
-   $ cd ..
-   $ git clone --recursive https://github.com/zngtcp2/nghttp3
-   $ cd nghttp3
-   $ autoreconf -i
-   $ ./configure --prefix=$PWD/build --enable-lib-only
-   $ make -j$(nproc) check
-   $ make install
-   $ cd ..
-   $ git clone --recursive  https://github.com/zngtcp2/ngtcp2
-   $ cd ngtcp2
-   $ autoreconf -i
-   $ # For Mac users who have installed libev with MacPorts, append
-   $ # LIBEV_CFLAGS="-I/opt/local/include" LIBEV_LIBS="-L/opt/local/lib -lev"
-   $ ./configure PKG_CONFIG_PATH=$PWD/../nghttp3/build/lib/pkgconfig \
-       BORINGSSL_CFLAGS="-I$PWD/../aws-lc/include" \
-       BORINGSSL_LIBS="-L$PWD/../aws-lc/build/ssl -lssl -L$PWD/../aws-lc/build/crypto -lcrypto" \
-       --with-boringssl
-   $ make -j$(nproc) check
-
-Build with libressl
------------------
-
-.. code-block:: shell
-
-   $ LIBRESSL_VERSION=v4.3.1
-   $ git clone --depth 1 -b $LIBRESSL_VERSION https://github.com/libressl/portable.git libressl
-   $ cd libressl
-   $ # Workaround autogen.sh failure
-   $ export LIBRESSL_GIT_OPTIONS="-b libressl-$LIBRESSL_VERSION"
-   $ ./autogen.sh
-   $ ./configure --prefix=$PWD/build
-   $ make -j$(nproc) install
+   $ git clone --recursive https://github.com/zngtcp2/zpicotls
+   $ cd zpicotls
+   $ cmake -B build
+   $ cmake --build build -j$(nproc)
    $ cd ..
    $ git clone --recursive https://github.com/zngtcp2/nghttp3
    $ cd nghttp3
@@ -192,7 +82,9 @@ Build with libressl
    $ autoreconf -i
    $ # For Mac users who have installed libev with MacPorts, append
    $ # LIBEV_CFLAGS="-I/opt/homebrew/Cellar/libev/4.33/include" LIBEV_LIBS="-L/opt/homebrew/Cellar/libev/4.33/lib -lev"
-   $ ./configure PKG_CONFIG_PATH=$PWD/../nghttp3/build/lib/pkgconfig:$PWD/../libressl/build/lib/pkgconfig
+   $ ./configure PKG_CONFIG_PATH=$PWD/../nghttp3/build/lib/pkgconfig \
+       ZPICOTLS_CFLAGS="-I$PWD/../zpicotls/include" \
+       ZPICOTLS_LIBS="-L$PWD/../zpicotls/build -lzpicotls-openssl -lzpicotls-core"
    $ make -j$(nproc) check
 
 Client/Server
@@ -206,7 +98,7 @@ Client
 
 .. code-block:: shell
 
-   $ examples/wsslclient [OPTIONS] <HOST> <PORT> [<URI>...]
+   $ examples/ptlsclient [OPTIONS] <HOST> <PORT> [<URI>...]
 
 The notable options are:
 
@@ -218,33 +110,22 @@ Server
 
 .. code-block:: shell
 
-   $ examples/wsslserver [OPTIONS] <ADDR> <PORT> <PRIVATE_KEY_FILE> <CERTIFICATE_FILE>
+   $ examples/ptlsserver [OPTIONS] <ADDR> <PORT> <PRIVATE_KEY_FILE> <CERTIFICATE_FILE>
 
 The notable options are:
 
 - ``-V``, ``--validate-addr``: Enforce stateless address validation.
-
-wsslhqclient/wsslhqserver
--------------------------
-
-There are wsslhqclient and wsslhqserver which speak HQ protocol, which
-is specifically tailored for `quic-interop-runner
-<https://github.com/marten-seemann/quic-interop-runner>`_.  They share
-the basic functionalities with HTTP/3 client and server but have less
-functions (e.g., wsslhqclient does not have a capability to send
-request body, and wsslhqserver does not understand numeric request
-path, like /1000).
 
 Resumption and 0-RTT
 --------------------
 
 In order to resume a session, a session ticket, and a transport
 parameters must be fetched from server.  First, run
-examples/wsslclient with --session-file, and --tp-file options which
+examples/ptlsclient with --session-file, and --tp-file options which
 specify a path to session ticket, and transport parameter files
 respectively to save them locally.
 
-Once these files are available, run examples/wsslclient with the same
+Once these files are available, run examples/ptlsclient with the same
 arguments again.  You will see that session is resumed in your log if
 resumption succeeds.  Resuming session makes server's first Handshake
 packet pretty small because it does not send its certificates.
@@ -260,7 +141,7 @@ established.  Client can send this token in subsequent connection to
 the server.  Server verifies the token and if it succeeds, the address
 validation completes and lifts some restrictions on server which might
 speed up transfer.  In order to save and/or load a token,
-use --token-file option of examples/wsslclient.  The given file is
+use --token-file option of examples/ptlsclient.  The given file is
 overwritten if it already exists when storing a token.
 
 Crypto helper library
@@ -273,14 +154,7 @@ one supported crypto helper library:
 
 The installed helper headers live under ``include/zngtcp2``.  The
 zpicotls provider installs mandatory packet crypto operations used by
-the buffer-oriented packet APIs.  Other upstream-style provider source
-directories are kept only as migration references and are not supported
-build targets.
-
-The legacy examples still document upstream backend naming in places
-and are migration references until they are converted to zpicotls.
-- osslclient: OpenSSL client
-- osslserver: OpenSSL server
+the buffer-oriented packet APIs.
 
 QUIC protocol extensions
 -------------------------

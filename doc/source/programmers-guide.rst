@@ -10,22 +10,9 @@ Reading :rfc:`9000` and :rfc:`9001` helps you a lot to write QUIC
 application.  They describes how TLS is integrated into QUIC and why
 the existing TLS stack cannot be used with QUIC.
 
-QUIC requires the special interface from TLS stack, which is probably
-not available from most of the existing TLS stacks.  As far as I know,
-the TLS stacks maintained by the active participants of QUIC working
-group only get this interface at the time of this writing.  In order
-to build QUIC application you have to choose one of them.  Here is the
-list of TLS stacks which are supposed to provide such interface and
-for which we provide crypto helper libraries:
-
-* `quictls <https://github.com/quictls/openssl>`_ (deprecated)
-* GnuTLS
-* BoringSSL
-* aws-lc
-* Picotls
-* wolfSSL
-* LibreSSL
-* OpenSSL (experimental)
+QUIC requires a special interface from the TLS stack.  zngtcp2
+supports zpicotls through the ``libzngtcp2_crypto_zpicotls`` helper
+library.
 
 Creating ngtcp2_conn object
 ---------------------------
@@ -156,76 +143,13 @@ helper functions to make it easier for applications to configure TLS
 stack object to work with QUIC and ngtcp2.  They are specific to each
 supported TLS stack.
 
-They make the minimal QUIC specific changes to TLS stack object.  See
-the ngtcp2 crypto API header files for each supported TLS stack.  In
-order to make these functions work, we require that a pointer to
+They make the minimal QUIC specific changes to the zpicotls objects.
+See ``zngtcp2/zngtcp2_crypto_zpicotls.h`` for the provider-specific
+API.  In order to make these functions work, we require that a pointer to
 :type:`ngtcp2_crypto_conn_ref` must be set as a user data in TLS stack
 object, and its :member:`ngtcp2_crypto_conn_ref.get_conn` must point
 to a function which returns :type:`ngtcp2_conn` of the underlying QUIC
 connection.
-
-quictls
-~~~~~~~
-
-The ``SSL_CTX`` object should be configured with one of the following
-functions:
-
-* `ngtcp2_crypto_quictls_configure_client_context`
-* `ngtcp2_crypto_quictls_configure_server_context`
-
-The ``SSL`` should be set as the TLS native handle for the connection
-using `ngtcp2_conn_set_tls_native_handle`.
-
-:type:`ngtcp2_crypto_conn_ref` must be set as a user data in ``SSL``
-object via ``SSL_set_app_data``.
-
-`ngtcp2_crypto_recv_crypto_data_cb` treats the following errors from
-`ngtcp2_crypto_read_write_crypto_data` as success:
-
-- :macro:`NGTCP2_CRYPTO_QUICTLS_ERR_TLS_WANT_X509_LOOKUP`
-- :macro:`NGTCP2_CRYPTO_QUICTLS_ERR_TLS_WANT_CLIENT_HELLO_CB`
-
-To continue the handshake, call `ngtcp2_conn_continue_handshake`.
-
-BoringSSL and aws-lc
-~~~~~~~~~~~~~~~~~~~~
-
-The ``SSL_CTX`` object should be configured with one of the following
-functions:
-
-* `ngtcp2_crypto_boringssl_configure_client_context`
-* `ngtcp2_crypto_boringssl_configure_server_context`
-
-The ``SSL`` should be set as the TLS native handle for the connection
-using `ngtcp2_conn_set_tls_native_handle`.
-
-:type:`ngtcp2_crypto_conn_ref` must be set as a user data in ``SSL``
-object via ``SSL_set_app_data``.
-
-`ngtcp2_crypto_read_write_crypto_data` treats the following errors
-from ``SSL_do_handshake`` as success in order to support the
-asynchronous operations:
-
-- ``SSL_ERROR_WANT_X509_LOOKUP``
-- ``SSL_ERROR_WANT_PRIVATE_KEY_OPERATION``
-- ``SSL_ERROR_WANT_CERTIFICATE_VERIFY``
-
-To continue the handshake, call `ngtcp2_conn_continue_handshake`.
-
-GnuTLS
-~~~~~~
-
-The ``gnutls_session_t`` object should be configured with one of the
-following functions:
-
-* `ngtcp2_crypto_gnutls_configure_client_session`
-* `ngtcp2_crypto_gnutls_configure_server_session`
-
-The ``gnutls_session_t`` should be set as the TLS native handle for
-the connection using `ngtcp2_conn_set_tls_native_handle`.
-
-:type:`ngtcp2_crypto_conn_ref` must be set as a user data in
-``gnutls_session_t`` object via ``gnutls_session_set_ptr``.
 
 zpicotls
 ~~~~~~~~
@@ -251,49 +175,6 @@ call `ngtcp2_crypto_zpicotls_configure_conn` directly.
 :type:`ngtcp2_crypto_conn_ref` must be set as a user data in
 ``ptls_t`` object inside :type:`ngtcp2_crypto_zpicotls_ctx` via
 ``ptls_get_data_ptr``.
-
-wolfSSL
-~~~~~~~
-
-The ``WOLFSSL_CTX`` object should be configured with one of the
-following functions:
-
-* `ngtcp2_crypto_wolfssl_configure_client_context`
-* `ngtcp2_crypto_wolfssl_configure_server_context`
-
-The ``WOLFSSL`` should be set as the TLS native handle for the
-connection using `ngtcp2_conn_set_tls_native_handle`.
-
-:type:`ngtcp2_crypto_conn_ref` must be set as a user data in
-``WOLFSSL`` object via ``wolfSSL_set_app_data``.
-
-OpenSSL
-~~~~~~~
-
-The ``SSL`` object should be configured with one of the following
-functions:
-
-* `ngtcp2_crypto_ossl_configure_client_session`
-* `ngtcp2_crypto_ossl_configure_server_session`
-
-For each TLS session, create :type:`ngtcp2_crypto_ossl_ctx` via
-`ngtcp2_crypto_ossl_ctx_new`.  It should be set as the TLS native
-handle for the connection using `ngtcp2_conn_set_tls_native_handle`.
-
-:type:`ngtcp2_crypto_conn_ref` must be set as a user data in
-``SSL`` object via ``SSL_set_app_data``.
-
-The application must make sure that :type:`ngtcp2_conn` is kept alive
-until the ``SSL`` object is freed by ``SSL_free``, or it must call
-``SSL_set_app_data(ssl, NULL)`` before calling ``SSL_free``.
-
-`ngtcp2_crypto_recv_crypto_data_cb` treats the following errors from
-`ngtcp2_crypto_read_write_crypto_data` as success:
-
-- :macro:`NGTCP2_CRYPTO_OSSL_ERR_TLS_WANT_X509_LOOKUP`
-- :macro:`NGTCP2_CRYPTO_OSSL_ERR_TLS_WANT_CLIENT_HELLO_CB`
-
-To continue the handshake, call `ngtcp2_conn_continue_handshake`.
 
 Configuring TLS stack yourself
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
