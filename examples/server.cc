@@ -584,15 +584,15 @@ int remove_connection_id(ngtcp2_conn *conn, const ngtcp2_cid *cid,
 } // namespace
 
 namespace {
-int update_key(ngtcp2_conn *conn, uint8_t *rx_secret, uint8_t *tx_secret,
-               ngtcp2_crypto_aead_ctx *rx_aead_ctx, uint8_t *rx_iv,
-               ngtcp2_crypto_aead_ctx *tx_aead_ctx, uint8_t *tx_iv,
-               const uint8_t *current_rx_secret,
-               const uint8_t *current_tx_secret, size_t secretlen,
+int update_key(ngtcp2_conn *conn, ngtcp2_buf *rx_secret,
+               ngtcp2_buf *tx_secret, ngtcp2_crypto_aead_ctx *rx_aead_ctx,
+               ngtcp2_buf *rx_iv, ngtcp2_crypto_aead_ctx *tx_aead_ctx,
+               ngtcp2_buf *tx_iv, const ngtcp2_buf *current_rx_secret,
+               const ngtcp2_buf *current_tx_secret,
                void *user_data) {
   auto h = static_cast<Handler *>(user_data);
   if (!h->update_key(rx_secret, tx_secret, rx_aead_ctx, rx_iv, tx_aead_ctx,
-                     tx_iv, current_rx_secret, current_tx_secret, secretlen)) {
+                     tx_iv, current_rx_secret, current_tx_secret)) {
     return NGTCP2_ERR_CALLBACK_FAILURE;
   }
   return 0;
@@ -1255,11 +1255,12 @@ Handler::recv_stream_data(uint32_t flags, int64_t stream_id,
 }
 
 std::expected<void, Error>
-Handler::update_key(uint8_t *rx_secret, uint8_t *tx_secret,
-                    ngtcp2_crypto_aead_ctx *rx_aead_ctx, uint8_t *rx_iv,
-                    ngtcp2_crypto_aead_ctx *tx_aead_ctx, uint8_t *tx_iv,
-                    const uint8_t *current_rx_secret,
-                    const uint8_t *current_tx_secret, size_t secretlen) {
+Handler::update_key(ngtcp2_buf *rx_secret, ngtcp2_buf *tx_secret,
+                    ngtcp2_crypto_aead_ctx *rx_aead_ctx, ngtcp2_buf *rx_iv,
+                    ngtcp2_crypto_aead_ctx *tx_aead_ctx, ngtcp2_buf *tx_iv,
+                    const ngtcp2_buf *current_rx_secret,
+                    const ngtcp2_buf *current_tx_secret) {
+  auto secretlen = ngtcp2_buf_len(current_rx_secret);
   auto crypto_ctx = ngtcp2_conn_get_crypto_ctx2(conn_);
   auto aead = &crypto_ctx->aead;
   auto keylen = ngtcp2_crypto_aead_keylen(aead);
@@ -1269,20 +1270,26 @@ Handler::update_key(uint8_t *rx_secret, uint8_t *tx_secret,
 
   std::array<uint8_t, 64> rx_key, tx_key;
 
-  if (ngtcp2_crypto_update_key(conn_, rx_secret, tx_secret, rx_aead_ctx,
-                               rx_key.data(), rx_iv, tx_aead_ctx, tx_key.data(),
-                               tx_iv, current_rx_secret, current_tx_secret,
+  if (ngtcp2_crypto_update_key(conn_, rx_secret->pos, tx_secret->pos,
+                               rx_aead_ctx, rx_key.data(), rx_iv->pos,
+                               tx_aead_ctx, tx_key.data(), tx_iv->pos,
+                               current_rx_secret->pos, current_tx_secret->pos,
                                secretlen) != 0) {
     return std::unexpected{Error::QUIC};
   }
 
+  rx_secret->last = rx_secret->pos + secretlen;
+  tx_secret->last = tx_secret->pos + secretlen;
+  rx_iv->last = rx_iv->pos + ivlen;
+  tx_iv->last = tx_iv->pos + ivlen;
+
   if (!config.quiet && config.show_secret) {
     std::println(stderr, "application_traffic rx secret {}", nkey_update_);
-    debug::print_secrets({rx_secret, secretlen}, {rx_key.data(), keylen},
-                         {rx_iv, ivlen});
+    debug::print_secrets({rx_secret->pos, secretlen}, {rx_key.data(), keylen},
+                         {rx_iv->pos, ivlen});
     std::println(stderr, "application_traffic tx secret {}", nkey_update_);
-    debug::print_secrets({tx_secret, secretlen}, {tx_key.data(), keylen},
-                         {tx_iv, ivlen});
+    debug::print_secrets({tx_secret->pos, secretlen}, {tx_key.data(), keylen},
+                         {tx_iv->pos, ivlen});
   }
 
   return {};

@@ -843,11 +843,15 @@ cleanup:
 }
 
 int ngtcp2_crypto_update_key_cb(
-  ngtcp2_conn *conn, uint8_t *rx_secret, uint8_t *tx_secret,
-  ngtcp2_crypto_aead_ctx *rx_aead_ctx, uint8_t *rx_iv,
-  ngtcp2_crypto_aead_ctx *tx_aead_ctx, uint8_t *tx_iv,
-  const uint8_t *current_rx_secret, const uint8_t *current_tx_secret,
-  size_t secretlen, void *user_data) {
+  ngtcp2_conn *conn, ngtcp2_buf *rx_secret, ngtcp2_buf *tx_secret,
+  ngtcp2_crypto_aead_ctx *rx_aead_ctx, ngtcp2_buf *rx_iv,
+  ngtcp2_crypto_aead_ctx *tx_aead_ctx, ngtcp2_buf *tx_iv,
+  const ngtcp2_buf *current_rx_secret, const ngtcp2_buf *current_tx_secret,
+  void *user_data) {
+  const ngtcp2_crypto_ctx *ctx = ngtcp2_conn_get_crypto_ctx2(conn);
+  const ngtcp2_crypto_aead *aead = &ctx->aead;
+  size_t secretlen = ngtcp2_buf_len(current_rx_secret);
+  size_t ivlen = ngtcp2_crypto_packet_protection_ivlen(aead);
   uint8_t rx_key[64];
   uint8_t tx_key[64];
   int rv;
@@ -855,8 +859,16 @@ int ngtcp2_crypto_update_key_cb(
   (void)user_data;
 
   rv = ngtcp2_crypto_update_key(
-    conn, rx_secret, tx_secret, rx_aead_ctx, rx_key, rx_iv, tx_aead_ctx, tx_key,
-    tx_iv, current_rx_secret, current_tx_secret, secretlen);
+    conn, rx_secret->pos, tx_secret->pos, rx_aead_ctx, rx_key, rx_iv->pos,
+    tx_aead_ctx, tx_key, tx_iv->pos, current_rx_secret->pos,
+    current_tx_secret->pos, secretlen);
+
+  if (rv == 0) {
+    rx_secret->last = rx_secret->pos + secretlen;
+    tx_secret->last = tx_secret->pos + secretlen;
+    rx_iv->last = rx_iv->pos + ivlen;
+    tx_iv->last = tx_iv->pos + ivlen;
+  }
 
   ngtcp2_secure_clear(rx_key, sizeof(rx_key));
   ngtcp2_secure_clear(tx_key, sizeof(tx_key));

@@ -1020,17 +1020,49 @@ conn_call_update_key(ngtcp2_conn *conn, uint8_t *rx_secret, uint8_t *tx_secret,
                      ngtcp2_crypto_aead_ctx *rx_aead_ctx, uint8_t *rx_iv,
                      ngtcp2_crypto_aead_ctx *tx_aead_ctx, uint8_t *tx_iv,
                      const uint8_t *current_rx_secret,
-                     const uint8_t *current_tx_secret, size_t secretlen) {
+                     const uint8_t *current_tx_secret, size_t secretlen,
+                     size_t ivlen) {
+  ngtcp2_buf rx_secret_buf, tx_secret_buf, rx_iv_buf, tx_iv_buf;
+  ngtcp2_buf current_rx_secret_buf, current_tx_secret_buf;
   int rv;
 
   assert(conn->callbacks.update_key);
 
+  ngtcp2_buf_init(&rx_secret_buf, rx_secret, secretlen,
+                  NGTCP2_BUF_ORIGIN_LIBRARY, NGTCP2_BUF_DIR_INTERNAL,
+                  NGTCP2_BUF_PURPOSE_SCRATCH, NULL, NULL, NULL);
+  ngtcp2_buf_init(&tx_secret_buf, tx_secret, secretlen,
+                  NGTCP2_BUF_ORIGIN_LIBRARY, NGTCP2_BUF_DIR_INTERNAL,
+                  NGTCP2_BUF_PURPOSE_SCRATCH, NULL, NULL, NULL);
+  ngtcp2_buf_init(&rx_iv_buf, rx_iv, ivlen, NGTCP2_BUF_ORIGIN_LIBRARY,
+                  NGTCP2_BUF_DIR_INTERNAL, NGTCP2_BUF_PURPOSE_SCRATCH, NULL,
+                  NULL, NULL);
+  ngtcp2_buf_init(&tx_iv_buf, tx_iv, ivlen, NGTCP2_BUF_ORIGIN_LIBRARY,
+                  NGTCP2_BUF_DIR_INTERNAL, NGTCP2_BUF_PURPOSE_SCRATCH, NULL,
+                  NULL, NULL);
+  ngtcp2_buf_init(&current_rx_secret_buf, (uint8_t *)current_rx_secret,
+                  secretlen, NGTCP2_BUF_ORIGIN_LIBRARY,
+                  NGTCP2_BUF_DIR_INTERNAL, NGTCP2_BUF_PURPOSE_SCRATCH, NULL,
+                  NULL, NULL);
+  current_rx_secret_buf.last = current_rx_secret_buf.end;
+  ngtcp2_buf_init(&current_tx_secret_buf, (uint8_t *)current_tx_secret,
+                  secretlen, NGTCP2_BUF_ORIGIN_LIBRARY,
+                  NGTCP2_BUF_DIR_INTERNAL, NGTCP2_BUF_PURPOSE_SCRATCH, NULL,
+                  NULL, NULL);
+  current_tx_secret_buf.last = current_tx_secret_buf.end;
+
   rv = conn->callbacks.update_key(
-    conn, rx_secret, tx_secret, rx_aead_ctx, rx_iv, tx_aead_ctx, tx_iv,
-    current_rx_secret, current_tx_secret, secretlen, conn->user_data);
+    conn, &rx_secret_buf, &tx_secret_buf, rx_aead_ctx, &rx_iv_buf, tx_aead_ctx,
+    &tx_iv_buf, &current_rx_secret_buf, &current_tx_secret_buf,
+    conn->user_data);
   if (rv != 0) {
     return NGTCP2_ERR_CALLBACK_FAILURE;
   }
+
+  rx_secret_buf.last = rx_secret_buf.end;
+  tx_secret_buf.last = tx_secret_buf.end;
+  rx_iv_buf.last = rx_iv_buf.end;
+  tx_iv_buf.last = tx_iv_buf.end;
 
   return 0;
 }
@@ -9190,7 +9222,7 @@ static int conn_prepare_key_update(ngtcp2_conn *conn, ngtcp2_tstamp ts) {
   rv = conn_call_update_key(
     conn, new_rx_ckm->secret.base, new_tx_ckm->secret.base, &rx_aead_ctx,
     new_rx_ckm->iv.base, &tx_aead_ctx, new_tx_ckm->iv.base, rx_ckm->secret.base,
-    tx_ckm->secret.base, secretlen);
+    tx_ckm->secret.base, secretlen, ivlen);
   if (rv != 0) {
     return rv;
   }

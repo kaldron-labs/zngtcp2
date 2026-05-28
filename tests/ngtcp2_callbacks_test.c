@@ -176,12 +176,12 @@ static int remove_connection_id(ngtcp2_conn *conn, const ngtcp2_cid *cid,
   return 0;
 }
 
-static int update_key(ngtcp2_conn *conn, uint8_t *rx_secret, uint8_t *tx_secret,
-                      ngtcp2_crypto_aead_ctx *rx_aead_ctx, uint8_t *rx_iv,
-                      ngtcp2_crypto_aead_ctx *tx_aead_ctx, uint8_t *tx_iv,
-                      const uint8_t *current_rx_secret,
-                      const uint8_t *current_tx_secret, size_t secretlen,
-                      void *user_data) {
+static int update_key(ngtcp2_conn *conn, ngtcp2_buf *rx_secret,
+                      ngtcp2_buf *tx_secret,
+                      ngtcp2_crypto_aead_ctx *rx_aead_ctx, ngtcp2_buf *rx_iv,
+                      ngtcp2_crypto_aead_ctx *tx_aead_ctx, ngtcp2_buf *tx_iv,
+                      const ngtcp2_buf *current_rx_secret,
+                      const ngtcp2_buf *current_tx_secret, void *user_data) {
   (void)conn;
   (void)rx_secret;
   (void)tx_secret;
@@ -191,7 +191,6 @@ static int update_key(ngtcp2_conn *conn, uint8_t *rx_secret, uint8_t *tx_secret,
   (void)tx_iv;
   (void)current_rx_secret;
   (void)current_tx_secret;
-  (void)secretlen;
   (void)user_data;
 
   return 0;

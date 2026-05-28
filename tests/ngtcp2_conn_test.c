@@ -772,26 +772,29 @@ static int recv_crypto_data_client_handshake(
   }
 }
 
-static int update_key(ngtcp2_conn *conn, uint8_t *rx_secret, uint8_t *tx_secret,
-                      ngtcp2_crypto_aead_ctx *rx_aead_ctx, uint8_t *rx_iv,
-                      ngtcp2_crypto_aead_ctx *tx_aead_ctx, uint8_t *tx_iv,
-                      const uint8_t *current_rx_secret,
-                      const uint8_t *current_tx_secret, size_t secretlen,
-                      void *user_data) {
+static int update_key(ngtcp2_conn *conn, ngtcp2_buf *rx_secret,
+                      ngtcp2_buf *tx_secret,
+                      ngtcp2_crypto_aead_ctx *rx_aead_ctx, ngtcp2_buf *rx_iv,
+                      ngtcp2_crypto_aead_ctx *tx_aead_ctx, ngtcp2_buf *tx_iv,
+                      const ngtcp2_buf *current_rx_secret,
+                      const ngtcp2_buf *current_tx_secret, void *user_data) {
+  size_t secretlen = ngtcp2_buf_len(current_rx_secret);
   (void)conn;
-  (void)current_rx_secret;
-  (void)current_tx_secret;
   (void)user_data;
-  (void)secretlen;
 
+  assert_size(secretlen, ==, ngtcp2_buf_len(current_tx_secret));
   assert(sizeof(null_secret) == secretlen);
 
-  memset(rx_secret, 0xFF, sizeof(null_secret));
-  memset(tx_secret, 0xFF, sizeof(null_secret));
+  memset(rx_secret->pos, 0xFF, sizeof(null_secret));
+  rx_secret->last = rx_secret->pos + sizeof(null_secret);
+  memset(tx_secret->pos, 0xFF, sizeof(null_secret));
+  tx_secret->last = tx_secret->pos + sizeof(null_secret);
   rx_aead_ctx->native_handle = NULL;
-  memset(rx_iv, 0xFF, sizeof(null_iv));
+  memset(rx_iv->pos, 0xFF, sizeof(null_iv));
+  rx_iv->last = rx_iv->pos + sizeof(null_iv);
   tx_aead_ctx->native_handle = NULL;
-  memset(tx_iv, 0xFF, sizeof(null_iv));
+  memset(tx_iv->pos, 0xFF, sizeof(null_iv));
+  tx_iv->last = tx_iv->pos + sizeof(null_iv);
 
   return 0;
 }

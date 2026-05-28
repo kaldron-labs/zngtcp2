@@ -3228,29 +3228,28 @@ typedef int (*ngtcp2_remove_connection_id)(ngtcp2_conn *conn,
  * application that it must generate new packet protection keying
  * materials and AEAD cipher context objects with new keys.  The
  * current set of secrets are given as |current_rx_secret| and
- * |current_tx_secret| of length |secretlen|.  They are decryption and
- * encryption secrets respectively.
+ * |current_tx_secret|.  They are decryption and encryption secrets
+ * respectively.
  *
  * The application must generate new secrets and keys for both
  * encryption and decryption.  It must write decryption secret and IV
- * to the buffer pointed by |rx_secret| and |rx_iv| respectively.  It
- * also must create new AEAD cipher context object with new decryption
- * key and initialize |rx_aead_ctx| with it.  Similarly, write
- * encryption secret and IV to the buffer pointed by |tx_secret| and
- * |tx_iv|.  Create new AEAD cipher context object with new encryption
- * key and initialize |tx_aead_ctx| with it.  All given buffers have
- * the enough capacity to store secret, key and IV.
+ * to |rx_secret| and |rx_iv| respectively.  It also must create new
+ * AEAD cipher context object with new decryption key and initialize
+ * |rx_aead_ctx| with it.  Similarly, write encryption secret and IV to
+ * |tx_secret| and |tx_iv|.  Create new AEAD cipher context object with
+ * new encryption key and initialize |tx_aead_ctx| with it.  Output
+ * buffers have enough capacity to store their respective values.
  *
  * The callback function must return 0 if it succeeds.  Returning
  * :macro:`NGTCP2_ERR_CALLBACK_FAILURE` makes the library call return
  * immediately.
  */
 typedef int (*ngtcp2_update_key)(
-  ngtcp2_conn *conn, uint8_t *rx_secret, uint8_t *tx_secret,
-  ngtcp2_crypto_aead_ctx *rx_aead_ctx, uint8_t *rx_iv,
-  ngtcp2_crypto_aead_ctx *tx_aead_ctx, uint8_t *tx_iv,
-  const uint8_t *current_rx_secret, const uint8_t *current_tx_secret,
-  size_t secretlen, void *user_data);
+  ngtcp2_conn *conn, ngtcp2_buf *rx_secret, ngtcp2_buf *tx_secret,
+  ngtcp2_crypto_aead_ctx *rx_aead_ctx, ngtcp2_buf *rx_iv,
+  ngtcp2_crypto_aead_ctx *tx_aead_ctx, ngtcp2_buf *tx_iv,
+  const ngtcp2_buf *current_rx_secret, const ngtcp2_buf *current_tx_secret,
+  void *user_data);
 
 /**
  * @macrosection

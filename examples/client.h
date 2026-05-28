@@ -124,11 +124,11 @@ public:
   std::expected<void, Error> change_local_addr();
   void start_change_local_addr_timer();
   std::expected<void, Error>
-  update_key(uint8_t *rx_secret, uint8_t *tx_secret,
-             ngtcp2_crypto_aead_ctx *rx_aead_ctx, uint8_t *rx_iv,
-             ngtcp2_crypto_aead_ctx *tx_aead_ctx, uint8_t *tx_iv,
-             const uint8_t *current_rx_secret, const uint8_t *current_tx_secret,
-             size_t secretlen);
+  update_key(ngtcp2_buf *rx_secret, ngtcp2_buf *tx_secret,
+             ngtcp2_crypto_aead_ctx *rx_aead_ctx, ngtcp2_buf *rx_iv,
+             ngtcp2_crypto_aead_ctx *tx_aead_ctx, ngtcp2_buf *tx_iv,
+             const ngtcp2_buf *current_rx_secret,
+             const ngtcp2_buf *current_tx_secret);
   std::expected<void, Error> initiate_key_update();
   void start_key_update_timer();
   void start_delay_stream_timer();

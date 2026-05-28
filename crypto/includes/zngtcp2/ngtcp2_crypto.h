@@ -408,11 +408,11 @@ NGTCP2_EXTERN int ngtcp2_crypto_update_key(
  * :macro:`NGTCP2_ERR_CALLBACK_FAILURE`.
  */
 NGTCP2_EXTERN int ngtcp2_crypto_update_key_cb(
-  ngtcp2_conn *conn, uint8_t *rx_secret, uint8_t *tx_secret,
-  ngtcp2_crypto_aead_ctx *rx_aead_ctx, uint8_t *rx_iv,
-  ngtcp2_crypto_aead_ctx *tx_aead_ctx, uint8_t *tx_iv,
-  const uint8_t *current_rx_secret, const uint8_t *current_tx_secret,
-  size_t secretlen, void *user_data);
+  ngtcp2_conn *conn, ngtcp2_buf *rx_secret, ngtcp2_buf *tx_secret,
+  ngtcp2_crypto_aead_ctx *rx_aead_ctx, ngtcp2_buf *rx_iv,
+  ngtcp2_crypto_aead_ctx *tx_aead_ctx, ngtcp2_buf *tx_iv,
+  const ngtcp2_buf *current_rx_secret, const ngtcp2_buf *current_tx_secret,
+  void *user_data);
 
 /**
  * @function
