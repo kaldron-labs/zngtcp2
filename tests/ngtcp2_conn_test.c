@@ -531,6 +531,20 @@ static void test_buf_release(ngtcp2_buf *buf, void *user_data) {
   *buf = (ngtcp2_buf){0};
 }
 
+static test_buf_allocator default_buf_allocator;
+
+static void test_settings_ensure_buf_allocator(ngtcp2_settings *settings) {
+  if (settings->buf_allocator.alloc) {
+    return;
+  }
+
+  settings->buf_allocator = (ngtcp2_buf_allocator){
+    .alloc = test_buf_alloc,
+    .release = test_buf_release,
+    .user_data = &default_buf_allocator,
+  };
+}
+
 static int submit_crypto_data(ngtcp2_conn *conn,
                               ngtcp2_encryption_level encryption_level,
                               const uint8_t *data, size_t datalen) {
@@ -1268,6 +1282,7 @@ static void conn_server_new(ngtcp2_conn **pconn, conn_options opts) {
   static const ngtcp2_cid dcid = make_dcid();
   static const ngtcp2_cid scid = make_scid();
   ngtcp2_settings settings;
+  ngtcp2_settings settingsbuf;
   ngtcp2_transport_params params;
   ngtcp2_callbacks cb;
 
@@ -1300,6 +1315,12 @@ static void conn_server_new(ngtcp2_conn **pconn, conn_options opts) {
 
   if (!opts.client_chosen_version) {
     opts.client_chosen_version = NGTCP2_PROTO_VER_V1;
+  }
+
+  if (!opts.settings->buf_allocator.alloc) {
+    settingsbuf = *opts.settings;
+    test_settings_ensure_buf_allocator(&settingsbuf);
+    opts.settings = &settingsbuf;
   }
 
   ngtcp2_conn_server_new(pconn, opts.dcid, opts.scid, opts.path,
@@ -1371,6 +1392,7 @@ static void conn_client_new(ngtcp2_conn **pconn, conn_options opts) {
   static const ngtcp2_cid dcid = make_dcid();
   static const ngtcp2_cid scid = make_scid();
   ngtcp2_settings settings;
+  ngtcp2_settings settingsbuf;
   ngtcp2_transport_params params;
   ngtcp2_callbacks cb;
 
@@ -1403,6 +1425,12 @@ static void conn_client_new(ngtcp2_conn **pconn, conn_options opts) {
 
   if (!opts.client_chosen_version) {
     opts.client_chosen_version = NGTCP2_PROTO_VER_V1;
+  }
+
+  if (!opts.settings->buf_allocator.alloc) {
+    settingsbuf = *opts.settings;
+    test_settings_ensure_buf_allocator(&settingsbuf);
+    opts.settings = &settingsbuf;
   }
 
   ngtcp2_conn_client_new(pconn, opts.dcid, opts.scid, opts.path,

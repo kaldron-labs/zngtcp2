@@ -6345,7 +6345,6 @@ conn_emit_pending_crypto_data(ngtcp2_conn *conn,
                               ngtcp2_encryption_level encryption_level,
                               ngtcp2_strm *strm, uint64_t rx_offset) {
   size_t datalen;
-  const uint8_t *data;
   const ngtcp2_buf *buf;
   int rv;
   uint64_t offset;
@@ -6371,34 +6370,12 @@ conn_emit_pending_crypto_data(ngtcp2_conn *conn,
     }
   }
 
-  if (!strm->rx.rob) {
-    return 0;
-  }
-
-  for (;;) {
-    datalen = ngtcp2_rob_data_at(strm->rx.rob, &data, rx_offset);
-    if (datalen == 0) {
-      assert(rx_offset == ngtcp2_strm_rx_offset(strm));
-      return 0;
-    }
-
-    offset = rx_offset;
-    rx_offset += datalen;
-
-    rv =
-      conn_call_recv_crypto_data(conn, encryption_level, offset, data, datalen);
-    if (rv != 0) {
-      return rv;
-    }
-
-    ngtcp2_rob_pop(strm->rx.rob, rx_offset - datalen, datalen);
-  }
+  return 0;
 }
 
 static ngtcp2_ssize conn_recv_reordering(ngtcp2_conn *conn, ngtcp2_strm *strm,
                                          const uint8_t *data, size_t datalen,
                                          uint64_t offset) {
-  ngtcp2_ssize nwrite;
   ngtcp2_pkt_buf_ctx *ctx = conn->rx_pkt_buf_ctx;
   ngtcp2_buf buf;
   ngtcp2_buf *packet;
@@ -6428,28 +6405,27 @@ static ngtcp2_ssize conn_recv_reordering(ngtcp2_conn *conn, ngtcp2_strm *strm,
       }
       allocator_owned = 1;
     }
-
-    rv =
-      ngtcp2_strm_recv_reordering_buf(strm, &buf, offset, conn_reorder_release,
-                                      conn, allocator_owned, &nwritebuf);
+  } else {
+    rv = conn_alloc_rx_reorder_copy(conn, &buf, data, datalen);
     if (rv != 0) {
-      conn_reorder_release(&buf, allocator_owned, conn);
       return rv;
     }
-
-    if (allocator_owned) {
-      conn->buf_stats.reorder_copy += nwritebuf;
-    }
-
-    return (ngtcp2_ssize)nwritebuf;
+    allocator_owned = 1;
   }
 
-  nwrite = ngtcp2_strm_recv_reordering(strm, data, datalen, offset);
-  if (nwrite > 0) {
-    conn->buf_stats.reorder_copy += (uint64_t)nwrite;
+  rv = ngtcp2_strm_recv_reordering_buf(strm, &buf, offset,
+                                       conn_reorder_release, conn,
+                                       allocator_owned, &nwritebuf);
+  if (rv != 0) {
+    conn_reorder_release(&buf, allocator_owned, conn);
+    return rv;
   }
 
-  return nwrite;
+  if (allocator_owned) {
+    conn->buf_stats.reorder_copy += nwritebuf;
+  }
+
+  return (ngtcp2_ssize)nwritebuf;
 }
 
 /*
@@ -7649,7 +7625,6 @@ fail:
 static int conn_emit_pending_stream_data(ngtcp2_conn *conn, ngtcp2_strm *strm,
                                          uint64_t rx_offset) {
   size_t datalen;
-  const uint8_t *data;
   const ngtcp2_buf *buf;
   int rv;
   uint64_t offset;
@@ -7694,49 +7669,7 @@ static int conn_emit_pending_stream_data(ngtcp2_conn *conn, ngtcp2_strm *strm,
     }
   }
 
-  if (!strm->rx.rob) {
-    return 0;
-  }
-
-  for (;;) {
-    /* Stop calling callback if application has called
-       ngtcp2_conn_shutdown_stream_read() inside the callback.
-       Because it doubly counts connection window. */
-    if (strm->flags & NGTCP2_STRM_FLAG_STOP_SENDING) {
-      return 0;
-    }
-
-    datalen = ngtcp2_rob_data_at(strm->rx.rob, &data, rx_offset);
-    if (datalen == 0) {
-      assert(rx_offset == ngtcp2_strm_rx_offset(strm));
-      return 0;
-    }
-
-    offset = rx_offset;
-    rx_offset += datalen;
-
-    sdflags = NGTCP2_STREAM_DATA_FLAG_NONE;
-    if ((strm->flags & NGTCP2_STRM_FLAG_SHUT_RD) &&
-        rx_offset == strm->rx.last_offset) {
-      sdflags |= NGTCP2_STREAM_DATA_FLAG_FIN;
-    }
-    if (!handshake_completed) {
-      sdflags |= NGTCP2_STREAM_DATA_FLAG_0RTT;
-    }
-
-    rv = conn_call_recv_stream_data(conn, strm, sdflags, offset, data, datalen);
-    if (rv != 0) {
-      return rv;
-    }
-
-    /* ngtcp2_conn_shutdown_stream_read from a callback will free
-       strm->rx.rob. */
-    if (!strm->rx.rob) {
-      return 0;
-    }
-
-    ngtcp2_rob_pop(strm->rx.rob, rx_offset - datalen, datalen);
-  }
+  return 0;
 }
 
 /*
@@ -10693,11 +10626,9 @@ static ngtcp2_ssize conn_read_handshake(ngtcp2_conn *conn,
      * validated data only.
      */
     if (ngtcp2_strm_rx_offset(&conn->in_pktns->crypto.strm) == 0) {
-      if ((conn->in_pktns->crypto.strm.rx.rob &&
-           ngtcp2_rob_data_buffered(conn->in_pktns->crypto.strm.rx.rob)) ||
-          (conn->in_pktns->crypto.strm.rx.reorder &&
+      if (conn->in_pktns->crypto.strm.rx.reorder &&
            ngtcp2_reorder_data_buffered(
-             conn->in_pktns->crypto.strm.rx.reorder))) {
+             conn->in_pktns->crypto.strm.rx.reorder)) {
         /* Address has been validated with token */
         if (conn->local.settings.tokenlen) {
           return nread;
@@ -10944,11 +10875,9 @@ int ngtcp2_conn_read_pkt_legacy_versioned(ngtcp2_conn *conn,
 
       if (conn->state == NGTCP2_CS_SERVER_INITIAL &&
           ngtcp2_strm_rx_offset(&conn->in_pktns->crypto.strm) == 0 &&
-          ((!conn->in_pktns->crypto.strm.rx.rob ||
-            !ngtcp2_rob_data_buffered(conn->in_pktns->crypto.strm.rx.rob)) &&
-           (!conn->in_pktns->crypto.strm.rx.reorder ||
-            !ngtcp2_reorder_data_buffered(
-              conn->in_pktns->crypto.strm.rx.reorder)))) {
+          (!conn->in_pktns->crypto.strm.rx.reorder ||
+           !ngtcp2_reorder_data_buffered(
+             conn->in_pktns->crypto.strm.rx.reorder))) {
         return NGTCP2_ERR_DROP_CONN;
       }
 
