@@ -57,12 +57,9 @@
 
 #undef ngtcp2_conn_read_pkt
 #undef ngtcp2_conn_write_pkt
-#undef ngtcp2_conn_write_stream
 #undef ngtcp2_conn_write_datagram
 #undef ngtcp2_conn_writev_datagram
 #undef ngtcp2_conn_write_connection_close
-
-#define NGTCP2_WRITE_STREAM_FLAG_MORE 0x01U
 
 #define NGTCP2_WRITE_DATAGRAM_FLAG_NONE 0x00U
 #define NGTCP2_WRITE_DATAGRAM_FLAG_MORE 0x01U
@@ -86,30 +83,6 @@ ngtcp2_ssize ngtcp2_conn_write_pkt_legacy_versioned(
 #define ngtcp2_conn_write_pkt(CONN, PATH, PI, DEST, DESTLEN, TS)               \
   ngtcp2_conn_write_pkt_legacy_versioned(                                      \
     (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (DEST), (DESTLEN), (TS))
-
-ngtcp2_ssize ngtcp2_conn_write_stream_legacy_versioned(
-  ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
-  ngtcp2_pkt_info *pi, uint8_t *dest, size_t destlen, ngtcp2_ssize *pdatalen,
-  uint32_t flags, int64_t stream_id, const uint8_t *data, size_t datalen,
-  ngtcp2_tstamp ts);
-
-#define ngtcp2_conn_write_stream(CONN, PATH, PI, DEST, DESTLEN, PDATALEN,      \
-                                 FLAGS, STREAM_ID, DATA, DATALEN, TS)          \
-  ngtcp2_conn_write_stream_legacy_versioned(                                   \
-    (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (DEST), (DESTLEN),          \
-    (PDATALEN), (FLAGS), (STREAM_ID), (DATA), (DATALEN), (TS))
-
-ngtcp2_ssize ngtcp2_conn_writev_stream_versioned(
-  ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
-  ngtcp2_pkt_info *pi, uint8_t *dest, size_t destlen, ngtcp2_ssize *pdatalen,
-  uint32_t flags, int64_t stream_id, const ngtcp2_vec *datav, size_t datavcnt,
-  ngtcp2_tstamp ts);
-
-#define ngtcp2_conn_writev_stream(CONN, PATH, PI, DEST, DESTLEN, PDATALEN,     \
-                                  FLAGS, STREAM_ID, DATAV, DATAVCNT, TS)       \
-  ngtcp2_conn_writev_stream_versioned(                                         \
-    (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (DEST), (DESTLEN),          \
-    (PDATALEN), (FLAGS), (STREAM_ID), (DATAV), (DATAVCNT), (TS))
 
 ngtcp2_ssize ngtcp2_conn_write_datagram_legacy_versioned(
   ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
@@ -259,8 +232,7 @@ void ngtcp2_path_challenge_entry_init(ngtcp2_path_challenge_entry *pcent,
    ACK frame which acknowledges packet which is encrypted with new
    key. */
 #define NGTCP2_CONN_FLAG_KEY_UPDATE_NOT_CONFIRMED 0x0800U
-/* NGTCP2_CONN_FLAG_PPE_PENDING is set when
-   NGTCP2_WRITE_STREAM_FLAG_MORE is used and the intermediate state of
+/* NGTCP2_CONN_FLAG_PPE_PENDING is set when the intermediate state of
    ngtcp2_ppe is stored in pkt struct of ngtcp2_conn. */
 #define NGTCP2_CONN_FLAG_PPE_PENDING 0x1000U
 /* NGTCP2_CONN_FLAG_RESTART_IDLE_TIMER_ON_WRITE is set when idle timer
@@ -276,9 +248,8 @@ void ngtcp2_path_challenge_entry_init(ngtcp2_path_challenge_entry *pcent,
 /* NGTCP2_CONN_FLAG_KEY_UPDATE_INITIATOR is set when the local
    endpoint has initiated key update. */
 #define NGTCP2_CONN_FLAG_KEY_UPDATE_INITIATOR 0x10000U
-/* NGTCP2_CONN_FLAG_AGGREGATE_PKTS is set when
-   ngtcp2_conn_writev_stream is called inside the callback invoked by
-   ngtcp2_conn_write_aggregate_pkt. */
+/* NGTCP2_CONN_FLAG_AGGREGATE_PKTS is set when a write API is called
+   inside the callback invoked by ngtcp2_conn_write_aggregate_pkt. */
 #define NGTCP2_CONN_FLAG_AGGREGATE_PKTS 0x20000U
 /* NGTCP2_CONN_FLAG_CRUMBLE_INITIAL_CRYPTO, if set, crumbles an
    Initial CRYPTO frame into pieces as a countermeasure against Deep
@@ -645,8 +616,7 @@ struct ngtcp2_conn {
     uint8_t tls_alert;
   } crypto;
 
-  /* pkt contains the packet intermediate construction data to support
-     NGTCP2_WRITE_STREAM_FLAG_MORE */
+  /* pkt contains intermediate packet construction data. */
   struct {
     ngtcp2_crypto_cc cc;
     ngtcp2_pkt_hd hd;
@@ -963,7 +933,7 @@ uint64_t ngtcp2_conn_tx_strmq_first_cycle(const ngtcp2_conn *conn);
  * `ngtcp2_conn_ack_delay_expiry` returns the expiry time point of
  * delayed protected ACK.  One should call
  * `ngtcp2_conn_cancel_expired_ack_delay_timer` and
- * `ngtcp2_conn_write_pkt` (or `ngtcp2_conn_writev_stream`) when it
+ * `ngtcp2_conn_write_pkt` when it
  * expires.  It returns UINT64_MAX if there is no expiry.
  */
 ngtcp2_tstamp ngtcp2_conn_ack_delay_expiry(const ngtcp2_conn *conn);
@@ -984,7 +954,7 @@ void ngtcp2_conn_cancel_expired_ack_delay_timer(ngtcp2_conn *conn,
  * `ngtcp2_conn_loss_detection_expiry` returns the expiry time point
  * of loss detection timer.  One should call
  * `ngtcp2_conn_on_loss_detection_timer` and `ngtcp2_conn_write_pkt`
- * (or `ngtcp2_conn_writev_stream`) when it expires.  It returns
+ * when it expires.  It returns
  * UINT64_MAX if loss detection timer is not armed.
  */
 ngtcp2_tstamp ngtcp2_conn_loss_detection_expiry(const ngtcp2_conn *conn);

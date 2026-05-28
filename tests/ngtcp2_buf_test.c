@@ -245,8 +245,7 @@ void test_ngtcp2_conn_buffer_api_contract(void) {
 
   assert_int(NGTCP2_ERR_BUF_CONTRACT, ==,
              ngtcp2_conn_write_stream_versioned(
-               &conn, NULL, 0, NULL, &dest, NULL, NGTCP2_WRITE_STREAM_FLAG_MORE,
-               -1, &data, 0));
+               &conn, NULL, 0, NULL, &dest, NULL, 0x01u, -1, &data, 0));
   assert_uint64(4, ==, conn.buf_stats.buf_contract_failure);
 
   assert_int(NGTCP2_ERR_BUF_CONTRACT, ==,
