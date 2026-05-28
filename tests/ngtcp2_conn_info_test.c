@@ -24,8 +24,6 @@
  */
 #include "ngtcp2_conn_info_test.h"
 
-#include <stdio.h>
-
 #include "ngtcp2_conn_info.h"
 #include "ngtcp2_test_helper.h"
 
@@ -57,34 +55,7 @@ void test_ngtcp2_conn_info_init(void) {
     .ping_recv = 90001,
     .pkt_discarded = 17,
   };
-  ngtcp2_conn_info *dest, destbuf = {0};
-  size_t destlen =
-    offsetof(ngtcp2_conn_info, bytes_in_flight) + sizeof(dest->bytes_in_flight);
-
-  dest = malloc(destlen);
-
-  ngtcp2_conn_info_init_versioned(NGTCP2_CONN_INFO_V1, dest, &cstat);
-
-  memcpy(&destbuf, dest, destlen);
-  free(dest);
-
-  assert_uint64(cstat.latest_rtt, ==, destbuf.latest_rtt);
-  assert_uint64(cstat.min_rtt, ==, destbuf.min_rtt);
-  assert_uint64(cstat.smoothed_rtt, ==, destbuf.smoothed_rtt);
-  assert_uint64(cstat.rttvar, ==, destbuf.rttvar);
-  assert_uint64(cstat.cwnd, ==, destbuf.cwnd);
-  assert_uint64(cstat.ssthresh, ==, destbuf.ssthresh);
-  assert_uint64(cstat.bytes_in_flight, ==, destbuf.bytes_in_flight);
-  assert_uint64(0, ==, destbuf.pkt_sent);
-  assert_uint64(0, ==, destbuf.bytes_sent);
-  assert_uint64(0, ==, destbuf.pkt_recv);
-  assert_uint64(0, ==, destbuf.bytes_recv);
-  assert_uint64(0, ==, destbuf.pkt_lost);
-  assert_uint64(0, ==, destbuf.bytes_lost);
-  assert_uint64(0, ==, destbuf.ping_recv);
-  assert_uint64(0, ==, destbuf.pkt_discarded);
-
-  destbuf = (ngtcp2_conn_info){0};
+  ngtcp2_conn_info destbuf = {0};
 
   ngtcp2_conn_info_init_versioned(NGTCP2_CONN_INFO_VERSION, &destbuf, &cstat);
 

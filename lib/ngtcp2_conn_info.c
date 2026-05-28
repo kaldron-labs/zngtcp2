@@ -25,9 +25,13 @@
 #include "ngtcp2_conn_info.h"
 #include "ngtcp2_conn_stat.h"
 
+#include <assert.h>
+
 void ngtcp2_conn_info_init_versioned(int conn_info_version,
                                      ngtcp2_conn_info *cinfo,
                                      const ngtcp2_conn_stat *cstat) {
+  assert(conn_info_version == NGTCP2_CONN_INFO_VERSION);
+
   cinfo->latest_rtt = cstat->latest_rtt;
   cinfo->min_rtt = cstat->min_rtt;
   cinfo->smoothed_rtt = cstat->smoothed_rtt;
@@ -35,16 +39,12 @@ void ngtcp2_conn_info_init_versioned(int conn_info_version,
   cinfo->cwnd = cstat->cwnd;
   cinfo->ssthresh = cstat->ssthresh;
   cinfo->bytes_in_flight = cstat->bytes_in_flight;
-
-  switch (conn_info_version) {
-  case NGTCP2_CONN_INFO_V2:
-    cinfo->pkt_sent = cstat->pkt_sent;
-    cinfo->bytes_sent = cstat->bytes_sent;
-    cinfo->pkt_recv = cstat->pkt_recv;
-    cinfo->bytes_recv = cstat->bytes_recv;
-    cinfo->pkt_lost = cstat->pkt_lost;
-    cinfo->bytes_lost = cstat->bytes_lost;
-    cinfo->ping_recv = cstat->ping_recv;
-    cinfo->pkt_discarded = cstat->pkt_discarded;
-  }
+  cinfo->pkt_sent = cstat->pkt_sent;
+  cinfo->bytes_sent = cstat->bytes_sent;
+  cinfo->pkt_recv = cstat->pkt_recv;
+  cinfo->bytes_recv = cstat->bytes_recv;
+  cinfo->pkt_lost = cstat->pkt_lost;
+  cinfo->bytes_lost = cstat->bytes_lost;
+  cinfo->ping_recv = cstat->ping_recv;
+  cinfo->pkt_discarded = cstat->pkt_discarded;
 }

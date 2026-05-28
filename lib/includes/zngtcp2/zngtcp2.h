@@ -1785,9 +1785,7 @@ typedef struct ngtcp2_transport_params {
   uint8_t version_info_present;
 } ngtcp2_transport_params;
 
-#define NGTCP2_CONN_INFO_V1 1
-#define NGTCP2_CONN_INFO_V2 2
-#define NGTCP2_CONN_INFO_VERSION NGTCP2_CONN_INFO_V2
+#define NGTCP2_CONN_INFO_VERSION 1
 
 /**
  * @struct
@@ -1826,8 +1824,6 @@ typedef struct ngtcp2_conn_info {
    * packets which have not been acknowledged.
    */
   uint64_t bytes_in_flight;
-  /* The following fields have been added since
-     NGTCP2_CONN_INFO_V2. */
   /**
    * :member:`pkt_sent` is the number of QUIC packets sent.
    *
