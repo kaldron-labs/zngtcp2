@@ -2743,7 +2743,8 @@ NGTCP2_EXTERN ngtcp2_ssize ngtcp2_pkt_decode_hd_short(ngtcp2_pkt_hd *dest,
  *     Use `ngtcp2_pkt_write_stateless_reset2` instead.
  *
  * `ngtcp2_pkt_write_stateless_reset` writes Stateless Reset packet in
- * the buffer pointed by |dest| whose length is |destlen|.
+ * |dest|.  |dest| must be an application-origin, mutable, contiguous
+ * :enum:`NGTCP2_BUF_PURPOSE_PACKET_TX` buffer.
  * |stateless_reset_token| is a pointer to the Stateless Reset Token,
  * and its length must be :macro:`NGTCP2_STATELESS_RESET_TOKENLEN`
  * bytes long.  |rand| specifies the random octets preceding Stateless
@@ -2762,16 +2763,19 @@ NGTCP2_EXTERN ngtcp2_ssize ngtcp2_pkt_decode_hd_short(ngtcp2_pkt_hd *dest,
  * :macro:`NGTCP2_ERR_INVALID_ARGUMENT`
  *     |randlen| is strictly less than
  *     :macro:`NGTCP2_MIN_STATELESS_RESET_RANDLEN`.
+ * :macro:`NGTCP2_ERR_BUF_CONTRACT`
+ *     |dest| is not a valid packet TX buffer.
  */
 NGTCP2_EXTERN ngtcp2_ssize ngtcp2_pkt_write_stateless_reset(
-  uint8_t *dest, size_t destlen, const uint8_t *stateless_reset_token,
-  const uint8_t *rand, size_t randlen);
+  ngtcp2_buf *dest, const uint8_t *stateless_reset_token, const uint8_t *rand,
+  size_t randlen);
 
 /**
  * @function
  *
  * `ngtcp2_pkt_write_stateless_reset2` writes Stateless Reset packet
- * in the buffer pointed by |dest| whose length is |destlen|.  |token|
+ * in |dest|.  |dest| must be an application-origin, mutable,
+ * contiguous :enum:`NGTCP2_BUF_PURPOSE_PACKET_TX` buffer.  |token|
  * must store the Stateless Reset Token.  |rand| specifies the random
  * octets preceding Stateless Reset Token.  The length of |rand| is
  * specified by |randlen| which must be at least
@@ -2788,18 +2792,21 @@ NGTCP2_EXTERN ngtcp2_ssize ngtcp2_pkt_write_stateless_reset(
  * :macro:`NGTCP2_ERR_INVALID_ARGUMENT`
  *     |randlen| is strictly less than
  *     :macro:`NGTCP2_MIN_STATELESS_RESET_RANDLEN`.
+ * :macro:`NGTCP2_ERR_BUF_CONTRACT`
+ *     |dest| is not a valid packet TX buffer.
  *
  * .. version-added:: 1.22.0
  */
 NGTCP2_EXTERN ngtcp2_ssize ngtcp2_pkt_write_stateless_reset2(
-  uint8_t *dest, size_t destlen, const ngtcp2_stateless_reset_token *token,
+  ngtcp2_buf *dest, const ngtcp2_stateless_reset_token *token,
   const uint8_t *rand, size_t randlen);
 
 /**
  * @function
  *
  * `ngtcp2_pkt_write_version_negotiation` writes Version Negotiation
- * packet in the buffer pointed by |dest| whose length is |destlen|.
+ * packet in |dest|.  |dest| must be an application-origin, mutable,
+ * contiguous :enum:`NGTCP2_BUF_PURPOSE_PACKET_TX` buffer.
  * |unused_random| should be generated randomly.  |dcid| is a
  * Connection ID which appeared in a packet as a Source Connection ID
  * sent by client which caused version negotiation.  Similarly, |scid|
@@ -2813,9 +2820,11 @@ NGTCP2_EXTERN ngtcp2_ssize ngtcp2_pkt_write_stateless_reset2(
  *
  * :macro:`NGTCP2_ERR_NOBUF`
  *     Buffer is too small.
+ * :macro:`NGTCP2_ERR_BUF_CONTRACT`
+ *     |dest| is not a valid packet TX buffer.
  */
 NGTCP2_EXTERN ngtcp2_ssize ngtcp2_pkt_write_version_negotiation(
-  uint8_t *dest, size_t destlen, uint8_t unused_random, const uint8_t *dcid,
+  ngtcp2_buf *dest, uint8_t unused_random, const uint8_t *dcid,
   size_t dcidlen, const uint8_t *scid, size_t scidlen, const uint32_t *sv,
   size_t nsv);
 
@@ -3918,8 +3927,9 @@ typedef struct ngtcp2_callbacks {
  *
  * `ngtcp2_pkt_write_connection_close` writes Initial packet
  * containing CONNECTION_CLOSE frame with the given |error_code| and
- * the optional |reason| of length |reasonlen| to the buffer pointed
- * by |dest| of length |destlen|.  |ops| must provide buffer-based
+ * the optional |reason| of length |reasonlen| to |dest|.  |dest| must
+ * be an application-origin, mutable, contiguous
+ * :enum:`NGTCP2_BUF_PURPOSE_PACKET_TX` buffer.  |ops| must provide buffer-based
  * packet encryption.  All encryption parameters are for Initial
  * packet encryption.  The packet number is always 0.
  *
@@ -3935,10 +3945,11 @@ typedef struct ngtcp2_callbacks {
  * :macro:`NGTCP2_ERR_CALLBACK_FAILURE`
  *     Callback function failed.
  * :macro:`NGTCP2_ERR_BUF_CONTRACT`
- *     Required buffer packet encryption operation is not provided.
+ *     |dest| is not a valid packet TX buffer, or required buffer packet
+ *     encryption operation is not provided.
  */
 NGTCP2_EXTERN ngtcp2_ssize ngtcp2_pkt_write_connection_close(
-  uint8_t *dest, size_t destlen, uint32_t version, const ngtcp2_cid *dcid,
+  ngtcp2_buf *dest, uint32_t version, const ngtcp2_cid *dcid,
   const ngtcp2_cid *scid, uint64_t error_code, const uint8_t *reason,
   size_t reasonlen, const ngtcp2_crypto_aead *aead,
   const ngtcp2_crypto_aead_ctx *aead_ctx, const uint8_t *iv,
@@ -3948,8 +3959,9 @@ NGTCP2_EXTERN ngtcp2_ssize ngtcp2_pkt_write_connection_close(
 /**
  * @function
  *
- * `ngtcp2_pkt_write_retry` writes Retry packet in the buffer pointed
- * by |dest| whose length is |destlen|.  |dcid| is the Connection ID
+ * `ngtcp2_pkt_write_retry` writes Retry packet in |dest|.  |dest|
+ * must be an application-origin, mutable, contiguous
+ * :enum:`NGTCP2_BUF_PURPOSE_PACKET_TX` buffer.  |dcid| is the Connection ID
  * which appeared in a packet as a Source Connection ID sent by
  * client.  |scid| is a server chosen Source Connection ID.  |odcid|
  * specifies Original Destination Connection ID which appeared in a
@@ -3968,14 +3980,14 @@ NGTCP2_EXTERN ngtcp2_ssize ngtcp2_pkt_write_connection_close(
  * :macro:`NGTCP2_ERR_CALLBACK_FAILURE`
  *     Callback function failed.
  * :macro:`NGTCP2_ERR_BUF_CONTRACT`
- *     |ops->encrypt_retry| is not set, or it violated the buffer
- *     contract.
+ *     |dest| is not a valid packet TX buffer, |ops->encrypt_retry| is not
+ *     set, or it violated the buffer contract.
  * :macro:`NGTCP2_ERR_INVALID_ARGUMENT`
  *     :member:`odcid->datalen <ngtcp2_cid.datalen>` is less than
  *     :macro:`NGTCP2_MIN_INITIAL_DCIDLEN`.
  */
 NGTCP2_EXTERN ngtcp2_ssize ngtcp2_pkt_write_retry(
-  uint8_t *dest, size_t destlen, uint32_t version, const ngtcp2_cid *dcid,
+  ngtcp2_buf *dest, uint32_t version, const ngtcp2_cid *dcid,
   const ngtcp2_cid *scid, const ngtcp2_cid *odcid, const uint8_t *token,
   size_t tokenlen, const ngtcp2_crypto_ops *ops, void *ops_ctx,
   const ngtcp2_crypto_aead *aead, const ngtcp2_crypto_aead_ctx *aead_ctx);

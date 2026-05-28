@@ -88,6 +88,8 @@ ngtcp2_strm *open_stream(ngtcp2_conn *conn, int64_t stream_id);
  */
 size_t rtb_entry_length(const ngtcp2_rtb_entry *ent);
 
+ngtcp2_buf ngtcp2_t_make_packet_tx_buf(uint8_t *buf, size_t len);
+
 #define make_scid()                                                            \
   {                                                                            \
     .datalen = 18,                                                             \

@@ -772,14 +772,14 @@ NGTCP2_EXTERN ngtcp2_ssize ngtcp2_crypto_verify_regular_token2(
  *
  * `ngtcp2_crypto_write_connection_close` writes Initial packet
  * containing CONNECTION_CLOSE with the given |error_code| and the
- * optional |reason| of length |reasonlen| to the buffer pointed by
- * |dest| of length |destlen|.  This function is designed for server
- * to close connection without committing the state when validating
- * Retry token fails.  This function must not be used by client.  The
- * |dcid| must be the Source Connection ID in Initial packet from
- * client.  The |scid| must be the Destination Connection ID in
- * Initial packet from client.  |scid| is used to derive initial
- * keying materials.
+ * optional |reason| of length |reasonlen| to |dest|.  |dest| must be
+ * an application-origin, mutable, contiguous packet TX buffer.  This
+ * function is designed for server to close connection without
+ * committing the state when validating Retry token fails.  This
+ * function must not be used by client.  The |dcid| must be the Source
+ * Connection ID in Initial packet from client.  The |scid| must be
+ * the Destination Connection ID in Initial packet from client.
+ * |scid| is used to derive initial keying materials.
  *
  * This function wraps around `ngtcp2_pkt_write_connection_close` for
  * easier use.
@@ -787,27 +787,28 @@ NGTCP2_EXTERN ngtcp2_ssize ngtcp2_crypto_verify_regular_token2(
  * This function returns 0 if it succeeds, or -1.
  */
 NGTCP2_EXTERN ngtcp2_ssize ngtcp2_crypto_write_connection_close(
-  uint8_t *dest, size_t destlen, uint32_t version, const ngtcp2_cid *dcid,
+  ngtcp2_buf *dest, uint32_t version, const ngtcp2_cid *dcid,
   const ngtcp2_cid *scid, uint64_t error_code, const uint8_t *reason,
   size_t reasonlen);
 
 /**
  * @function
  *
- * `ngtcp2_crypto_write_retry` writes Retry packet to the buffer
- * pointed by |dest| of length |destlen|.  |dcid| is the Connection ID
- * which appeared in a packet as a Source Connection ID sent by
- * client.  |scid| is a server chosen Source Connection ID.  |odcid|
- * specifies Original Destination Connection ID which appeared in a
- * packet as a Destination Connection ID sent by client.  |token|
- * specifies Retry Token, and |tokenlen| specifies its length.
+ * `ngtcp2_crypto_write_retry` writes Retry packet to |dest|.  |dest|
+ * must be an application-origin, mutable, contiguous packet TX
+ * buffer.  |dcid| is the Connection ID which appeared in a packet as
+ * a Source Connection ID sent by client.  |scid| is a server chosen
+ * Source Connection ID.  |odcid| specifies Original Destination
+ * Connection ID which appeared in a packet as a Destination
+ * Connection ID sent by client.  |token| specifies Retry Token, and
+ * |tokenlen| specifies its length.
  *
  * This function wraps around `ngtcp2_pkt_write_retry` for easier use.
  *
  * This function returns 0 if it succeeds, or -1.
  */
 NGTCP2_EXTERN ngtcp2_ssize ngtcp2_crypto_write_retry(
-  uint8_t *dest, size_t destlen, uint32_t version, const ngtcp2_cid *dcid,
+  ngtcp2_buf *dest, uint32_t version, const ngtcp2_cid *dcid,
   const ngtcp2_cid *scid, const ngtcp2_cid *odcid, const uint8_t *token,
   size_t tokenlen);
 

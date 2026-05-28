@@ -1952,6 +1952,7 @@ void test_ngtcp2_pkt_validate_ack(void) {
 
 void test_ngtcp2_pkt_write_stateless_reset(void) {
   uint8_t buf[256];
+  ngtcp2_buf pkt;
   ngtcp2_ssize spktlen;
   uint8_t token[NGTCP2_STATELESS_RESET_TOKENLEN];
   uint8_t rand[256];
@@ -1964,8 +1965,8 @@ void test_ngtcp2_pkt_write_stateless_reset(void) {
     token[i] = (uint8_t)(i + 1);
   }
 
-  spktlen = ngtcp2_pkt_write_stateless_reset(buf, sizeof(buf), token, rand,
-                                             sizeof(rand));
+  pkt = ngtcp2_t_make_packet_tx_buf(buf, sizeof(buf));
+  spktlen = ngtcp2_pkt_write_stateless_reset(&pkt, token, rand, sizeof(rand));
 
   p = buf;
 
@@ -1988,16 +1989,17 @@ void test_ngtcp2_pkt_write_stateless_reset(void) {
   assert_ptrdiff(spktlen, ==, p - buf);
 
   /* Not enough buffer */
-  spktlen = ngtcp2_pkt_write_stateless_reset(
+  pkt = ngtcp2_t_make_packet_tx_buf(
     buf,
-    NGTCP2_MIN_STATELESS_RESET_RANDLEN - 1 + NGTCP2_STATELESS_RESET_TOKENLEN,
-    token, rand, sizeof(rand));
+    NGTCP2_MIN_STATELESS_RESET_RANDLEN - 1 + NGTCP2_STATELESS_RESET_TOKENLEN);
+  spktlen = ngtcp2_pkt_write_stateless_reset(&pkt, token, rand, sizeof(rand));
 
   assert_ptrdiff(NGTCP2_ERR_NOBUF, ==, spktlen);
 }
 
 void test_ngtcp2_pkt_write_stateless_reset2(void) {
   uint8_t buf[256];
+  ngtcp2_buf pkt;
   ngtcp2_ssize spktlen;
   static const ngtcp2_stateless_reset_token token =
     make_stateless_reset_token();
@@ -2005,7 +2007,8 @@ void test_ngtcp2_pkt_write_stateless_reset2(void) {
   uint8_t *p;
   size_t randlen;
 
-  spktlen = ngtcp2_pkt_write_stateless_reset2(buf, sizeof(buf), &token, rand,
+  pkt = ngtcp2_t_make_packet_tx_buf(buf, sizeof(buf));
+  spktlen = ngtcp2_pkt_write_stateless_reset2(&pkt, &token, rand,
                                               sizeof(rand));
 
   p = buf;
@@ -2030,15 +2033,17 @@ void test_ngtcp2_pkt_write_stateless_reset2(void) {
   assert_ptrdiff(spktlen, ==, p - buf);
 
   /* Not enough buffer */
-  spktlen = ngtcp2_pkt_write_stateless_reset2(
-    buf, NGTCP2_MIN_STATELESS_RESET_RANDLEN - 1 + sizeof(token.data), &token,
-    rand, sizeof(rand));
+  pkt = ngtcp2_t_make_packet_tx_buf(
+    buf, NGTCP2_MIN_STATELESS_RESET_RANDLEN - 1 + sizeof(token.data));
+  spktlen = ngtcp2_pkt_write_stateless_reset2(&pkt, &token, rand,
+                                              sizeof(rand));
 
   assert_ptrdiff(NGTCP2_ERR_NOBUF, ==, spktlen);
 }
 
 void test_ngtcp2_pkt_write_retry(void) {
   uint8_t buf[256];
+  ngtcp2_buf pkt;
   ngtcp2_ssize spktlen;
   static const ngtcp2_cid scid = make_scid();
   static const ngtcp2_cid dcid = make_dcid();
@@ -2059,8 +2064,9 @@ void test_ngtcp2_pkt_write_retry(void) {
     token[i] = (uint8_t)i;
   }
 
-  spktlen = ngtcp2_pkt_write_retry(buf, sizeof(buf), NGTCP2_PROTO_VER_V1, &dcid,
-                                   &scid, &odcid, token, sizeof(token),
+  pkt = ngtcp2_t_make_packet_tx_buf(buf, sizeof(buf));
+  spktlen = ngtcp2_pkt_write_retry(&pkt, NGTCP2_PROTO_VER_V1, &dcid, &scid,
+                                   &odcid, token, sizeof(token),
                                    &null_retry_crypto_ops, NULL, &aead,
                                    &aead_ctx);
 
@@ -2086,6 +2092,7 @@ void test_ngtcp2_pkt_write_retry(void) {
 
 void test_ngtcp2_pkt_write_version_negotiation(void) {
   uint8_t buf[256];
+  ngtcp2_buf pkt;
   ngtcp2_ssize spktlen;
   static const uint32_t sv[] = {0xF1F2F3F4, 0x1F2F3F4F};
   const uint8_t *p;
@@ -2094,8 +2101,9 @@ void test_ngtcp2_pkt_write_version_negotiation(void) {
   static const ngtcp2_cid scid = make_scid();
   uint32_t v;
 
+  pkt = ngtcp2_t_make_packet_tx_buf(buf, sizeof(buf));
   spktlen = ngtcp2_pkt_write_version_negotiation(
-    buf, sizeof(buf), 133, dcid.data, dcid.datalen, scid.data, scid.datalen, sv,
+    &pkt, 133, dcid.data, dcid.datalen, scid.data, scid.datalen, sv,
     ngtcp2_arraylen(sv));
 
   assert_ptrdiff((ngtcp2_ssize)(1 + 4 + 1 + dcid.datalen + 1 + scid.datalen +

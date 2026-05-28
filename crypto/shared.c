@@ -1666,7 +1666,7 @@ static const ngtcp2_crypto_ops shared_crypto_ops = {
 };
 
 ngtcp2_ssize ngtcp2_crypto_write_connection_close(
-  uint8_t *dest, size_t destlen, uint32_t version, const ngtcp2_cid *dcid,
+  ngtcp2_buf *dest, uint32_t version, const ngtcp2_cid *dcid,
   const ngtcp2_cid *scid, uint64_t error_code, const uint8_t *reason,
   size_t reasonlen) {
   uint8_t rx_secret[NGTCP2_CRYPTO_INITIAL_SECRETLEN];
@@ -1706,8 +1706,8 @@ ngtcp2_ssize ngtcp2_crypto_write_connection_close(
   }
 
   spktlen = ngtcp2_pkt_write_connection_close(
-    dest, destlen, version, dcid, scid, error_code, reason, reasonlen,
-    &ctx.aead, &aead_ctx, tx_iv, &shared_crypto_ops, NULL, &ctx.hp, &hp_ctx);
+    dest, version, dcid, scid, error_code, reason, reasonlen, &ctx.aead,
+    &aead_ctx, tx_iv, &shared_crypto_ops, NULL, &ctx.hp, &hp_ctx);
   if (spktlen < 0) {
     spktlen = -1;
   }
@@ -1719,8 +1719,8 @@ end:
   return spktlen;
 }
 
-ngtcp2_ssize ngtcp2_crypto_write_retry(uint8_t *dest, size_t destlen,
-                                       uint32_t version, const ngtcp2_cid *dcid,
+ngtcp2_ssize ngtcp2_crypto_write_retry(ngtcp2_buf *dest, uint32_t version,
+                                       const ngtcp2_cid *dcid,
                                        const ngtcp2_cid *scid,
                                        const ngtcp2_cid *odcid,
                                        const uint8_t *token, size_t tokenlen) {
@@ -1749,9 +1749,9 @@ ngtcp2_ssize ngtcp2_crypto_write_retry(uint8_t *dest, size_t destlen,
     return -1;
   }
 
-  spktlen = ngtcp2_pkt_write_retry(dest, destlen, version, dcid, scid, odcid,
-                                   token, tokenlen, &shared_crypto_ops, NULL,
-                                   &aead, &aead_ctx);
+  spktlen = ngtcp2_pkt_write_retry(dest, version, dcid, scid, odcid, token,
+                                   tokenlen, &shared_crypto_ops, NULL, &aead,
+                                   &aead_ctx);
   if (spktlen < 0) {
     spktlen = -1;
   }

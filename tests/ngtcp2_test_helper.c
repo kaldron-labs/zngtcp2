@@ -295,6 +295,16 @@ size_t rtb_entry_length(const ngtcp2_rtb_entry *ent) {
   return len;
 }
 
+ngtcp2_buf ngtcp2_t_make_packet_tx_buf(uint8_t *buf, size_t len) {
+  ngtcp2_buf dest;
+
+  ngtcp2_buf_init(&dest, buf, len, NGTCP2_BUF_ORIGIN_APPLICATION,
+                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_PACKET_TX, NULL, NULL,
+                  NULL);
+
+  return dest;
+}
+
 uint64_t read_pkt_payloadlen(const uint8_t *pkt, const ngtcp2_cid *dcid,
                              const ngtcp2_cid *scid) {
   uint64_t len;

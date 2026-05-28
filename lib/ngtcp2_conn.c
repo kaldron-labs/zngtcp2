@@ -15125,7 +15125,7 @@ void ngtcp2_path_challenge_entry_init(ngtcp2_path_challenge_entry *pcent,
    test data defined only in ngtcp2_conn_test.c, so it is written
    here. */
 ngtcp2_ssize ngtcp2_pkt_write_connection_close(
-  uint8_t *dest, size_t destlen, uint32_t version, const ngtcp2_cid *dcid,
+  ngtcp2_buf *dest, uint32_t version, const ngtcp2_cid *dcid,
   const ngtcp2_cid *scid, uint64_t error_code, const uint8_t *reason,
   size_t reasonlen, const ngtcp2_crypto_aead *aead,
   const ngtcp2_crypto_aead_ctx *aead_ctx, const uint8_t *iv,
@@ -15137,8 +15137,12 @@ ngtcp2_ssize ngtcp2_pkt_write_connection_close(
   ngtcp2_ppe ppe;
   ngtcp2_frame fr;
   int rv;
+  ngtcp2_ssize nwrite;
 
-  if (ops == NULL) {
+  rv =
+    ngtcp2_buf_validate(dest, NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_PACKET_TX);
+  if (rv != 0 || dest->origin != NGTCP2_BUF_ORIGIN_APPLICATION ||
+      ops == NULL) {
     return NGTCP2_ERR_BUF_CONTRACT;
   }
 
@@ -15158,7 +15162,7 @@ ngtcp2_ssize ngtcp2_pkt_write_connection_close(
   cc.ops = *ops;
   cc.ops_ctx = ops_ctx;
 
-  ngtcp2_ppe_init(&ppe, dest, destlen, 0, &cc);
+  ngtcp2_ppe_init(&ppe, dest->pos, (size_t)(dest->end - dest->pos), 0, &cc);
 
   rv = ngtcp2_ppe_encode_hd(&ppe, &hd);
   if (rv != 0) {
@@ -15179,7 +15183,12 @@ ngtcp2_ssize ngtcp2_pkt_write_connection_close(
     return rv;
   }
 
-  return ngtcp2_ppe_final(&ppe, NULL);
+  nwrite = ngtcp2_ppe_final(&ppe, NULL);
+  if (nwrite > 0) {
+    dest->last = dest->pos + nwrite;
+  }
+
+  return nwrite;
 }
 
 int ngtcp2_is_bidi_stream(int64_t stream_id) { return bidi_stream(stream_id); }

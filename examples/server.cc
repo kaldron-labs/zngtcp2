@@ -1927,9 +1927,15 @@ std::expected<void, Error> Server::send_version_negotiation(
     }
   }
 
+  ngtcp2_buf pkt;
+
+  ngtcp2_buf_init(&pkt, buf.wpos(), buf.left(), NGTCP2_BUF_ORIGIN_APPLICATION,
+                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_PACKET_TX, nullptr,
+                  nullptr, nullptr);
+
   auto nwrite = ngtcp2_pkt_write_version_negotiation(
-    buf.wpos(), buf.left(), std::uniform_int_distribution<uint8_t>()(randgen),
-    dcid.data(), dcid.size(), scid.data(), scid.size(), sv.data(),
+    &pkt, std::uniform_int_distribution<uint8_t>()(randgen), dcid.data(),
+    dcid.size(), scid.data(), scid.size(), sv.data(),
     as_unsigned(p - std::ranges::begin(sv)));
   if (nwrite < 0) {
     std::println(stderr, "ngtcp2_pkt_write_version_negotiation: {}",
@@ -1993,10 +1999,15 @@ std::expected<void, Error> Server::send_retry(const ngtcp2_pkt_hd *chd,
 
   Buffer buf{
     std::min(static_cast<size_t>(NGTCP2_MAX_UDP_PAYLOAD_SIZE), max_pktlen)};
+  ngtcp2_buf pkt;
+
+  ngtcp2_buf_init(&pkt, buf.wpos(), buf.left(), NGTCP2_BUF_ORIGIN_APPLICATION,
+                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_PACKET_TX, nullptr,
+                  nullptr, nullptr);
 
   auto nwrite =
-    ngtcp2_crypto_write_retry(buf.wpos(), buf.left(), chd->version, &chd->scid,
-                              &scid, &chd->dcid, token.data(), token.size());
+    ngtcp2_crypto_write_retry(&pkt, chd->version, &chd->scid, &scid,
+                              &chd->dcid, token.data(), token.size());
   if (nwrite < 0) {
     std::println(stderr, "ngtcp2_crypto_write_retry failed");
     return std::unexpected{Error::QUIC};
@@ -2013,10 +2024,15 @@ std::expected<void, Error> Server::send_stateless_connection_close(
   const ngtcp2_pkt_hd *chd, const Endpoint &ep, const Address &local_addr,
   const Address &remote_addr) {
   Buffer buf{NGTCP2_MAX_UDP_PAYLOAD_SIZE};
+  ngtcp2_buf pkt;
+
+  ngtcp2_buf_init(&pkt, buf.wpos(), buf.left(), NGTCP2_BUF_ORIGIN_APPLICATION,
+                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_PACKET_TX, nullptr,
+                  nullptr, nullptr);
 
   auto nwrite = ngtcp2_crypto_write_connection_close(
-    buf.wpos(), buf.left(), chd->version, &chd->scid, &chd->dcid,
-    NGTCP2_INVALID_TOKEN, nullptr, 0);
+    &pkt, chd->version, &chd->scid, &chd->dcid, NGTCP2_INVALID_TOKEN, nullptr,
+    0);
   if (nwrite < 0) {
     std::println(stderr, "ngtcp2_crypto_write_connection_close failed");
     return std::unexpected{Error::QUIC};
@@ -2078,9 +2094,14 @@ Server::send_stateless_reset(size_t pktlen, std::span<const uint8_t> dcid,
   }
 
   Buffer buf{NGTCP2_MAX_UDP_PAYLOAD_SIZE};
+  ngtcp2_buf pkt;
+
+  ngtcp2_buf_init(&pkt, buf.wpos(), buf.left(), NGTCP2_BUF_ORIGIN_APPLICATION,
+                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_PACKET_TX, nullptr,
+                  nullptr, nullptr);
 
   auto nwrite = ngtcp2_pkt_write_stateless_reset2(
-    buf.wpos(), buf.left(), &token, rand_bytes.data(), rand_byteslen);
+    &pkt, &token, rand_bytes.data(), rand_byteslen);
   if (nwrite < 0) {
     std::println(stderr, "ngtcp2_pkt_write_stateless_reset2: {}",
                  ngtcp2_strerror(static_cast<int>(nwrite)));

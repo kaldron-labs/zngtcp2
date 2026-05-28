@@ -541,9 +541,14 @@ Endpoint::send_retry(const NetworkPath &path, const ngtcp2_version_cid &vcid) {
   }
 
   std::array<uint8_t, MAX_UDP_PAYLOAD_SIZE> buf;
+  ngtcp2_buf pkt;
 
-  auto nwrite = ngtcp2_crypto_write_retry(buf.data(), buf.size(), vcid.version,
-                                          &dcid, &scid, &odcid, token.data(),
+  ngtcp2_buf_init(&pkt, buf.data(), buf.size(), NGTCP2_BUF_ORIGIN_APPLICATION,
+                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_PACKET_TX, nullptr,
+                  nullptr, nullptr);
+
+  auto nwrite = ngtcp2_crypto_write_retry(&pkt, vcid.version, &dcid, &scid,
+                                          &odcid, token.data(),
                                           as_unsigned(tokenlen));
   if (nwrite < 0) {
     return std::unexpected{Error::QUIC};
