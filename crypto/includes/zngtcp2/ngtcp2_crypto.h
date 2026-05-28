@@ -224,24 +224,6 @@ NGTCP2_EXTERN int ngtcp2_crypto_encrypt(uint8_t *dest,
 /**
  * @function
  *
- * `ngtcp2_crypto_encrypt_cb` is a wrapper function around
- * `ngtcp2_crypto_encrypt`.  Target connections use
- * :type:`ngtcp2_crypto_ops` for packet protection; this wrapper remains for
- * Retry helpers and provider migration code.
- *
- * This function returns 0 if it succeeds, or
- * :macro:`NGTCP2_ERR_CALLBACK_FAILURE`.
- */
-NGTCP2_EXTERN int
-ngtcp2_crypto_encrypt_cb(uint8_t *dest, const ngtcp2_crypto_aead *aead,
-                         const ngtcp2_crypto_aead_ctx *aead_ctx,
-                         const uint8_t *plaintext, size_t plaintextlen,
-                         const uint8_t *nonce, size_t noncelen,
-                         const uint8_t *aad, size_t aadlen);
-
-/**
- * @function
- *
  * `ngtcp2_crypto_decrypt` decrypts |ciphertext| of length
  * |ciphertextlen| and writes the plaintext into the buffer pointed by
  * |dest|.  The length of plaintext is |ciphertextlen| -
@@ -262,24 +244,6 @@ NGTCP2_EXTERN int ngtcp2_crypto_decrypt(uint8_t *dest,
 /**
  * @function
  *
- * `ngtcp2_crypto_decrypt_cb` is a wrapper function around
- * `ngtcp2_crypto_decrypt`.  Target connections use
- * :type:`ngtcp2_crypto_ops` for packet protection; this wrapper remains for
- * provider migration code.
- *
- * This function returns 0 if it succeeds, or
- * :macro:`NGTCP2_ERR_TLS_DECRYPT`.
- */
-NGTCP2_EXTERN int
-ngtcp2_crypto_decrypt_cb(uint8_t *dest, const ngtcp2_crypto_aead *aead,
-                         const ngtcp2_crypto_aead_ctx *aead_ctx,
-                         const uint8_t *ciphertext, size_t ciphertextlen,
-                         const uint8_t *nonce, size_t noncelen,
-                         const uint8_t *aad, size_t aadlen);
-
-/**
- * @function
- *
  * `ngtcp2_crypto_hp_mask` generates a mask which is used in packet
  * header encryption.  The mask is written to the buffer pointed by
  * |dest|.  The sample is passed as |sample| which is
@@ -295,22 +259,6 @@ NGTCP2_EXTERN int ngtcp2_crypto_hp_mask(uint8_t *dest,
                                         const ngtcp2_crypto_cipher *hp,
                                         const ngtcp2_crypto_cipher_ctx *hp_ctx,
                                         const uint8_t *sample);
-
-/**
- * @function
- *
- * `ngtcp2_crypto_hp_mask_cb` is a wrapper function around
- * `ngtcp2_crypto_hp_mask`.  Target connections use
- * :type:`ngtcp2_crypto_ops` for header protection; this wrapper remains for
- * provider migration code.
- *
- * This function returns 0 if it succeeds, or
- * :macro:`NGTCP2_ERR_CALLBACK_FAILURE`.
- */
-NGTCP2_EXTERN int
-ngtcp2_crypto_hp_mask_cb(uint8_t *dest, const ngtcp2_crypto_cipher *hp,
-                         const ngtcp2_crypto_cipher_ctx *hp_ctx,
-                         const uint8_t *sample);
 
 /**
  * @function

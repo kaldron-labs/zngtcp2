@@ -842,39 +842,6 @@ cleanup:
   return -1;
 }
 
-int ngtcp2_crypto_encrypt_cb(uint8_t *dest, const ngtcp2_crypto_aead *aead,
-                             const ngtcp2_crypto_aead_ctx *aead_ctx,
-                             const uint8_t *plaintext, size_t plaintextlen,
-                             const uint8_t *nonce, size_t noncelen,
-                             const uint8_t *aad, size_t aadlen) {
-  if (ngtcp2_crypto_encrypt(dest, aead, aead_ctx, plaintext, plaintextlen,
-                            nonce, noncelen, aad, aadlen) != 0) {
-    return NGTCP2_ERR_CALLBACK_FAILURE;
-  }
-  return 0;
-}
-
-int ngtcp2_crypto_decrypt_cb(uint8_t *dest, const ngtcp2_crypto_aead *aead,
-                             const ngtcp2_crypto_aead_ctx *aead_ctx,
-                             const uint8_t *ciphertext, size_t ciphertextlen,
-                             const uint8_t *nonce, size_t noncelen,
-                             const uint8_t *aad, size_t aadlen) {
-  if (ngtcp2_crypto_decrypt(dest, aead, aead_ctx, ciphertext, ciphertextlen,
-                            nonce, noncelen, aad, aadlen) != 0) {
-    return NGTCP2_ERR_DECRYPT;
-  }
-  return 0;
-}
-
-int ngtcp2_crypto_hp_mask_cb(uint8_t *dest, const ngtcp2_crypto_cipher *hp,
-                             const ngtcp2_crypto_cipher_ctx *hp_ctx,
-                             const uint8_t *sample) {
-  if (ngtcp2_crypto_hp_mask(dest, hp, hp_ctx, sample) != 0) {
-    return NGTCP2_ERR_CALLBACK_FAILURE;
-  }
-  return 0;
-}
-
 int ngtcp2_crypto_update_key_cb(
   ngtcp2_conn *conn, uint8_t *rx_secret, uint8_t *tx_secret,
   ngtcp2_crypto_aead_ctx *rx_aead_ctx, uint8_t *rx_iv,
