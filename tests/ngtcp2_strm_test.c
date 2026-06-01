@@ -834,8 +834,8 @@ void test_ngtcp2_strm_discard_reordered_data(void) {
   ngtcp2_strm_init(&strm, 0, NGTCP2_STRM_FLAG_NONE, 0, 0, NULL, NULL, mem);
 
   ngtcp2_strm_update_rx_offset(&strm, 1000000007);
-  ngtcp2_buf_init(&buf, nulldata, 117, NGTCP2_BUF_ORIGIN_BORROWED,
-                  NGTCP2_BUF_DIR_RX, NGTCP2_BUF_PURPOSE_REORDER_RX, NULL, NULL,
+  ngtcp2_buf_init(&buf, nulldata, 117, NULL,
+                  NGTCP2_BUF_ROLE_RX_STREAM, NULL, NULL,
                   NULL);
   buf.last = buf.end;
   rv = ngtcp2_strm_recv_reordering_buf(&strm, &buf, 1000000008,

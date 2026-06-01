@@ -24,6 +24,8 @@
  */
 #include "hq_client_proto_codec.h"
 
+#include <algorithm>
+#include <cstring>
 #include <unistd.h>
 
 #include "client.h"
@@ -102,71 +104,79 @@ ProtoCodec::extend_max_stream_data(int64_t stream_id, uint64_t max_data) {
   return {};
 }
 
-ngtcp2_ssize ProtoCodec::write_pkt(ngtcp2_path *path, ngtcp2_pkt_info *pi,
-                                   ngtcp2_buf *dest, ngtcp2_tstamp ts) {
-  ngtcp2_buf data;
-  ngtcp2_buf *pdata;
-
+std::expected<void, Error> ProtoCodec::submit_stream_data(ngtcp2_tstamp ts) {
   for (;;) {
-    int64_t stream_id = -1;
-    uint32_t flags = NGTCP2_WRITE_STREAM_FLAG_NONE;
-    Stream *stream = nullptr;
-    uint8_t empty = 0;
-    pdata = nullptr;
-
-    if (!sendq_.empty() && ngtcp2_conn_get_max_data_left2(conn_)) {
-      stream = *std::ranges::begin(sendq_);
-
-      stream_id = stream->stream_id;
-      auto base = stream->reqbuf.empty()
-                    ? &empty
-                    : const_cast<uint8_t *>(stream->reqbuf.data());
-      ngtcp2_buf_init(&data, base, stream->reqbuf.size(),
-                      NGTCP2_BUF_ORIGIN_APPLICATION, NGTCP2_BUF_DIR_TX,
-                      NGTCP2_BUF_PURPOSE_STREAM_TX, nullptr, nullptr, nullptr);
-      data.last = data.end;
-      pdata = &data;
-      flags |= NGTCP2_WRITE_STREAM_FLAG_FIN;
+    if (sendq_.empty() || !ngtcp2_conn_get_max_data_left2(conn_)) {
+      return {};
     }
 
-    ngtcp2_ssize ndatalen;
+    auto stream = *std::ranges::begin(sendq_);
+    auto payload_cap =
+      std::min(stream->reqbuf.size(),
+               ngtcp2_conn_get_path_max_tx_udp_payload_size2(conn_));
+    auto fin = payload_cap == stream->reqbuf.size();
 
-    auto nwrite = ngtcp2_conn_write_stream(conn_, path, pi, dest, &ndatalen,
-                                           flags, stream_id, pdata, ts);
-    if (nwrite < 0) {
-      switch (nwrite) {
-      case NGTCP2_ERR_STREAM_DATA_BLOCKED:
+    ngtcp2_stream_buf buf;
+    auto rv = ngtcp2_conn_alloc_stream_buf(
+      conn_, &buf, stream->stream_id, payload_cap, NGTCP2_STREAM_BUF_FLAG_NONE,
+      ts);
+    if (rv != 0) {
+      switch (rv) {
       case NGTCP2_ERR_STREAM_SHUT_WR:
-        assert(ndatalen == -1);
+      case NGTCP2_ERR_STREAM_NOT_FOUND:
         sendq_.erase(std::ranges::begin(sendq_));
         continue;
-      case NGTCP2_ERR_WRITE_MORE:
-        assert(ndatalen >= 0);
-        stream->reqbuf = stream->reqbuf.subspan(as_unsigned(ndatalen));
-        if (stream->reqbuf.empty()) {
-          sendq_.erase(std::ranges::begin(sendq_));
-        }
+      default:
+        std::println(stderr, "ngtcp2_conn_alloc_stream_buf: {}",
+                     ngtcp2_strerror(rv));
+        ngtcp2_ccerr_set_liberr(&last_error_, rv, nullptr, 0);
+        return std::unexpected{Error::QUIC};
+      }
+    }
+
+    if (payload_cap) {
+      memcpy(buf.payload.pos, stream->reqbuf.data(), payload_cap);
+      buf.payload.last = buf.payload.pos + payload_cap;
+    }
+
+    auto naccepted = ngtcp2_conn_submit_stream_buf(
+      conn_, &buf, payload_cap, fin ? NGTCP2_WRITE_STREAM_FLAG_FIN
+                                    : NGTCP2_WRITE_STREAM_FLAG_NONE,
+      ts);
+    if (naccepted < 0) {
+      ngtcp2_conn_cancel_stream_buf(conn_, &buf);
+
+      switch (naccepted) {
+      case NGTCP2_ERR_STREAM_DATA_BLOCKED:
+        return {};
+      case NGTCP2_ERR_STREAM_SHUT_WR:
+        sendq_.erase(std::ranges::begin(sendq_));
         continue;
       }
 
-      assert(ndatalen == -1);
+      std::println(stderr, "ngtcp2_conn_submit_stream_buf: {}",
+                   ngtcp2_strerror(static_cast<int>(naccepted)));
+      ngtcp2_ccerr_set_liberr(&last_error_, static_cast<int>(naccepted),
+                              nullptr, 0);
 
-      std::println(stderr, "ngtcp2_conn_write_stream: {}",
-                   ngtcp2_strerror(static_cast<int>(nwrite)));
-      ngtcp2_ccerr_set_liberr(&last_error_, static_cast<int>(nwrite), nullptr,
-                              0);
-
-      return NGTCP2_ERR_CALLBACK_FAILURE;
+      return std::unexpected{Error::QUIC};
     }
 
-    if (ndatalen >= 0) {
-      stream->reqbuf = stream->reqbuf.subspan(as_unsigned(ndatalen));
+    if (naccepted == 0 && !fin) {
+      ngtcp2_conn_cancel_stream_buf(conn_, &buf);
+      return {};
+    }
+
+    ngtcp2_conn_cancel_stream_buf(conn_, &buf);
+
+    if (naccepted >= 0) {
+      stream->reqbuf = stream->reqbuf.subspan(as_unsigned(naccepted));
       if (stream->reqbuf.empty()) {
         sendq_.erase(std::ranges::begin(sendq_));
       }
     }
 
-    return nwrite;
+    return {};
   }
 }
 

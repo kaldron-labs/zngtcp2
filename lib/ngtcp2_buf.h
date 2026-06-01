@@ -38,6 +38,28 @@
 void ngtcp2_buf_init_internal(ngtcp2_buf *buf, uint8_t *begin, size_t len);
 
 /*
+ * ngtcp2_buf_role_is_rx returns nonzero if |role| identifies receive-side
+ * storage.
+ */
+static inline int ngtcp2_buf_role_is_rx(ngtcp2_buf_role role) {
+  return role == NGTCP2_BUF_ROLE_RX_PACKET ||
+         role == NGTCP2_BUF_ROLE_RX_STREAM ||
+         role == NGTCP2_BUF_ROLE_RX_CONTROL ||
+         role == NGTCP2_BUF_ROLE_RX_DATAGRAM;
+}
+
+/*
+ * ngtcp2_buf_role_is_tx returns nonzero if |role| identifies transmit-side
+ * storage.
+ */
+static inline int ngtcp2_buf_role_is_tx(ngtcp2_buf_role role) {
+  return role == NGTCP2_BUF_ROLE_TX_PACKET ||
+         role == NGTCP2_BUF_ROLE_TX_STREAM ||
+         role == NGTCP2_BUF_ROLE_TX_CONTROL ||
+         role == NGTCP2_BUF_ROLE_TX_DATAGRAM;
+}
+
+/*
  * ngtcp2_buf_left returns the number of additional bytes which can be
  * written to the underlying buffer.  In other words, it returns
  * buf->end - buf->last.

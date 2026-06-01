@@ -203,6 +203,7 @@ void Client::disconnect() {
   tx_.send_blocked = false;
 
   handle_error();
+  release_blocked_tx_pkts();
 
   config.tx_loss_prob = 0;
 
@@ -842,8 +843,8 @@ Client::feed_data(const Endpoint &ep, const sockaddr *sa, socklen_t salen,
   uint8_t empty = 0;
   auto pkt_data = data.empty() ? &empty : const_cast<uint8_t *>(data.data());
   ngtcp2_buf pkt;
-  ngtcp2_buf_init(&pkt, pkt_data, data.size(), NGTCP2_BUF_ORIGIN_APPLICATION,
-                  NGTCP2_BUF_DIR_RX, NGTCP2_BUF_PURPOSE_PACKET_RX, nullptr,
+  ngtcp2_buf_init(&pkt, pkt_data, data.size(), ((void *)(uintptr_t)1),
+                  NGTCP2_BUF_ROLE_RX_PACKET, nullptr,
                   nullptr, nullptr);
   pkt.last = pkt.end;
 
@@ -1014,37 +1015,19 @@ std::expected<void, Error> Client::on_write() {
   return {};
 }
 
-namespace {
-ngtcp2_ssize write_pkt(ngtcp2_conn *conn, ngtcp2_path *path,
-                       ngtcp2_pkt_info *pi, ngtcp2_buf *dest,
-                       ngtcp2_tstamp ts, void *user_data) {
-  auto c = static_cast<Client *>(user_data);
-
-  return c->write_pkt(path, pi, dest, ts);
-}
-} // namespace
-
-ngtcp2_ssize Client::write_pkt(ngtcp2_path *path, ngtcp2_pkt_info *pi,
-                               ngtcp2_buf *dest, ngtcp2_tstamp ts) {
-  return proto_codec_->write_pkt(path, pi, dest, ts);
-}
-
 std::expected<void, Error> Client::write_streams() {
-  ngtcp2_path_storage ps;
-  ngtcp2_pkt_info pi;
   size_t gso_size;
   auto ts = util::timestamp();
-  auto txbuf = std::span{txbuf_};
-  auto buflen = util::clamp_buffer_size(conn_, txbuf.size(), config.gso_burst);
-  ngtcp2_buf pkt;
+  auto max_pkts = config.gso_burst ? config.gso_burst : 64;
+  std::array<ngtcp2_tx_pkt, 64> pkts;
 
-  ngtcp2_path_storage_zero(&ps);
-  ngtcp2_buf_init(&pkt, txbuf.data(), buflen, NGTCP2_BUF_ORIGIN_APPLICATION,
-                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_PACKET_TX, nullptr,
-                  nullptr, nullptr);
+  if (auto rv = proto_codec_->submit_stream_data(ts); !rv) {
+    return rv;
+  }
 
-  auto nwrite = ngtcp2_conn_write_aggregate_pkt2(
-    conn_, &ps.path, &pi, &pkt, &gso_size, ::write_pkt, config.gso_burst, ts);
+  auto nwrite = ngtcp2_conn_next_tx_pkts(
+    conn_, pkts.data(), std::min(max_pkts, pkts.size()), &gso_size,
+    NGTCP2_TX_PKTS_FLAG_NONE, ts);
   if (nwrite < 0) {
     disconnect();
     return std::unexpected{Error::QUIC};
@@ -1056,23 +1039,52 @@ std::expected<void, Error> Client::write_streams() {
     return {};
   }
 
-  send_packet_or_blocked(ps.path, pi.ecn,
-                         txbuf.first(static_cast<size_t>(nwrite)), gso_size);
+  for (size_t i = 0; i < static_cast<size_t>(nwrite); ++i) {
+    if (auto rv = send_tx_pkt_or_blocked(pkts[i]); !rv) {
+      for (++i; i < static_cast<size_t>(nwrite); ++i) {
+        on_send_blocked(pkts[i]);
+      }
+      if (rv.error() == Error::SEND_BLOCKED) {
+        return {};
+      }
+      return rv;
+    }
+  }
 
   return {};
 }
 
-std::expected<void, Error>
-Client::send_packet_or_blocked(const ngtcp2_path &path, unsigned int ecn,
-                               std::span<const uint8_t> data, size_t gso_size) {
-  auto &ep = *static_cast<Endpoint *>(path.user_data);
+namespace {
+std::span<const uint8_t> tx_pkt_data(const ngtcp2_tx_pkt &pkt) {
+  return {pkt.pkt.pos, static_cast<size_t>(pkt.pkt.last - pkt.pkt.pos)};
+}
 
-  auto rest = send_packet(ep, path.remote, ecn, data, gso_size);
+ngtcp2_tx_pkt move_tx_pkt(ngtcp2_tx_pkt &pkt) {
+  auto res = pkt;
+  ngtcp2_path_storage_init(&res.path, pkt.path.path.local.addr,
+                           pkt.path.path.local.addrlen,
+                           pkt.path.path.remote.addr,
+                           pkt.path.path.remote.addrlen,
+                           pkt.path.path.user_data);
+  pkt = {};
+  return res;
+}
+} // namespace
+
+std::expected<void, Error> Client::send_tx_pkt_or_blocked(ngtcp2_tx_pkt &pkt) {
+  auto &path = pkt.path.path;
+  auto &ep = *static_cast<Endpoint *>(path.user_data);
+  auto data = tx_pkt_data(pkt);
+
+  auto rest = send_packet(ep, path.remote, pkt.pi.ecn, data, data.size());
   if (!rest.empty()) {
-    on_send_blocked(path, ecn, rest, gso_size);
+    on_send_blocked(pkt);
 
     return std::unexpected{Error::SEND_BLOCKED};
   }
+
+  ngtcp2_conn_release_tx_pkt(conn_, &pkt);
+  pkt = {};
 
   return {};
 }
@@ -1587,25 +1599,16 @@ std::span<const uint8_t> Client::send_packet(const Endpoint &ep,
   return {};
 }
 
-void Client::on_send_blocked(const ngtcp2_path &path, unsigned int ecn,
-                             std::span<const uint8_t> data, size_t gso_size) {
-  assert(!tx_.send_blocked);
-  assert(gso_size);
-
+void Client::on_send_blocked(ngtcp2_tx_pkt &pkt) {
+  auto was_blocked = tx_.send_blocked;
   tx_.send_blocked = true;
 
-  auto &p = tx_.blocked;
+  auto &ep = *static_cast<Endpoint *>(pkt.path.path.user_data);
 
-  p.remote_addr.set(path.remote.addr);
-
-  auto &ep = *static_cast<Endpoint *>(path.user_data);
-
-  p.endpoint = &ep;
-  p.ecn = ecn;
-  p.data = data;
-  p.gso_size = gso_size;
-
-  start_wev_endpoint(ep);
+  tx_.blocked_pkts.emplace_back(move_tx_pkt(pkt));
+  if (!was_blocked) {
+    start_wev_endpoint(ep);
+  }
 }
 
 void Client::start_wev_endpoint(const Endpoint &ep) {
@@ -1625,19 +1628,32 @@ void Client::start_wev_endpoint(const Endpoint &ep) {
 void Client::send_blocked_packet() {
   assert(tx_.send_blocked);
 
-  auto &p = tx_.blocked;
+  while (!tx_.blocked_pkts.empty()) {
+    auto &pkt = tx_.blocked_pkts.front();
+    auto &path = pkt.path.path;
+    auto &ep = *static_cast<Endpoint *>(path.user_data);
+    auto data = tx_pkt_data(pkt);
 
-  auto rest = send_packet(*p.endpoint, as_ngtcp2_addr(p.remote_addr), p.ecn,
-                          p.data, p.gso_size);
-  if (!rest.empty()) {
-    p.data = rest;
+    auto rest = send_packet(ep, path.remote, pkt.pi.ecn, data, data.size());
+    if (!rest.empty()) {
+      start_wev_endpoint(ep);
 
-    start_wev_endpoint(*p.endpoint);
+      return;
+    }
 
-    return;
+    ngtcp2_conn_release_tx_pkt(conn_, &pkt);
+    tx_.blocked_pkts.pop_front();
   }
 
   tx_.send_blocked = false;
+}
+
+void Client::release_blocked_tx_pkts() {
+  while (!tx_.blocked_pkts.empty()) {
+    auto &pkt = tx_.blocked_pkts.front();
+    ngtcp2_conn_release_tx_pkt(conn_, &pkt);
+    tx_.blocked_pkts.pop_front();
+  }
 }
 
 std::expected<void, Error> Client::handle_error() {
@@ -1646,23 +1662,12 @@ std::expected<void, Error> Client::handle_error() {
     return {};
   }
 
-  std::array<uint8_t, NGTCP2_MAX_UDP_PAYLOAD_SIZE> buf;
-  ngtcp2_buf pkt;
+  ngtcp2_tx_pkt pkt;
 
-  ngtcp2_path_storage ps;
-
-  ngtcp2_path_storage_zero(&ps);
-
-  ngtcp2_pkt_info pi;
-
-  ngtcp2_buf_init(&pkt, buf.data(), buf.size(), NGTCP2_BUF_ORIGIN_APPLICATION,
-                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_PACKET_TX, nullptr,
-                  nullptr, nullptr);
-
-  auto nwrite = ngtcp2_conn_write_connection_close(
-    conn_, &ps.path, &pi, &pkt, &last_error_, util::timestamp());
+  auto nwrite = ngtcp2_conn_next_tx_connection_close_pkt(
+    conn_, &pkt, &last_error_, util::timestamp());
   if (nwrite < 0) {
-    std::println(stderr, "ngtcp2_conn_write_connection_close: {}",
+    std::println(stderr, "ngtcp2_conn_next_tx_connection_close_pkt: {}",
                  ngtcp2_strerror(static_cast<int>(nwrite)));
     return std::unexpected{Error::QUIC};
   }
@@ -1671,9 +1676,7 @@ std::expected<void, Error> Client::handle_error() {
     return {};
   }
 
-  return send_packet(*static_cast<Endpoint *>(ps.path.user_data),
-                     ps.path.remote, pi.ecn,
-                     {buf.data(), static_cast<size_t>(nwrite)});
+  return send_tx_pkt_or_blocked(pkt);
 }
 
 std::expected<void, Error> Client::on_stream_close(int64_t stream_id,

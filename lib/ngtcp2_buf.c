@@ -25,6 +25,10 @@
 #include "ngtcp2_buf.h"
 #include "ngtcp2_mem.h"
 
+static int buf_role_bad(ngtcp2_buf_role role) {
+  return role > NGTCP2_BUF_ROLE_TX_DATAGRAM;
+}
+
 static int buf_bad_range(const ngtcp2_buf *buf) {
   if (buf == NULL || buf->begin == NULL || buf->end == NULL ||
       buf->pos == NULL || buf->last == NULL) {
@@ -36,8 +40,7 @@ static int buf_bad_range(const ngtcp2_buf *buf) {
 }
 
 void ngtcp2_buf_init(ngtcp2_buf *buf, uint8_t *begin, size_t len,
-                     ngtcp2_buf_origin origin, ngtcp2_buf_dir dir,
-                     ngtcp2_buf_purpose purpose, void *owner,
+                     void *origin, ngtcp2_buf_role role, void *owner,
                      ngtcp2_buf_retain retain, ngtcp2_buf_release release) {
   *buf = (ngtcp2_buf){
     .begin = begin,
@@ -45,8 +48,7 @@ void ngtcp2_buf_init(ngtcp2_buf *buf, uint8_t *begin, size_t len,
     .pos = begin,
     .last = begin,
     .origin = origin,
-    .dir = dir,
-    .purpose = purpose,
+    .role = role,
     .owner = owner,
     .retain = retain,
     .release = release,
@@ -54,17 +56,15 @@ void ngtcp2_buf_init(ngtcp2_buf *buf, uint8_t *begin, size_t len,
 }
 
 void ngtcp2_buf_init_internal(ngtcp2_buf *buf, uint8_t *begin, size_t len) {
-  ngtcp2_buf_init(buf, begin, len, NGTCP2_BUF_ORIGIN_LIBRARY,
-                  NGTCP2_BUF_DIR_INTERNAL, NGTCP2_BUF_PURPOSE_SCRATCH, NULL,
-                  NULL, NULL);
+  ngtcp2_buf_init(buf, begin, len, NULL, NGTCP2_BUF_ROLE_INTERNAL, NULL, NULL,
+                  NULL);
 }
 
-int ngtcp2_buf_validate(const ngtcp2_buf *buf, ngtcp2_buf_dir dir,
-                        ngtcp2_buf_purpose purpose) {
-  if (buf_bad_range(buf) || buf->origin > NGTCP2_BUF_ORIGIN_EXTERNAL ||
-      buf->dir > NGTCP2_BUF_DIR_TX ||
-      buf->purpose > NGTCP2_BUF_PURPOSE_REORDER_RX || buf->dir != dir ||
-      buf->purpose != purpose) {
+int ngtcp2_buf_validate(const ngtcp2_buf *buf, ngtcp2_buf_role role) {
+  if (buf_bad_range(buf) || buf_role_bad(role) || buf_role_bad(buf->role) ||
+      buf->role != role ||
+      ((buf->owner != NULL || buf->retain != NULL || buf->release != NULL) &&
+       !(buf->owner != NULL && buf->retain != NULL && buf->release != NULL))) {
     return NGTCP2_ERR_BUF_CONTRACT;
   }
 
@@ -72,8 +72,8 @@ int ngtcp2_buf_validate(const ngtcp2_buf *buf, ngtcp2_buf_dir dir,
 }
 
 int ngtcp2_buf_retain_owner(const ngtcp2_buf *buf) {
-  if (buf == NULL || buf->origin == NGTCP2_BUF_ORIGIN_BORROWED ||
-      buf->owner == NULL || buf->retain == NULL || buf->release == NULL) {
+  if (buf == NULL || buf->owner == NULL || buf->retain == NULL ||
+      buf->release == NULL) {
     return NGTCP2_ERR_BUF_CONTRACT;
   }
 
@@ -97,22 +97,21 @@ void ngtcp2_buf_release_owner(ngtcp2_buf *buf) {
 }
 
 int ngtcp2_buf_slice(ngtcp2_buf *dest, const ngtcp2_buf *src, size_t off,
-                     size_t len, ngtcp2_buf_purpose purpose) {
+                     size_t len, ngtcp2_buf_role role) {
   ngtcp2_buf buf;
   int rv;
 
   if (dest == NULL || buf_bad_range(src) || off > ngtcp2_buf_len(src) ||
-      len > ngtcp2_buf_len(src) - off) {
+      len > ngtcp2_buf_len(src) - off || buf_role_bad(role)) {
     return NGTCP2_ERR_BUF_CONTRACT;
   }
 
   buf = *src;
   buf.pos = src->pos + off;
   buf.last = buf.pos + len;
-  buf.purpose = purpose;
+  buf.role = role;
 
-  if (src->origin != NGTCP2_BUF_ORIGIN_LIBRARY || src->owner ||
-      src->retain || src->release) {
+  if (src->owner || src->retain || src->release) {
     rv = ngtcp2_buf_retain_owner(src);
     if (rv != 0) {
       return rv;

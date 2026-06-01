@@ -757,47 +757,32 @@ NGTCP2_EXTERN ngtcp2_ssize ngtcp2_crypto_verify_regular_token2(
 /**
  * @function
  *
- * `ngtcp2_crypto_write_connection_close` writes Initial packet
- * containing CONNECTION_CLOSE with the given |error_code| and the
- * optional |reason| of length |reasonlen| to |dest|.  |dest| must be
- * an application-origin, mutable, contiguous packet TX buffer.  This
- * function is designed for server to close connection without
- * committing the state when validating Retry token fails.  This
- * function must not be used by client.  The |dcid| must be the Source
- * Connection ID in Initial packet from client.  The |scid| must be
- * the Destination Connection ID in Initial packet from client.
- * |scid| is used to derive initial keying materials.
- *
- * This function wraps around `ngtcp2_pkt_write_connection_close` for
- * easier use.
- *
- * This function returns 0 if it succeeds, or -1.
+ * `ngtcp2_crypto_next_tx_connection_close_pkt` creates an Initial
+ * CONNECTION_CLOSE packet handoff in a zngtcp2-owned
+ * :enum:`NGTCP2_BUF_ROLE_TX_PACKET` buffer allocated by |allocator|.  This
+ * function is designed for a server to close without committing connection
+ * state when validating a Retry token fails.
  */
-NGTCP2_EXTERN ngtcp2_ssize ngtcp2_crypto_write_connection_close(
-  ngtcp2_buf *dest, uint32_t version, const ngtcp2_cid *dcid,
-  const ngtcp2_cid *scid, uint64_t error_code, const uint8_t *reason,
-  size_t reasonlen);
+NGTCP2_EXTERN ngtcp2_ssize
+ngtcp2_crypto_next_tx_connection_close_pkt_versioned(
+  ngtcp2_tx_pkt *out, int tx_pkt_version, ngtcp2_buf_allocator *allocator,
+  size_t pkt_cap, const ngtcp2_path *path, const ngtcp2_pkt_info *pi,
+  uint32_t version, const ngtcp2_cid *dcid, const ngtcp2_cid *scid,
+  uint64_t error_code, const uint8_t *reason, size_t reasonlen);
 
 /**
  * @function
  *
- * `ngtcp2_crypto_write_retry` writes Retry packet to |dest|.  |dest|
- * must be an application-origin, mutable, contiguous packet TX
- * buffer.  |dcid| is the Connection ID which appeared in a packet as
- * a Source Connection ID sent by client.  |scid| is a server chosen
- * Source Connection ID.  |odcid| specifies Original Destination
- * Connection ID which appeared in a packet as a Destination
- * Connection ID sent by client.  |token| specifies Retry Token, and
- * |tokenlen| specifies its length.
- *
- * This function wraps around `ngtcp2_pkt_write_retry` for easier use.
- *
- * This function returns 0 if it succeeds, or -1.
+ * `ngtcp2_crypto_next_tx_retry_pkt` creates a Retry packet handoff in a
+ * zngtcp2-owned :enum:`NGTCP2_BUF_ROLE_TX_PACKET` buffer allocated by
+ * |allocator|.  The application sends :member:`ngtcp2_tx_pkt.pkt` and releases
+ * |out| with `ngtcp2_tx_pkt_release`.
  */
-NGTCP2_EXTERN ngtcp2_ssize ngtcp2_crypto_write_retry(
-  ngtcp2_buf *dest, uint32_t version, const ngtcp2_cid *dcid,
-  const ngtcp2_cid *scid, const ngtcp2_cid *odcid, const uint8_t *token,
-  size_t tokenlen);
+NGTCP2_EXTERN ngtcp2_ssize ngtcp2_crypto_next_tx_retry_pkt_versioned(
+  ngtcp2_tx_pkt *out, int tx_pkt_version, ngtcp2_buf_allocator *allocator,
+  size_t pkt_cap, const ngtcp2_path *path, const ngtcp2_pkt_info *pi,
+  uint32_t version, const ngtcp2_cid *dcid, const ngtcp2_cid *scid,
+  const ngtcp2_cid *odcid, const uint8_t *token, size_t tokenlen);
 
 /**
  * @function
@@ -924,6 +909,20 @@ typedef struct ngtcp2_crypto_conn_ref {
    */
   void *user_data;
 } ngtcp2_crypto_conn_ref;
+
+#define ngtcp2_crypto_next_tx_connection_close_pkt(                            \
+  OUT, ALLOCATOR, PKT_CAP, PATH, PI, VERSION, DCID, SCID, ERROR_CODE, REASON, \
+  REASONLEN)                                                                  \
+  ngtcp2_crypto_next_tx_connection_close_pkt_versioned(                        \
+    (OUT), NGTCP2_TX_PKT_VERSION, (ALLOCATOR), (PKT_CAP), (PATH), (PI),        \
+    (VERSION), (DCID), (SCID), (ERROR_CODE), (REASON), (REASONLEN))
+
+#define ngtcp2_crypto_next_tx_retry_pkt(OUT, ALLOCATOR, PKT_CAP, PATH, PI,     \
+                                        VERSION, DCID, SCID, ODCID, TOKEN,     \
+                                        TOKENLEN)                              \
+  ngtcp2_crypto_next_tx_retry_pkt_versioned(                                   \
+    (OUT), NGTCP2_TX_PKT_VERSION, (ALLOCATOR), (PKT_CAP), (PATH), (PI),        \
+    (VERSION), (DCID), (SCID), (ODCID), (TOKEN), (TOKENLEN))
 
 #ifdef __cplusplus
 }

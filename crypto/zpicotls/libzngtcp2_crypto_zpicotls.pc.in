@@ -31,4 +31,4 @@ URL: https://github.com/zngtcp2/ngtcp2
 Version: @VERSION@
 Libs: -L${libdir} -lzngtcp2_crypto_zpicotls
 Cflags: -I${includedir}
-Requires.private: libzngtcp2, zpicotls, openssl
+Requires.private: libzngtcp2, zpicotls-openssl

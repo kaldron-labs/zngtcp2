@@ -59,8 +59,8 @@ static void reorder_release(ngtcp2_buf *buf, int allocator_owned,
 }
 
 static void init_reorder_buf(ngtcp2_buf *buf, uint8_t *data, size_t datalen) {
-  ngtcp2_buf_init(buf, data, datalen, NGTCP2_BUF_ORIGIN_APPLICATION,
-                  NGTCP2_BUF_DIR_RX, NGTCP2_BUF_PURPOSE_REORDER_RX, NULL, NULL,
+  ngtcp2_buf_init(buf, data, datalen, ((void *)(uintptr_t)1),
+                  NGTCP2_BUF_ROLE_RX_STREAM, NULL, NULL,
                   NULL);
   buf->last = buf->end;
 }

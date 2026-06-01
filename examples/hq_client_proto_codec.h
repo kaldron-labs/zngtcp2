@@ -75,8 +75,7 @@ public:
 
   std::expected<void, Error> submit_request(Stream *stream);
 
-  ngtcp2_ssize write_pkt(ngtcp2_path *path, ngtcp2_pkt_info *pi,
-                         ngtcp2_buf *dest, ngtcp2_tstamp ts);
+  std::expected<void, Error> submit_stream_data(ngtcp2_tstamp ts);
 
   std::expected<void, Error> setup_codec() { return {}; }
 

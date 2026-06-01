@@ -29,8 +29,8 @@
 #  include <config.h>
 #endif // defined(HAVE_CONFIG_H)
 
-#include <picotls.h>
-#include <picotls/openssl.h>
+#include <zpicotls.h>
+#include <zpicotls/openssl.h>
 
 #include "shared.h"
 

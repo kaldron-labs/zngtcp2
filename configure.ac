@@ -170,8 +170,12 @@ AM_CONDITIONAL([HAVE_OPENSSL], [ test "x${have_openssl}" = "xyes" ])
 # zpicotls is the only supported crypto provider for zngtcp2.
 have_zpicotls=no
 if test "x${ZPICOTLS_CFLAGS}" = "x" &&
-   test -d "${srcdir}/../zpicotls/include"; then
-  ZPICOTLS_CFLAGS="-I${srcdir}/../zpicotls/include"
+   test "x${ZPICOTLS_LIBS}" = "x"; then
+  PKG_CHECK_MODULES([ZPICOTLS], [zpicotls-openssl],
+                    [],
+                    [if test -d "${srcdir}/../zpicotls/include"; then
+                       ZPICOTLS_CFLAGS="-I${srcdir}/../zpicotls/include"
+                     fi])
 fi
 
 save_CFLAGS="$CFLAGS"
@@ -195,7 +199,7 @@ CFLAGS="$save_CFLAGS"
 LIBS="$save_LIBS"
 
 if test "x${have_zpicotls}" != "xyes"; then
-  AC_MSG_ERROR([zpicotls with QUIC buffer hooks was not found; set ZPICOTLS_CFLAGS and ZPICOTLS_LIBS])
+  AC_MSG_ERROR([zpicotls with QUIC buffer hooks was not found; install zpicotls-openssl.pc or set ZPICOTLS_CFLAGS and ZPICOTLS_LIBS])
 fi
 
 AM_CONDITIONAL([HAVE_ZPICOTLS], [ test "x${have_zpicotls}" = "xyes" ])

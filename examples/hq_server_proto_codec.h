@@ -70,8 +70,7 @@ public:
 
   std::expected<void, Error> on_app_tx_ready() { return {}; }
 
-  ngtcp2_ssize write_pkt(ngtcp2_path *path, ngtcp2_pkt_info *pi,
-                         ngtcp2_buf *dest, ngtcp2_tstamp ts);
+  std::expected<void, Error> submit_stream_data(ngtcp2_tstamp ts);
 
   std::expected<void, Error> recv_stream_data(uint32_t flags, int64_t stream_id,
                                               std::span<const uint8_t> data);

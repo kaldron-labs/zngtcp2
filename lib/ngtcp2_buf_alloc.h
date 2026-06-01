@@ -1,7 +1,7 @@
 /*
  * ngtcp2
  *
- * Copyright (c) 2023 ngtcp2 contributors
+ * Copyright (c) 2026 ngtcp2 contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files (the
@@ -22,15 +22,39 @@
  * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-#ifndef TLS_SHARED_PICOTLS_H
-#define TLS_SHARED_PICOTLS_H
+#ifndef NGTCP2_BUF_ALLOC_H
+#define NGTCP2_BUF_ALLOC_H
 
 #ifdef HAVE_CONFIG_H
 #  include <config.h>
-#endif // defined(HAVE_CONFIG_H)
+#endif /* defined(HAVE_CONFIG_H) */
 
-#include <zpicotls.h>
+#include "ngtcp2_buf.h"
+#include "ngtcp2_mem.h"
 
-extern ptls_log_event_t log_event;
+/*
+ * ngtcp2_buf_alloc calls |allocator| with deterministic role/allocation
+ * validation.
+ */
+int ngtcp2_buf_alloc(ngtcp2_buf_allocator *allocator, ngtcp2_buf *out,
+                     const ngtcp2_buf_alloc_info *info);
 
-#endif // !defined(TLS_SHARED_PICOTLS_H)
+/*
+ * ngtcp2_buf_grow grows |buf| through |allocator|.
+ */
+int ngtcp2_buf_grow(ngtcp2_buf_allocator *allocator, ngtcp2_buf *buf,
+                    size_t size, const ngtcp2_buf_alloc_info *info);
+
+/*
+ * ngtcp2_buf_alloc_release releases |buf| through |allocator|.
+ */
+void ngtcp2_buf_alloc_release(ngtcp2_buf_allocator *allocator, ngtcp2_buf *buf);
+
+/*
+ * ngtcp2_tx_pkt_alloc allocates a TX packet handoff buffer.
+ */
+int ngtcp2_tx_pkt_alloc(ngtcp2_tx_pkt *out, ngtcp2_buf_allocator *allocator,
+                        size_t pkt_cap, const ngtcp2_path *path,
+                        const ngtcp2_pkt_info *pi);
+
+#endif /* !defined(NGTCP2_BUF_ALLOC_H) */

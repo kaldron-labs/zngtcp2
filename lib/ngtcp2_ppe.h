@@ -35,12 +35,16 @@
 #include "ngtcp2_buf.h"
 #include "ngtcp2_crypto.h"
 
+#define NGTCP2_PPE_MAX_PLAINV 64
+
 /*
  * ngtcp2_ppe is the QUIC Packet Encoder.
  */
 typedef struct ngtcp2_ppe {
   /* buf is the buffer where a QUIC packet is written. */
   ngtcp2_buf buf;
+  /* plain stores generated plaintext frame bytes before packet protection. */
+  ngtcp2_buf plain;
   /* cc is the encryption context that includes callback functions to
      encrypt a QUIC packet, and AEAD cipher, etc. */
   ngtcp2_crypto_cc *cc;
@@ -49,6 +53,11 @@ typedef struct ngtcp2_ppe {
   size_t dgram_offset;
   /* hdlen is the number of bytes for packet header written in buf. */
   size_t hdlen;
+  /* payloadlen is the total plaintext payload length, including external
+     vector entries. */
+  size_t payloadlen;
+  size_t plainv_offset;
+  size_t plainvcnt;
   /* len_offset is the offset to Length field. */
   size_t len_offset;
   /* pkt_num_offset is the offset to packet number field. */
@@ -61,6 +70,8 @@ typedef struct ngtcp2_ppe {
   /* nonce is the buffer to store nonce.  It should be equal or longer
      than the length of IV. */
   uint8_t nonce[32];
+  ngtcp2_crypto_vec plainv[NGTCP2_PPE_MAX_PLAINV];
+  uint8_t plain_storage[NGTCP2_MAX_TX_UDP_PAYLOAD_SIZE];
 } ngtcp2_ppe;
 
 /*

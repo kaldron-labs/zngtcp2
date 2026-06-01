@@ -813,7 +813,7 @@ typedef struct NGTCP2_ALIGN(8) ngtcp2_pkt_info {
  * @macro
  *
  * :macro:`NGTCP2_ERR_BUF_CONTRACT` indicates a local zngtcp2 buffer,
- * allocator, or in-place crypto contract failure.
+ * allocator, or source-to-destination crypto contract failure.
  */
 #define NGTCP2_ERR_BUF_CONTRACT -503
 
@@ -1128,47 +1128,22 @@ typedef struct ngtcp2_vec {
 /**
  * @enum
  *
- * :type:`ngtcp2_buf_origin` identifies who owns the bytes referenced by
- * :type:`ngtcp2_buf`.
+ * :type:`ngtcp2_buf_role` identifies the semantic role of
+ * :type:`ngtcp2_buf`.  :member:`ngtcp2_buf.origin` is ``NULL`` for
+ * library/internal storage.  Non-``NULL`` values are opaque application or
+ * allocator identities and are compared only by pointer value.
  */
-typedef enum ngtcp2_buf_origin {
-  NGTCP2_BUF_ORIGIN_LIBRARY,
-  NGTCP2_BUF_ORIGIN_APPLICATION,
-  NGTCP2_BUF_ORIGIN_BORROWED,
-  NGTCP2_BUF_ORIGIN_EXTERNAL
-} ngtcp2_buf_origin;
-
-/**
- * @enum
- *
- * :type:`ngtcp2_buf_dir` identifies the data-path direction of
- * :type:`ngtcp2_buf`.
- */
-typedef enum ngtcp2_buf_dir {
-  NGTCP2_BUF_DIR_INTERNAL,
-  NGTCP2_BUF_DIR_RX,
-  NGTCP2_BUF_DIR_TX
-} ngtcp2_buf_dir;
-
-/**
- * @enum
- *
- * :type:`ngtcp2_buf_purpose` classifies the semantic use of
- * :type:`ngtcp2_buf`.
- */
-typedef enum ngtcp2_buf_purpose {
-  NGTCP2_BUF_PURPOSE_METADATA,
-  NGTCP2_BUF_PURPOSE_SCRATCH,
-  NGTCP2_BUF_PURPOSE_PACKET_RX,
-  NGTCP2_BUF_PURPOSE_PACKET_TX,
-  NGTCP2_BUF_PURPOSE_PAYLOAD_RX,
-  NGTCP2_BUF_PURPOSE_PAYLOAD_TX,
-  NGTCP2_BUF_PURPOSE_STREAM_RX,
-  NGTCP2_BUF_PURPOSE_STREAM_TX,
-  NGTCP2_BUF_PURPOSE_CRYPTO_RX,
-  NGTCP2_BUF_PURPOSE_CRYPTO_TX,
-  NGTCP2_BUF_PURPOSE_REORDER_RX
-} ngtcp2_buf_purpose;
+typedef enum ngtcp2_buf_role {
+  NGTCP2_BUF_ROLE_INTERNAL,
+  NGTCP2_BUF_ROLE_RX_PACKET,
+  NGTCP2_BUF_ROLE_RX_STREAM,
+  NGTCP2_BUF_ROLE_RX_CONTROL,
+  NGTCP2_BUF_ROLE_RX_DATAGRAM,
+  NGTCP2_BUF_ROLE_TX_PACKET,
+  NGTCP2_BUF_ROLE_TX_STREAM,
+  NGTCP2_BUF_ROLE_TX_CONTROL,
+  NGTCP2_BUF_ROLE_TX_DATAGRAM
+} ngtcp2_buf_role;
 
 typedef int (*ngtcp2_buf_retain)(void *owner);
 typedef void (*ngtcp2_buf_release)(void *owner);
@@ -1197,17 +1172,14 @@ typedef struct ngtcp2_buf {
    */
   uint8_t *last;
   /**
-   * :member:`origin` identifies the owner class of the buffer bytes.
+   * :member:`origin` is ``NULL`` for library/internal storage.  Non-``NULL``
+   * values are opaque application or allocator identities.
    */
-  ngtcp2_buf_origin origin;
+  void *origin;
   /**
-   * :member:`dir` identifies the data-path direction.
+   * :member:`role` identifies the semantic data-path role.
    */
-  ngtcp2_buf_dir dir;
-  /**
-   * :member:`purpose` identifies the semantic data-path purpose.
-   */
-  ngtcp2_buf_purpose purpose;
+  ngtcp2_buf_role role;
   /**
    * :member:`owner` is passed to :member:`retain` and :member:`release`.
    */
@@ -1223,13 +1195,13 @@ typedef struct ngtcp2_buf {
 } ngtcp2_buf;
 
 NGTCP2_EXTERN void ngtcp2_buf_init(ngtcp2_buf *buf, uint8_t *begin, size_t len,
-                                   ngtcp2_buf_origin origin, ngtcp2_buf_dir dir,
-                                   ngtcp2_buf_purpose purpose, void *owner,
+                                   void *origin, ngtcp2_buf_role role,
+                                   void *owner,
                                    ngtcp2_buf_retain retain,
                                    ngtcp2_buf_release release);
 
-NGTCP2_EXTERN int ngtcp2_buf_validate(const ngtcp2_buf *buf, ngtcp2_buf_dir dir,
-                                      ngtcp2_buf_purpose purpose);
+NGTCP2_EXTERN int ngtcp2_buf_validate(const ngtcp2_buf *buf,
+                                      ngtcp2_buf_role role);
 
 NGTCP2_EXTERN int ngtcp2_buf_retain_owner(const ngtcp2_buf *buf);
 
@@ -1237,7 +1209,7 @@ NGTCP2_EXTERN void ngtcp2_buf_release_owner(ngtcp2_buf *buf);
 
 NGTCP2_EXTERN int ngtcp2_buf_slice(ngtcp2_buf *dest, const ngtcp2_buf *src,
                                    size_t off, size_t len,
-                                   ngtcp2_buf_purpose purpose);
+                                   ngtcp2_buf_role role);
 
 NGTCP2_EXTERN void ngtcp2_buf_move(ngtcp2_buf *dest, ngtcp2_buf *src);
 
@@ -1247,13 +1219,19 @@ NGTCP2_EXTERN size_t ngtcp2_buf_len(const ngtcp2_buf *buf);
 
 NGTCP2_EXTERN size_t ngtcp2_buf_cap(const ngtcp2_buf *buf);
 
+#define NGTCP2_BUF_ALLOC_FLAG_UNINITIALIZED 0x01u
+#define NGTCP2_BUF_ALLOC_FLAG_NON_TEMPORAL 0x02u
+#define NGTCP2_BUF_ALLOC_FLAG_RETAINABLE 0x04u
+#define NGTCP2_BUF_ALLOC_FLAG_PACKET_DST 0x08u
+
 typedef struct ngtcp2_buf_alloc_info {
-  ngtcp2_buf_dir dir;
-  ngtcp2_buf_purpose purpose;
-  ngtcp2_buf_origin preferred_origin;
+  ngtcp2_buf_role role;
+  void *origin;
   size_t size;
+  size_t headroom;
+  size_t tailroom;
   size_t align;
-  unsigned flags;
+  uint32_t flags;
 } ngtcp2_buf_alloc_info;
 
 typedef struct ngtcp2_buf_allocator {
@@ -1264,6 +1242,16 @@ typedef struct ngtcp2_buf_allocator {
               void *user_data);
   void (*release)(ngtcp2_buf *buf, void *user_data);
 } ngtcp2_buf_allocator;
+
+/**
+ * @function
+ *
+ * `ngtcp2_buf_allocator_default` initializes |dest| with the default
+ * zngtcp2 allocator backed by |mem|.  If |mem| is ``NULL``, use
+ * `ngtcp2_mem_default()`.
+ */
+NGTCP2_EXTERN void ngtcp2_buf_allocator_default(ngtcp2_buf_allocator *dest,
+                                                const ngtcp2_mem *mem);
 
 /**
  * @function
@@ -1888,10 +1876,14 @@ typedef struct ngtcp2_conn_buf_stats {
   uint64_t app_retain;
   uint64_t app_release;
   uint64_t library_buf_exposed;
-  uint64_t decrypt_inplace_success;
-  uint64_t decrypt_inplace_failure;
-  uint64_t encrypt_inplace_success;
-  uint64_t encrypt_inplace_failure;
+  uint64_t decrypt_source_to_dest_success;
+  uint64_t decrypt_source_to_dest_failure;
+  uint64_t encrypt_source_to_dest_success;
+  uint64_t encrypt_source_to_dest_failure;
+  uint64_t tx_pkt_handoff_alloc;
+  uint64_t tx_pkt_handoff_release;
+  uint64_t tx_pkt_handoff_reject;
+  uint64_t tx_pkt_handoff_outstanding;
   uint64_t allocator_reject;
   uint64_t buf_contract_failure;
 } ngtcp2_conn_buf_stats;
@@ -1909,6 +1901,7 @@ typedef struct ngtcp2_pkt_buf_ctx {
   ngtcp2_buf payload;
   ngtcp2_pkt_buf_copy_kind copy_kind;
   int first_stream_delivered;
+  int plaintext_allocated;
 } ngtcp2_pkt_buf_ctx;
 
 /**
@@ -2361,6 +2354,79 @@ typedef struct ngtcp2_path_storage {
   ngtcp2_sockaddr_union remote_addrbuf;
 } ngtcp2_path_storage;
 
+#define NGTCP2_TX_PKT_V1 1
+#define NGTCP2_TX_PKT_VERSION NGTCP2_TX_PKT_V1
+
+#define NGTCP2_TX_PKT_FLAG_NONE 0x00u
+#define NGTCP2_TX_PKT_FLAG_RELEASE_REQUIRED 0x01u
+
+#define NGTCP2_TX_PKTS_FLAG_NONE 0x00u
+
+/**
+ * @struct
+ *
+ * :type:`ngtcp2_tx_pkt` is a protected UDP packet handoff produced by
+ * zngtcp2.  The application sends :member:`pkt` bytes and then releases this
+ * object with `ngtcp2_conn_release_tx_pkt`.
+ */
+typedef struct ngtcp2_tx_pkt {
+  ngtcp2_buf pkt;
+  ngtcp2_path_storage path;
+  ngtcp2_pkt_info pi;
+  size_t gso_size;
+  uint32_t flags;
+} ngtcp2_tx_pkt;
+
+/**
+ * @function
+ *
+ * `ngtcp2_tx_pkt_release` releases a packet handoff allocated by a
+ * stateless packet helper.  Connection-owned packet handoffs must be released
+ * with `ngtcp2_conn_release_tx_pkt` instead so connection accounting is
+ * updated.
+ */
+NGTCP2_EXTERN void ngtcp2_tx_pkt_release(ngtcp2_buf_allocator *allocator,
+                                         ngtcp2_tx_pkt *pkt);
+
+#define NGTCP2_STREAM_BUF_V1 1
+#define NGTCP2_STREAM_BUF_VERSION NGTCP2_STREAM_BUF_V1
+
+#define NGTCP2_STREAM_BUF_FLAG_NONE 0x00u
+
+#define NGTCP2_DGRAM_BUF_V1 1
+#define NGTCP2_DGRAM_BUF_VERSION NGTCP2_DGRAM_BUF_V1
+
+#define NGTCP2_DGRAM_BUF_FLAG_NONE 0x00u
+#define NGTCP2_DGRAM_BUF_FLAG_PADDING 0x01u
+
+/**
+ * @struct
+ *
+ * :type:`ngtcp2_stream_buf` is a zngtcp2-issued, app-filled transmit stream
+ * buffer.  The application writes at most the available bytes in
+ * :member:`payload` and submits the filled prefix.
+ */
+typedef struct ngtcp2_stream_buf {
+  ngtcp2_buf payload;
+  int64_t stream_id;
+  uint32_t flags;
+  size_t submitted;
+} ngtcp2_stream_buf;
+
+/**
+ * @struct
+ *
+ * :type:`ngtcp2_dgram_buf` is a zngtcp2-issued, app-filled transmit DATAGRAM
+ * buffer.  Submitted DATAGRAM payload is retained only until packet
+ * protection succeeds.
+ */
+typedef struct ngtcp2_dgram_buf {
+  ngtcp2_buf payload;
+  uint64_t dgram_id;
+  uint32_t flags;
+  size_t submitted;
+} ngtcp2_dgram_buf;
+
 /**
  * @struct
  *
@@ -2391,6 +2457,16 @@ typedef struct ngtcp2_crypto_aead {
    * AEAD encryption needs on encryption.
    */
   size_t max_overhead;
+  /**
+   * :member:`non_temporal` is nonzero if the AEAD implementation requires
+   * non-temporal output storage constraints.
+   */
+  uint8_t non_temporal;
+  /**
+   * :member:`align_bits` is log2 of the required packet output alignment, or
+   * zero when no stricter alignment is required.
+   */
+  uint8_t align_bits;
 } ngtcp2_crypto_aead;
 
 /**
@@ -2442,24 +2518,39 @@ typedef struct ngtcp2_crypto_cipher_ctx {
 /**
  * @struct
  *
+ * :type:`ngtcp2_crypto_vec` references a plaintext range for packet
+ * protection.
+ */
+typedef struct ngtcp2_crypto_vec {
+  const uint8_t *base;
+  size_t len;
+  const ngtcp2_buf *source;
+} ngtcp2_crypto_vec;
+
+/**
+ * @struct
+ *
  * :type:`ngtcp2_crypto_ops` is the packet-protection operation table.
- * zngtcp2 packet data-path arguments are represented as :type:`ngtcp2_buf`:
- * packet buffers are mutated in place, AAD and nonce are read from buffer
- * ranges, and header-protection samples and masks use buffer ranges.
+ * Packet protection writes AEAD output to a destination packet buffer from one
+ * or more read-only plaintext vectors.  Packet unprotection writes plaintext
+ * to storage distinct from the source packet.
  */
 typedef struct ngtcp2_crypto_ops {
   uint32_t version;
-  int (*encrypt_pkt)(ngtcp2_buf *pkt, size_t payload_offset,
-                     size_t plaintextlen, const ngtcp2_crypto_aead *aead,
+  int (*protect_pkt)(ngtcp2_buf *dst_pkt, size_t dst_payload_offset,
+                     const ngtcp2_crypto_vec *plainv, size_t plainvcnt,
+                     const ngtcp2_crypto_aead *aead,
                      const ngtcp2_crypto_aead_ctx *aead_ctx,
                      const ngtcp2_buf *aad, const ngtcp2_buf *nonce,
                      const ngtcp2_crypto_cipher *hp,
                      const ngtcp2_crypto_cipher_ctx *hp_ctx,
                      size_t hp_sample_offset, ngtcp2_buf *hp_mask, void *ctx);
-  int (*decrypt_pkt)(ngtcp2_buf *pkt, size_t payload_offset,
-                     size_t ciphertextlen, const ngtcp2_crypto_aead *aead,
-                     const ngtcp2_crypto_aead_ctx *aead_ctx,
-                     const ngtcp2_buf *aad, const ngtcp2_buf *nonce, void *ctx);
+  int (*unprotect_pkt)(ngtcp2_buf *plain, const ngtcp2_buf *src_pkt,
+                       size_t src_payload_offset, size_t ciphertextlen,
+                       const ngtcp2_crypto_aead *aead,
+                       const ngtcp2_crypto_aead_ctx *aead_ctx,
+                       const ngtcp2_buf *aad, const ngtcp2_buf *nonce,
+                       void *ctx);
   int (*hp_mask)(ngtcp2_buf *dest, const ngtcp2_crypto_cipher *hp,
                  const ngtcp2_crypto_cipher_ctx *hp_ctx,
                  const ngtcp2_buf *sample, void *ctx);
@@ -2743,96 +2834,34 @@ NGTCP2_EXTERN ngtcp2_ssize ngtcp2_pkt_decode_hd_short(ngtcp2_pkt_hd *dest,
 /**
  * @function
  *
- * .. warning::
- *
- *   .. version-deprecated:: 1.22.0
- *     Use `ngtcp2_pkt_write_stateless_reset2` instead.
- *
- * `ngtcp2_pkt_write_stateless_reset` writes Stateless Reset packet in
- * |dest|.  |dest| must be an application-origin, mutable, contiguous
- * :enum:`NGTCP2_BUF_PURPOSE_PACKET_TX` buffer.
- * |stateless_reset_token| is a pointer to the Stateless Reset Token,
- * and its length must be :macro:`NGTCP2_STATELESS_RESET_TOKENLEN`
- * bytes long.  |rand| specifies the random octets preceding Stateless
- * Reset Token.  The length of |rand| is specified by |randlen| which
- * must be at least :macro:`NGTCP2_MIN_STATELESS_RESET_RANDLEN` bytes
- * long.
- *
- * If |randlen| is too long to write them all in the buffer, |rand| is
- * written to the buffer as much as possible, and is truncated.
- *
- * This function returns the number of bytes written to the buffer, or
- * one of the following negative error codes:
- *
- * :macro:`NGTCP2_ERR_NOBUF`
- *     Buffer is too small.
- * :macro:`NGTCP2_ERR_INVALID_ARGUMENT`
- *     |randlen| is strictly less than
- *     :macro:`NGTCP2_MIN_STATELESS_RESET_RANDLEN`.
- * :macro:`NGTCP2_ERR_BUF_CONTRACT`
- *     |dest| is not a valid packet TX buffer.
+ * `ngtcp2_pkt_next_tx_stateless_reset_pkt` creates a Stateless Reset packet
+ * handoff in a zngtcp2-owned :enum:`NGTCP2_BUF_ROLE_TX_PACKET` buffer allocated
+ * by |allocator|.  |pkt_cap| is the packet buffer capacity.  The application
+ * sends :member:`ngtcp2_tx_pkt.pkt` and releases |out| with
+ * `ngtcp2_tx_pkt_release`.
  */
-NGTCP2_EXTERN ngtcp2_ssize ngtcp2_pkt_write_stateless_reset(
-  ngtcp2_buf *dest, const uint8_t *stateless_reset_token, const uint8_t *rand,
+NGTCP2_EXTERN ngtcp2_ssize
+ngtcp2_pkt_next_tx_stateless_reset_pkt_versioned(
+  ngtcp2_tx_pkt *out, int tx_pkt_version, ngtcp2_buf_allocator *allocator,
+  size_t pkt_cap, const ngtcp2_path *path, const ngtcp2_pkt_info *pi,
+  const ngtcp2_stateless_reset_token *token, const uint8_t *rand,
   size_t randlen);
 
 /**
  * @function
  *
- * `ngtcp2_pkt_write_stateless_reset2` writes Stateless Reset packet
- * in |dest|.  |dest| must be an application-origin, mutable,
- * contiguous :enum:`NGTCP2_BUF_PURPOSE_PACKET_TX` buffer.  |token|
- * must store the Stateless Reset Token.  |rand| specifies the random
- * octets preceding Stateless Reset Token.  The length of |rand| is
- * specified by |randlen| which must be at least
- * :macro:`NGTCP2_MIN_STATELESS_RESET_RANDLEN` bytes long.
- *
- * If |randlen| is too long to write them all in the buffer, |rand| is
- * written to the buffer as much as possible, and is truncated.
- *
- * This function returns the number of bytes written to the buffer, or
- * one of the following negative error codes:
- *
- * :macro:`NGTCP2_ERR_NOBUF`
- *     Buffer is too small.
- * :macro:`NGTCP2_ERR_INVALID_ARGUMENT`
- *     |randlen| is strictly less than
- *     :macro:`NGTCP2_MIN_STATELESS_RESET_RANDLEN`.
- * :macro:`NGTCP2_ERR_BUF_CONTRACT`
- *     |dest| is not a valid packet TX buffer.
- *
- * .. version-added:: 1.22.0
+ * `ngtcp2_pkt_next_tx_version_negotiation_pkt` creates a Version Negotiation
+ * packet handoff in a zngtcp2-owned :enum:`NGTCP2_BUF_ROLE_TX_PACKET` buffer
+ * allocated by |allocator|.  |unused_random| should be generated randomly.
+ * |dcid| and |scid| are the source and destination Connection IDs from the
+ * triggering client packet, and |sv| contains the supported versions.
  */
-NGTCP2_EXTERN ngtcp2_ssize ngtcp2_pkt_write_stateless_reset2(
-  ngtcp2_buf *dest, const ngtcp2_stateless_reset_token *token,
-  const uint8_t *rand, size_t randlen);
-
-/**
- * @function
- *
- * `ngtcp2_pkt_write_version_negotiation` writes Version Negotiation
- * packet in |dest|.  |dest| must be an application-origin, mutable,
- * contiguous :enum:`NGTCP2_BUF_PURPOSE_PACKET_TX` buffer.
- * |unused_random| should be generated randomly.  |dcid| is a
- * Connection ID which appeared in a packet as a Source Connection ID
- * sent by client which caused version negotiation.  Similarly, |scid|
- * is a Connection ID which appeared in a packet as a Destination
- * Connection ID sent by client.  |sv| is a list of supported
- * versions, and |nsv| specifies the number of supported versions
- * included in |sv|.
- *
- * This function returns the number of bytes written to the buffer, or
- * one of the following negative error codes:
- *
- * :macro:`NGTCP2_ERR_NOBUF`
- *     Buffer is too small.
- * :macro:`NGTCP2_ERR_BUF_CONTRACT`
- *     |dest| is not a valid packet TX buffer.
- */
-NGTCP2_EXTERN ngtcp2_ssize ngtcp2_pkt_write_version_negotiation(
-  ngtcp2_buf *dest, uint8_t unused_random, const uint8_t *dcid,
-  size_t dcidlen, const uint8_t *scid, size_t scidlen, const uint32_t *sv,
-  size_t nsv);
+NGTCP2_EXTERN ngtcp2_ssize
+ngtcp2_pkt_next_tx_version_negotiation_pkt_versioned(
+  ngtcp2_tx_pkt *out, int tx_pkt_version, ngtcp2_buf_allocator *allocator,
+  size_t pkt_cap, const ngtcp2_path *path, const ngtcp2_pkt_info *pi,
+  uint8_t unused_random, const uint8_t *dcid, size_t dcidlen,
+  const uint8_t *scid, size_t scidlen, const uint32_t *sv, size_t nsv);
 
 /**
  * @struct
@@ -2840,6 +2869,8 @@ NGTCP2_EXTERN ngtcp2_ssize ngtcp2_pkt_write_version_negotiation(
  * :type:`ngtcp2_conn` represents a single QUIC connection.
  */
 typedef struct ngtcp2_conn ngtcp2_conn;
+
+typedef struct ngtcp2_ccerr ngtcp2_ccerr;
 
 /**
  * @functypedef
@@ -3461,8 +3492,8 @@ typedef void (*ngtcp2_delete_crypto_cipher_ctx)(
  * :type:`ngtcp2_recv_datagram` is invoked when DATAGRAM frame is
  * received.  |flags| is bitwise-OR of zero or more of
  * :macro:`NGTCP2_DATAGRAM_FLAG_* <NGTCP2_DATAGRAM_FLAG_NONE>`.
- * |data| is a borrowed :enum:`NGTCP2_BUF_DIR_RX` and
- * :enum:`NGTCP2_BUF_PURPOSE_PAYLOAD_RX` buffer.
+ * |data| is an :enum:`NGTCP2_BUF_ROLE_RX_DATAGRAM` buffer whose lifetime is
+ * bound to the callback unless the application retains its owner.
  *
  * If :macro:`NGTCP2_DATAGRAM_FLAG_0RTT` is set in |flags|, it
  * indicates that DATAGRAM frame was received in 0-RTT packet, and a
@@ -3931,76 +3962,6 @@ typedef struct ngtcp2_callbacks {
 /**
  * @function
  *
- * `ngtcp2_pkt_write_connection_close` writes Initial packet
- * containing CONNECTION_CLOSE frame with the given |error_code| and
- * the optional |reason| of length |reasonlen| to |dest|.  |dest| must
- * be an application-origin, mutable, contiguous
- * :enum:`NGTCP2_BUF_PURPOSE_PACKET_TX` buffer.  |ops| must provide buffer-based
- * packet encryption.  All encryption parameters are for Initial
- * packet encryption.  The packet number is always 0.
- *
- * The primary use case of this function is for server to send
- * CONNECTION_CLOSE frame in Initial packet to close connection
- * without committing any state when validating Retry token fails.
- *
- * This function returns the number of bytes written if it succeeds,
- * or one of the following negative error codes:
- *
- * :macro:`NGTCP2_ERR_NOBUF`
- *     Buffer is too small.
- * :macro:`NGTCP2_ERR_CALLBACK_FAILURE`
- *     Callback function failed.
- * :macro:`NGTCP2_ERR_BUF_CONTRACT`
- *     |dest| is not a valid packet TX buffer, or required buffer packet
- *     encryption operation is not provided.
- */
-NGTCP2_EXTERN ngtcp2_ssize ngtcp2_pkt_write_connection_close(
-  ngtcp2_buf *dest, uint32_t version, const ngtcp2_cid *dcid,
-  const ngtcp2_cid *scid, uint64_t error_code, const uint8_t *reason,
-  size_t reasonlen, const ngtcp2_crypto_aead *aead,
-  const ngtcp2_crypto_aead_ctx *aead_ctx, const uint8_t *iv,
-  const ngtcp2_crypto_ops *ops, void *ops_ctx, const ngtcp2_crypto_cipher *hp,
-  const ngtcp2_crypto_cipher_ctx *hp_ctx);
-
-/**
- * @function
- *
- * `ngtcp2_pkt_write_retry` writes Retry packet in |dest|.  |dest|
- * must be an application-origin, mutable, contiguous
- * :enum:`NGTCP2_BUF_PURPOSE_PACKET_TX` buffer.  |dcid| is the Connection ID
- * which appeared in a packet as a Source Connection ID sent by
- * client.  |scid| is a server chosen Source Connection ID.  |odcid|
- * specifies Original Destination Connection ID which appeared in a
- * packet as a Destination Connection ID sent by client.  |token|
- * specifies Retry Token, and |tokenlen| specifies its length.
- * |ops->encrypt_retry| is invoked to encrypt Retry integrity tag
- * using buffer based arguments, and |ops_ctx| is passed to it.
- * |aead| must be AEAD_AES_128_GCM.  |aead_ctx| must be initialized
- * with :macro:`NGTCP2_RETRY_KEY` as an encryption key.
- *
- * This function returns the number of bytes written to the buffer, or
- * one of the following negative error codes:
- *
- * :macro:`NGTCP2_ERR_NOBUF`
- *     Buffer is too small.
- * :macro:`NGTCP2_ERR_CALLBACK_FAILURE`
- *     Callback function failed.
- * :macro:`NGTCP2_ERR_BUF_CONTRACT`
- *     |dest| is not a valid packet TX buffer, |ops->encrypt_retry| is not
- *     set, or it violated the buffer contract.
- * :macro:`NGTCP2_ERR_INVALID_ARGUMENT`
- *     :member:`odcid->datalen <ngtcp2_cid.datalen>` is less than
- *     :macro:`NGTCP2_MIN_INITIAL_DCIDLEN`.
- */
-NGTCP2_EXTERN ngtcp2_ssize ngtcp2_pkt_write_retry(
-  ngtcp2_buf *dest, uint32_t version, const ngtcp2_cid *dcid,
-  const ngtcp2_cid *scid, const ngtcp2_cid *odcid, const uint8_t *token,
-  size_t tokenlen, const ngtcp2_crypto_ops *ops, void *ops_ctx,
-  const ngtcp2_crypto_aead *aead, const ngtcp2_crypto_aead_ctx *aead_ctx);
-
-/**
- * @function
- *
  * `ngtcp2_accept` is used by server implementation, and decides
  * whether packet |pkt| of length |pktlen| from client is acceptable
  * for the very first packet to a connection.
@@ -4112,7 +4073,7 @@ NGTCP2_EXTERN void ngtcp2_conn_del(ngtcp2_conn *conn);
  *
  * :macro:`NGTCP2_ERR_RETRY`
  *    Server must perform address validation by sending Retry packet
- *    (see `ngtcp2_crypto_write_retry` and `ngtcp2_pkt_write_retry`),
+ *    (see `ngtcp2_crypto_next_tx_retry_pkt`),
  *    and discard the connection state.  Client application does not
  *    get this error code.
  * :macro:`NGTCP2_ERR_DROP_CONN`
@@ -4124,16 +4085,13 @@ NGTCP2_EXTERN void ngtcp2_conn_del(ngtcp2_conn *conn);
  *    packet transmission is allowed.
  * :macro:`NGTCP2_ERR_CLOSING`
  *    A connection has entered the closing state, and no further
- *    packet transmission is allowed.  Calling
- *    `ngtcp2_conn_write_connection_close` makes a connection enter
- *    this state.
+ *    packet transmission is allowed except pending TX packet handoffs.
  * :macro:`NGTCP2_ERR_CRYPTO`
  *    An error happened in TLS stack.  `ngtcp2_conn_get_tls_alert2`
  *    returns TLS alert if set.
  *
- * If any other negative error is returned, call
- * `ngtcp2_conn_write_connection_close` to get terminal packet, and
- * sending it makes QUIC connection enter the closing state.
+ * If any other negative error is returned, close the connection and drain any
+ * pending TX packet handoffs.
  */
 NGTCP2_EXTERN int
 ngtcp2_conn_read_pkt_versioned(ngtcp2_conn *conn, const ngtcp2_path *path,
@@ -4143,13 +4101,45 @@ ngtcp2_conn_read_pkt_versioned(ngtcp2_conn *conn, const ngtcp2_path *path,
 /**
  * @function
  *
- * `ngtcp2_conn_write_pkt` writes a packet without submitting new
- * stream data.  |dest| must be an application-origin, mutable,
- * contiguous :enum:`NGTCP2_BUF_PURPOSE_PACKET_TX` buffer.
+ * `ngtcp2_conn_next_tx_pkt` produces one protected UDP packet in a
+ * zngtcp2-owned `TX_PACKET` buffer.  The application sends the returned packet
+ * bytes and must call `ngtcp2_conn_release_tx_pkt` when the handoff is no
+ * longer needed.
  */
-NGTCP2_EXTERN ngtcp2_ssize ngtcp2_conn_write_pkt_versioned(
-  ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
-  ngtcp2_pkt_info *pi, ngtcp2_buf *dest, ngtcp2_tstamp ts);
+NGTCP2_EXTERN ngtcp2_ssize ngtcp2_conn_next_tx_pkt_versioned(
+  ngtcp2_conn *conn, int tx_pkt_version, ngtcp2_tx_pkt *out,
+  ngtcp2_tstamp ts);
+
+/**
+ * @function
+ *
+ * `ngtcp2_conn_next_tx_pkts` produces up to |outcnt| protected UDP packet
+ * handoffs.  |pgso_size| is set to a nonzero UDP_SEGMENT size when the
+ * returned batch is GSO-compatible; otherwise it is set to 0.
+ */
+NGTCP2_EXTERN ngtcp2_ssize ngtcp2_conn_next_tx_pkts_versioned(
+  ngtcp2_conn *conn, int tx_pkt_version, ngtcp2_tx_pkt *out, size_t outcnt,
+  size_t *pgso_size, uint32_t flags, ngtcp2_tstamp ts);
+
+/**
+ * @function
+ *
+ * `ngtcp2_conn_next_tx_connection_close_pkt` produces a protected terminal
+ * CONNECTION_CLOSE packet in a zngtcp2-owned `TX_PACKET` handoff.
+ */
+NGTCP2_EXTERN ngtcp2_ssize
+ngtcp2_conn_next_tx_connection_close_pkt_versioned(
+  ngtcp2_conn *conn, int tx_pkt_version, ngtcp2_tx_pkt *out,
+  const ngtcp2_ccerr *ccerr, ngtcp2_tstamp ts);
+
+/**
+ * @function
+ *
+ * `ngtcp2_conn_release_tx_pkt` releases packet handoff ownership.  It does not
+ * roll back QUIC send state.
+ */
+NGTCP2_EXTERN void ngtcp2_conn_release_tx_pkt(ngtcp2_conn *conn,
+                                              ngtcp2_tx_pkt *pkt);
 
 /**
  * @function
@@ -4558,15 +4548,12 @@ NGTCP2_EXTERN ngtcp2_tstamp ngtcp2_conn_get_expiry2(const ngtcp2_conn *conn);
  *
  * If it returns :macro:`NGTCP2_ERR_IDLE_CLOSE`, it means that an idle
  * timer has fired for this particular connection.  In this case, drop
- * the connection without calling
- * `ngtcp2_conn_write_connection_close`.  If it returns any of the
- * other negative error codes, close the connection by sending the
- * terminal packet produced by `ngtcp2_conn_write_connection_close`.
- * Otherwise, schedule `ngtcp2_conn_write_stream` or
- * `ngtcp2_conn_write_pkt` call.  An
+ * the connection.  If it returns any of the other negative error codes, close
+ * the connection and drain any pending TX packet handoffs.  Otherwise, submit
+ * application payload buffers as needed and pull TX packet handoffs.  An
  * application may call any number of additional
  * `ngtcp2_conn_read_pkt` and `ngtcp2_conn_handle_expiry` before
- * writing a packet.  After writing a packet, new expiry is set.  The
+ * pulling a packet.  After sending a packet, new expiry is set.  The
  * application should call `ngtcp2_conn_get_expiry2` to get a new
  * deadline and set the timer.
  */
@@ -5027,20 +5014,60 @@ NGTCP2_EXTERN int ngtcp2_conn_shutdown_stream_read(ngtcp2_conn *conn,
 /**
  * @function
  *
- * `ngtcp2_conn_write_stream` writes a packet into |dest| and may
- * encode stream data from |data| for |stream_id|.  |dest| must be an
- * application-origin, mutable, contiguous
- * :enum:`NGTCP2_BUF_PURPOSE_PACKET_TX` buffer.  If |data| is not
- * ``NULL``, it must be an application-origin
- * :enum:`NGTCP2_BUF_PURPOSE_STREAM_TX` buffer.  Non-empty |data| must
- * have retain/release owner callbacks; the library retains the
- * consumed range until ACK, retransmission cleanup, stream teardown, or
- * connection deletion.
+ * `ngtcp2_conn_alloc_stream_buf` allocates an uninitialized `TX_STREAM`
+ * payload buffer for |stream_id|.  The returned buffer must be submitted or
+ * cancelled.
  */
-NGTCP2_EXTERN ngtcp2_ssize ngtcp2_conn_write_stream_versioned(
-  ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
-  ngtcp2_pkt_info *pi, ngtcp2_buf *dest, ngtcp2_ssize *pdatalen, uint32_t flags,
-  int64_t stream_id, const ngtcp2_buf *data, ngtcp2_tstamp ts);
+NGTCP2_EXTERN int ngtcp2_conn_alloc_stream_buf_versioned(
+  ngtcp2_conn *conn, int stream_buf_version, ngtcp2_stream_buf *out,
+  int64_t stream_id, size_t payload_cap, uint32_t flags, ngtcp2_tstamp ts);
+
+/**
+ * @function
+ *
+ * `ngtcp2_conn_submit_stream_buf` submits the filled prefix of |buf| and
+ * transfers custody of accepted bytes to zngtcp2.
+ */
+NGTCP2_EXTERN ngtcp2_ssize ngtcp2_conn_submit_stream_buf_versioned(
+  ngtcp2_conn *conn, int stream_buf_version, ngtcp2_stream_buf *buf,
+  size_t datalen, uint32_t flags, ngtcp2_tstamp ts);
+
+/**
+ * @function
+ *
+ * `ngtcp2_conn_cancel_stream_buf` releases an unsubmitted stream buffer or any
+ * unsubmitted suffix left after partial submission.
+ */
+NGTCP2_EXTERN void ngtcp2_conn_cancel_stream_buf(ngtcp2_conn *conn,
+                                                 ngtcp2_stream_buf *buf);
+
+/**
+ * @function
+ *
+ * `ngtcp2_conn_alloc_dgram_buf` allocates an uninitialized `TX_DATAGRAM`
+ * payload buffer.  The returned buffer must be submitted or cancelled.
+ */
+NGTCP2_EXTERN int ngtcp2_conn_alloc_dgram_buf_versioned(
+  ngtcp2_conn *conn, int dgram_buf_version, ngtcp2_dgram_buf *out,
+  size_t payload_cap, uint32_t flags, ngtcp2_tstamp ts);
+
+/**
+ * @function
+ *
+ * `ngtcp2_conn_submit_dgram_buf` submits a filled DATAGRAM payload.  The
+ * accepted payload is sent by later `ngtcp2_conn_next_tx_pkt` calls.
+ */
+NGTCP2_EXTERN ngtcp2_ssize ngtcp2_conn_submit_dgram_buf_versioned(
+  ngtcp2_conn *conn, int dgram_buf_version, ngtcp2_dgram_buf *buf,
+  size_t datalen, uint32_t flags, uint64_t dgram_id, ngtcp2_tstamp ts);
+
+/**
+ * @function
+ *
+ * `ngtcp2_conn_cancel_dgram_buf` releases an unsubmitted DATAGRAM buffer.
+ */
+NGTCP2_EXTERN void ngtcp2_conn_cancel_dgram_buf(ngtcp2_conn *conn,
+                                                ngtcp2_dgram_buf *buf);
 
 /**
  * @function
@@ -5525,7 +5552,7 @@ ngtcp2_conn_record_zpicotls_crypto_staging_copy(ngtcp2_conn *conn);
  *
  * `ngtcp2_conn_submit_crypto_data` submits crypto data |data| to the
  * library for transmission.  |data| must be a
- * :enum:`NGTCP2_BUF_PURPOSE_CRYPTO_TX` buffer.
+ * :enum:`NGTCP2_BUF_ROLE_TX_CONTROL` buffer.
  * |encryption_level| specifies the encryption level of data.
  *
  * If |data| is non-borrowed and has retain/release owner callbacks, the
@@ -6199,73 +6226,6 @@ NGTCP2_EXTERN void ngtcp2_ccerr_set_application_error(ngtcp2_ccerr *ccerr,
 /**
  * @function
  *
- * `ngtcp2_conn_write_connection_close` writes a packet which contains
- * CONNECTION_CLOSE frame(s) (type 0x1C or 0x1D) in |dest|.  |dest|
- * must be an application-origin, mutable, contiguous
- * :enum:`NGTCP2_BUF_PURPOSE_PACKET_TX` buffer.
- *
- * For client, the writable capacity of |dest| should be at least
- * :macro:`NGTCP2_MAX_UDP_PAYLOAD_SIZE`.
- *
- * If |path| is not ``NULL``, this function stores the network path
- * with which the packet should be sent.  Each addr field must point
- * to the buffer which should be at least
- * sizeof(:type:`ngtcp2_sockaddr_union`) bytes long.  The assignment
- * might not be done if nothing is written to |dest|.
- *
- * If |pi| is not ``NULL``, this function stores packet metadata in it
- * if it succeeds.  The metadata includes ECN markings.
- *
- * If :member:`ccerr->type <ngtcp2_ccerr.type>` ==
- * :enum:`ngtcp2_ccerr_type.NGTCP2_CCERR_TYPE_TRANSPORT`, this
- * function sends CONNECTION_CLOSE (type 0x1C) frame.  If
- * :member:`ccerr->type <ngtcp2_ccerr.type>` ==
- * :enum:`ngtcp2_ccerr_type.NGTCP2_CCERR_TYPE_APPLICATION`, it sends
- * CONNECTION_CLOSE (type 0x1D) frame.  Otherwise, it does not produce
- * any data, and returns 0.
- *
- * The available writable capacity could be shortened by some factors
- * (e.g., server side
- * amplification limit).  This function returns
- * :macro:`NGTCP2_ERR_NOBUF` if the resulting buffer is too small even
- * if the given buffer has enough space.  This can happen if sending a
- * packet would exceed a transmission limit (e.g., for amplification
- * attack protection).
- *
- * This function must not be called from inside the callback
- * functions.
- *
- * At the moment, successful call to this function makes connection
- * close.  We may change this behaviour in the future to allow
- * graceful shutdown.
- *
- * This function returns the number of bytes written in |dest| if it
- * succeeds, or one of the following negative error codes:
- *
- * :macro:`NGTCP2_ERR_NOMEM`
- *     Out of memory
- * :macro:`NGTCP2_ERR_NOBUF`
- *     Buffer is too small or packet would exceed the transmission
- *     limit (e.g., for amplification attack protection).
- * :macro:`NGTCP2_ERR_INVALID_STATE`
- *     The current state does not allow sending CONNECTION_CLOSE
- *     frame.
- * :macro:`NGTCP2_ERR_PKT_NUM_EXHAUSTED`
- *     Packet number is exhausted, and cannot send any more packet.
- * :macro:`NGTCP2_ERR_CALLBACK_FAILURE`
- *     User callback failed
- * :macro:`NGTCP2_ERR_BUF_CONTRACT`
- *     |dest| is not a valid packet TX buffer or required packet crypto
- *     operations are not installed.
- */
-NGTCP2_EXTERN ngtcp2_ssize ngtcp2_conn_write_connection_close_versioned(
-  ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
-  ngtcp2_pkt_info *pi, ngtcp2_buf *dest, const ngtcp2_ccerr *ccerr,
-  ngtcp2_tstamp ts);
-
-/**
- * @function
- *
  * .. warning::
  *
  *   .. version-deprecated:: 1.23.0
@@ -6426,11 +6386,8 @@ NGTCP2_EXTERN void *ngtcp2_conn_get_stream_user_data2(const ngtcp2_conn *conn,
  * @function
  *
  * `ngtcp2_conn_update_pkt_tx_time` sets the time instant of the next
- * packet transmission to pace packets.  This function must be called
- * after writing packets with `ngtcp2_conn_write_stream` or
- * `ngtcp2_conn_write_pkt`.  If packet aggregation (e.g., packet
- * batching, GSO) is used, call this function after all aggregated
- * datagrams are sent.
+ * packet transmission to pace packets.  Call this function after sending
+ * packet handoffs, including batches.
  */
 NGTCP2_EXTERN void ngtcp2_conn_update_pkt_tx_time(ngtcp2_conn *conn,
                                                   ngtcp2_tstamp ts);
@@ -6488,113 +6445,6 @@ NGTCP2_EXTERN size_t ngtcp2_conn_get_stream_loss_count(ngtcp2_conn *conn,
  */
 NGTCP2_EXTERN size_t ngtcp2_conn_get_stream_loss_count2(const ngtcp2_conn *conn,
                                                         int64_t stream_id);
-
-/**
- * @functypedef
- *
- * :type:`ngtcp2_write_pkt` is a callback function to write a single
- * packet in |dest|.  |dest| is an application-origin, mutable,
- * contiguous :enum:`NGTCP2_BUF_PURPOSE_PACKET_TX` buffer.  The
- * implementation should use `ngtcp2_conn_write_stream` or another
- * packet-writing function to write the packet.  |path|, |pi|,
- * |dest|, and |ts| should be directly passed to buffer-based
- * functions.  If the callback succeeds, it should return the number of
- * bytes written to the buffer.  In general, this callback function
- * should return the value that the above mentioned functions returned
- * except for the following error codes:
- *
- * - :macro:`NGTCP2_ERR_STREAM_DATA_BLOCKED`
- * - :macro:`NGTCP2_ERR_STREAM_SHUT_WR`
- * - :macro:`NGTCP2_ERR_STREAM_NOT_FOUND`
- *
- * Those error codes should be handled by an application.  If any
- * error occurred outside those functions, return
- * :macro:`NGTCP2_ERR_CALLBACK_FAILURE`.  If no packet is produced,
- * return 0.
- *
- * Because GSO requires that the aggregated packets have the same
- * length, :macro:`NGTCP2_WRITE_STREAM_FLAG_PADDING` is recommended
- * when writing stream packets.
- *
- * .. version-added:: 1.15.0
- */
-typedef ngtcp2_ssize (*ngtcp2_write_pkt)(ngtcp2_conn *conn, ngtcp2_path *path,
-                                         ngtcp2_pkt_info *pi, ngtcp2_buf *dest,
-                                         ngtcp2_tstamp ts, void *user_data);
-
-/**
- * @function
- *
- * `ngtcp2_conn_write_aggregate_pkt` is a helper function to write
- * multiple packets in the provided buffer, which is suitable to be
- * sent at once in GSO.  This function returns the number of bytes
- * written to the writable region of |buf|, which spans |buf->pos| to
- * |buf->end|.  That writable region must be at least
- * `ngtcp2_conn_get_path_max_tx_udp_payload_size2(conn)
- * <ngtcp2_conn_get_path_max_tx_udp_payload_size2>` bytes long.  It is
- * recommended to pass the buffer at least
- * `ngtcp2_conn_get_max_tx_udp_payload_size2(conn)
- * <ngtcp2_conn_get_max_tx_udp_payload_size2>` bytes in order to send
- * a PMTUD packet.  This function only writes multiple packets if the
- * first packet is
- * `ngtcp2_conn_get_path_max_tx_udp_payload_size2(conn)
- * <ngtcp2_conn_get_path_max_tx_udp_payload_size2>` bytes long.  The
- * application can adjust the length of the buffer to limit the number
- * of packets to aggregate (or use `ngtcp2_conn_write_aggregate_pkt2`
- * to control the number of packets to write directly).  If this
- * function returns positive integer, all packets share the same
- * :type:`ngtcp2_path` and :type:`ngtcp2_pkt_info` values, and they
- * are assigned to the objects pointed by |path| and |pi|
- * respectively.  The length of all packets other than the last packet
- * is assigned to |*pgsolen|.  The length of last packet is equal to
- * or less than |*pgsolen|.  |write_pkt| must write a single packet.
- * After all packets are written, this function calls
- * `ngtcp2_conn_update_pkt_tx_time`.
- *
- * If this function returns positive integer, |buf->last| points one
- * byte beyond the last byte written.
- *
- * This function is equivalent to call
- * `ngtcp2_conn_write_aggregate_pkt2` with the writable region of
- * |buf| clamped to the value returned by
- * `ngtcp2_conn_get_send_quantum2(conn)
- * <ngtcp2_conn_get_send_quantum2>` and |num_pkts| = 0 followed by
- * `ngtcp2_conn_update_pkt_tx_time(conn)
- * <ngtcp2_conn_update_pkt_tx_time>`.
- *
- * This function returns the number of bytes written to the buffer, or
- * a negative error code returned by |write_pkt|.
- *
- * .. version-added:: 1.15.0
- */
-NGTCP2_EXTERN ngtcp2_ssize ngtcp2_conn_write_aggregate_pkt_versioned(
-  ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
-  ngtcp2_pkt_info *pi, ngtcp2_buf *buf, size_t *pgsolen,
-  ngtcp2_write_pkt write_pkt, ngtcp2_tstamp ts);
-
-/**
- * @function
- *
- * `ngtcp2_conn_write_aggregate_pkt2` behaves like
- * `ngtcp2_conn_write_aggregate_pkt`, but it accepts |num_pkts| to
- * specify the maximum number of packets to write.  If |num_pkts| is
- * 0, this function writes packets as much as possible.  The actual
- * number of packets to write is determined by the connection state
- * (e.g., the congestion controller, data available to send) and the
- * length of packet produced.  It also does not clamp the writable
- * region of |buf|, and does not call
- * `ngtcp2_conn_update_pkt_tx_time`.
- *
- * This function offers more flexibility and optimization chances to
- * an application.  It can experiment different GSO buffer size
- * strategy and number of GSO writes per event loop.
- *
- * .. version-added:: 1.17.0
- */
-NGTCP2_EXTERN ngtcp2_ssize ngtcp2_conn_write_aggregate_pkt2_versioned(
-  ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
-  ngtcp2_pkt_info *pi, ngtcp2_buf *buf, size_t *pgsolen,
-  ngtcp2_write_pkt write_pkt, size_t num_pkts, ngtcp2_tstamp ts);
 
 /**
  * @function
@@ -6880,33 +6730,87 @@ NGTCP2_EXTERN void ngtcp2_secure_clear(void *data, size_t len);
                                  (PI), (PKT), (TS))
 
 /*
- * `ngtcp2_conn_write_pkt` is a wrapper around
- * `ngtcp2_conn_write_pkt_versioned` to set the correct struct
- * version.
+ * `ngtcp2_conn_next_tx_pkt` is a wrapper around
+ * `ngtcp2_conn_next_tx_pkt_versioned` to set the correct struct version.
  */
-#define ngtcp2_conn_write_pkt(CONN, PATH, PI, DEST, TS)                        \
-  ngtcp2_conn_write_pkt_versioned((CONN), (PATH), NGTCP2_PKT_INFO_VERSION,     \
-                                  (PI), (DEST), (TS))
+#define ngtcp2_conn_next_tx_pkt(CONN, OUT, TS)                                 \
+  ngtcp2_conn_next_tx_pkt_versioned((CONN), NGTCP2_TX_PKT_VERSION, (OUT), (TS))
 
 /*
- * `ngtcp2_conn_write_stream` is a wrapper around
- * `ngtcp2_conn_write_stream_versioned` to set the correct struct
- * version.
+ * `ngtcp2_conn_next_tx_pkts` is a wrapper around
+ * `ngtcp2_conn_next_tx_pkts_versioned` to set the correct struct version.
  */
-#define ngtcp2_conn_write_stream(CONN, PATH, PI, DEST, PDATALEN, FLAGS,        \
-                                 STREAM_ID, DATA, TS)                          \
-  ngtcp2_conn_write_stream_versioned(                                          \
-    (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (DEST), (PDATALEN),         \
-    (FLAGS), (STREAM_ID), (DATA), (TS))
+#define ngtcp2_conn_next_tx_pkts(CONN, OUT, OUTCNT, PGSO_SIZE, FLAGS, TS)      \
+  ngtcp2_conn_next_tx_pkts_versioned(                                          \
+    (CONN), NGTCP2_TX_PKT_VERSION, (OUT), (OUTCNT), (PGSO_SIZE), (FLAGS), (TS))
 
 /*
- * `ngtcp2_conn_write_connection_close` is a wrapper around
- * `ngtcp2_conn_write_connection_close_versioned` to set the correct
+ * `ngtcp2_conn_next_tx_connection_close_pkt` is a wrapper around
+ * `ngtcp2_conn_next_tx_connection_close_pkt_versioned` to set the correct
  * struct version.
  */
-#define ngtcp2_conn_write_connection_close(CONN, PATH, PI, DEST, CCERR, TS)    \
-  ngtcp2_conn_write_connection_close_versioned(                                \
-    (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (DEST), (CCERR), (TS))
+#define ngtcp2_conn_next_tx_connection_close_pkt(CONN, OUT, CCERR, TS)         \
+  ngtcp2_conn_next_tx_connection_close_pkt_versioned(                          \
+    (CONN), NGTCP2_TX_PKT_VERSION, (OUT), (CCERR), (TS))
+
+/*
+ * `ngtcp2_pkt_next_tx_stateless_reset_pkt` is a wrapper around
+ * `ngtcp2_pkt_next_tx_stateless_reset_pkt_versioned` to set the correct
+ * struct version.
+ */
+#define ngtcp2_pkt_next_tx_stateless_reset_pkt(OUT, ALLOCATOR, PKT_CAP, PATH, \
+                                               PI, TOKEN, RAND, RANDLEN)       \
+  ngtcp2_pkt_next_tx_stateless_reset_pkt_versioned(                            \
+    (OUT), NGTCP2_TX_PKT_VERSION, (ALLOCATOR), (PKT_CAP), (PATH), (PI),        \
+    (TOKEN), (RAND), (RANDLEN))
+
+/*
+ * `ngtcp2_pkt_next_tx_version_negotiation_pkt` is a wrapper around
+ * `ngtcp2_pkt_next_tx_version_negotiation_pkt_versioned` to set the correct
+ * struct version.
+ */
+#define ngtcp2_pkt_next_tx_version_negotiation_pkt(                            \
+  OUT, ALLOCATOR, PKT_CAP, PATH, PI, UNUSED_RANDOM, DCID, DCIDLEN, SCID,       \
+  SCIDLEN, SV, NSV)                                                            \
+  ngtcp2_pkt_next_tx_version_negotiation_pkt_versioned(                        \
+    (OUT), NGTCP2_TX_PKT_VERSION, (ALLOCATOR), (PKT_CAP), (PATH), (PI),        \
+    (UNUSED_RANDOM), (DCID), (DCIDLEN), (SCID), (SCIDLEN), (SV), (NSV))
+
+/*
+ * `ngtcp2_conn_alloc_stream_buf` is a wrapper around
+ * `ngtcp2_conn_alloc_stream_buf_versioned` to set the correct struct version.
+ */
+#define ngtcp2_conn_alloc_stream_buf(CONN, OUT, STREAM_ID, PAYLOAD_CAP, FLAGS, \
+                                     TS)                                       \
+  ngtcp2_conn_alloc_stream_buf_versioned(                                      \
+    (CONN), NGTCP2_STREAM_BUF_VERSION, (OUT), (STREAM_ID), (PAYLOAD_CAP),      \
+    (FLAGS), (TS))
+
+/*
+ * `ngtcp2_conn_submit_stream_buf` is a wrapper around
+ * `ngtcp2_conn_submit_stream_buf_versioned` to set the correct struct
+ * version.
+ */
+#define ngtcp2_conn_submit_stream_buf(CONN, BUF, DATALEN, FLAGS, TS)           \
+  ngtcp2_conn_submit_stream_buf_versioned(                                     \
+    (CONN), NGTCP2_STREAM_BUF_VERSION, (BUF), (DATALEN), (FLAGS), (TS))
+
+/*
+ * `ngtcp2_conn_alloc_dgram_buf` is a wrapper around
+ * `ngtcp2_conn_alloc_dgram_buf_versioned` to set the correct struct version.
+ */
+#define ngtcp2_conn_alloc_dgram_buf(CONN, OUT, PAYLOAD_CAP, FLAGS, TS)         \
+  ngtcp2_conn_alloc_dgram_buf_versioned(                                       \
+    (CONN), NGTCP2_DGRAM_BUF_VERSION, (OUT), (PAYLOAD_CAP), (FLAGS), (TS))
+
+/*
+ * `ngtcp2_conn_submit_dgram_buf` is a wrapper around
+ * `ngtcp2_conn_submit_dgram_buf_versioned` to set the correct struct version.
+ */
+#define ngtcp2_conn_submit_dgram_buf(CONN, BUF, DATALEN, FLAGS, DGRAM_ID, TS)  \
+  ngtcp2_conn_submit_dgram_buf_versioned(                                      \
+    (CONN), NGTCP2_DGRAM_BUF_VERSION, (BUF), (DATALEN), (FLAGS), (DGRAM_ID),   \
+    (TS))
 
 /*
  * `ngtcp2_transport_params_encode` is a wrapper around
@@ -6984,28 +6888,6 @@ NGTCP2_EXTERN void ngtcp2_secure_clear(void *data, size_t len);
 #define ngtcp2_conn_get_conn_info2(CONN, CINFO)                                \
   ngtcp2_conn_get_conn_info2_versioned((CONN), NGTCP2_CONN_INFO_VERSION,       \
                                        (CINFO))
-
-/*
- * `ngtcp2_conn_write_aggregate_pkt` is a wrapper around
- * `ngtcp2_conn_write_aggregate_pkt_versioned` to set the correct
- * struct version.
- */
-#define ngtcp2_conn_write_aggregate_pkt(CONN, PATH, PI, BUF, PGSOLEN,          \
-                                        WRITE_PKT, TS)                         \
-  ngtcp2_conn_write_aggregate_pkt_versioned(                                   \
-    (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (BUF), (PGSOLEN),           \
-    (WRITE_PKT), (TS))
-
-/*
- * `ngtcp2_conn_write_aggregate_pkt2` is a wrapper around
- * `ngtcp2_conn_write_aggregate_pkt2_versioned` to set the correct
- * struct version.
- */
-#define ngtcp2_conn_write_aggregate_pkt2(CONN, PATH, PI, BUF, PGSOLEN,         \
-                                         WRITE_PKT, NUM_PKTS, TS)              \
-  ngtcp2_conn_write_aggregate_pkt2_versioned(                                  \
-    (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (BUF), (PGSOLEN),           \
-    (WRITE_PKT), (NUM_PKTS), (TS))
 
 /*
  * `ngtcp2_settings_default` is a wrapper around

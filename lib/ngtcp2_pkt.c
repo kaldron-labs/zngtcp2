@@ -34,6 +34,7 @@
 #include "ngtcp2_mem.h"
 #include "ngtcp2_vec.h"
 #include "ngtcp2_buf.h"
+#include "ngtcp2_buf_alloc.h"
 #include "ngtcp2_unreachable.h"
 #include "ngtcp2_pcg.h"
 
@@ -2117,8 +2118,9 @@ static int pkt_validate_tx_dest(const ngtcp2_buf *dest) {
   int rv;
 
   rv =
-    ngtcp2_buf_validate(dest, NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_PACKET_TX);
-  if (rv != 0 || dest->origin != NGTCP2_BUF_ORIGIN_APPLICATION) {
+    ngtcp2_buf_validate(dest, NGTCP2_BUF_ROLE_TX_PACKET);
+  if (rv != 0 ||
+      (dest->origin != NULL && dest->origin != ((void *)(uintptr_t)1))) {
     return NGTCP2_ERR_BUF_CONTRACT;
   }
 
@@ -2329,6 +2331,63 @@ ngtcp2_pkt_write_stateless_reset2(ngtcp2_buf *dest,
   return p - base;
 }
 
+ngtcp2_ssize ngtcp2_pkt_next_tx_stateless_reset_pkt_versioned(
+  ngtcp2_tx_pkt *out, int tx_pkt_version, ngtcp2_buf_allocator *allocator,
+  size_t pkt_cap, const ngtcp2_path *path, const ngtcp2_pkt_info *pi,
+  const ngtcp2_stateless_reset_token *token, const uint8_t *rand,
+  size_t randlen) {
+  ngtcp2_ssize nwrite;
+  int rv;
+
+  if (tx_pkt_version != NGTCP2_TX_PKT_VERSION) {
+    return NGTCP2_ERR_INVALID_ARGUMENT;
+  }
+
+  rv = ngtcp2_tx_pkt_alloc(out, allocator, pkt_cap, path, pi);
+  if (rv != 0) {
+    return rv;
+  }
+
+  nwrite = ngtcp2_pkt_write_stateless_reset2(&out->pkt, token, rand, randlen);
+  if (nwrite < 0) {
+    ngtcp2_tx_pkt_release(allocator, out);
+    return nwrite;
+  }
+
+  out->pkt.last = out->pkt.pos + nwrite;
+
+  return nwrite;
+}
+
+ngtcp2_ssize ngtcp2_pkt_next_tx_version_negotiation_pkt_versioned(
+  ngtcp2_tx_pkt *out, int tx_pkt_version, ngtcp2_buf_allocator *allocator,
+  size_t pkt_cap, const ngtcp2_path *path, const ngtcp2_pkt_info *pi,
+  uint8_t unused_random, const uint8_t *dcid, size_t dcidlen,
+  const uint8_t *scid, size_t scidlen, const uint32_t *sv, size_t nsv) {
+  ngtcp2_ssize nwrite;
+  int rv;
+
+  if (tx_pkt_version != NGTCP2_TX_PKT_VERSION) {
+    return NGTCP2_ERR_INVALID_ARGUMENT;
+  }
+
+  rv = ngtcp2_tx_pkt_alloc(out, allocator, pkt_cap, path, pi);
+  if (rv != 0) {
+    return rv;
+  }
+
+  nwrite = ngtcp2_pkt_write_version_negotiation(
+    &out->pkt, unused_random, dcid, dcidlen, scid, scidlen, sv, nsv);
+  if (nwrite < 0) {
+    ngtcp2_tx_pkt_release(allocator, out);
+    return nwrite;
+  }
+
+  out->pkt.last = out->pkt.pos + nwrite;
+
+  return nwrite;
+}
+
 ngtcp2_ssize ngtcp2_pkt_write_retry(
   ngtcp2_buf *dest, uint32_t version, const ngtcp2_cid *dcid,
   const ngtcp2_cid *scid, const ngtcp2_cid *odcid, const uint8_t *token,
@@ -2391,19 +2450,17 @@ ngtcp2_ssize ngtcp2_pkt_write_retry(
     break;
   }
 
-  ngtcp2_buf_init(&tagbuf, tag, sizeof(tag), NGTCP2_BUF_ORIGIN_LIBRARY,
-                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_SCRATCH, NULL, NULL,
+  ngtcp2_buf_init(&tagbuf, tag, sizeof(tag), NULL,
+                  NGTCP2_BUF_ROLE_INTERNAL, NULL, NULL,
                   NULL);
-  ngtcp2_buf_init(&plaintext, &empty, 0, NGTCP2_BUF_ORIGIN_BORROWED,
-                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_SCRATCH, NULL, NULL,
+  ngtcp2_buf_init(&plaintext, &empty, 0, NULL,
+                  NGTCP2_BUF_ROLE_INTERNAL, NULL, NULL,
                   NULL);
   ngtcp2_buf_init(&aad, pseudo_retry, (size_t)pseudo_retrylen,
-                  NGTCP2_BUF_ORIGIN_BORROWED, NGTCP2_BUF_DIR_TX,
-                  NGTCP2_BUF_PURPOSE_PACKET_TX, NULL, NULL, NULL);
+                  NULL, NGTCP2_BUF_ROLE_TX_PACKET, NULL, NULL, NULL);
   aad.last = aad.end;
   ngtcp2_buf_init(&noncebuf, (uint8_t *)nonce, noncelen,
-                  NGTCP2_BUF_ORIGIN_BORROWED, NGTCP2_BUF_DIR_TX,
-                  NGTCP2_BUF_PURPOSE_SCRATCH, NULL, NULL, NULL);
+                  NULL, NGTCP2_BUF_ROLE_INTERNAL, NULL, NULL, NULL);
   noncebuf.last = noncebuf.end;
 
   rv = ops->encrypt_retry(&tagbuf, aead, aead_ctx, &plaintext, &noncebuf, &aad,
@@ -2506,19 +2563,17 @@ int ngtcp2_pkt_verify_retry_tag(uint32_t version, const ngtcp2_pkt_retry *retry,
     break;
   }
 
-  ngtcp2_buf_init(&tagbuf, tag, sizeof(tag), NGTCP2_BUF_ORIGIN_LIBRARY,
-                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_SCRATCH, NULL, NULL,
+  ngtcp2_buf_init(&tagbuf, tag, sizeof(tag), NULL,
+                  NGTCP2_BUF_ROLE_INTERNAL, NULL, NULL,
                   NULL);
-  ngtcp2_buf_init(&plaintext, &empty, 0, NGTCP2_BUF_ORIGIN_BORROWED,
-                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_SCRATCH, NULL, NULL,
+  ngtcp2_buf_init(&plaintext, &empty, 0, NULL,
+                  NGTCP2_BUF_ROLE_INTERNAL, NULL, NULL,
                   NULL);
   ngtcp2_buf_init(&aad, pseudo_retry, pseudo_retrylen,
-                  NGTCP2_BUF_ORIGIN_BORROWED, NGTCP2_BUF_DIR_TX,
-                  NGTCP2_BUF_PURPOSE_PACKET_TX, NULL, NULL, NULL);
+                  NULL, NGTCP2_BUF_ROLE_TX_PACKET, NULL, NULL, NULL);
   aad.last = aad.end;
   ngtcp2_buf_init(&noncebuf, (uint8_t *)nonce, noncelen,
-                  NGTCP2_BUF_ORIGIN_BORROWED, NGTCP2_BUF_DIR_TX,
-                  NGTCP2_BUF_PURPOSE_SCRATCH, NULL, NULL, NULL);
+                  NULL, NGTCP2_BUF_ROLE_INTERNAL, NULL, NULL, NULL);
   noncebuf.last = noncebuf.end;
 
   rv = ops->encrypt_retry(&tagbuf, aead, aead_ctx, &plaintext, &noncebuf, &aad,

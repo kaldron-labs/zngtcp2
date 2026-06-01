@@ -34,7 +34,7 @@
 
 #include <zngtcp2/zngtcp2_crypto_zpicotls.h>
 
-#include <picotls.h>
+#include <zpicotls.h>
 
 class TLSSessionBase {
 public:

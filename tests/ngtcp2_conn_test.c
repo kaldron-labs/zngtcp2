@@ -84,6 +84,13 @@ static const MunitTest tests[] = {
   munit_void_test(test_ngtcp2_conn_recv_early_data),
   munit_void_test(test_ngtcp2_conn_recv_compound_pkt),
   munit_void_test(test_ngtcp2_conn_pkt_payloadlen),
+  munit_void_test(test_ngtcp2_conn_next_tx_pkt_handoff),
+  munit_void_test(test_ngtcp2_conn_next_tx_connection_close_pkt_handoff),
+  munit_void_test(test_ngtcp2_conn_stream_buf_submit_direct_vector),
+  munit_void_test(test_ngtcp2_conn_stream_buf_submit_ack_release),
+  munit_void_test(test_ngtcp2_conn_stream_buf_submit_conn_del_release),
+  munit_void_test(test_ngtcp2_conn_dgram_buf_submit_direct_vector),
+  munit_void_test(test_ngtcp2_conn_next_tx_pkts_batch_gso),
   munit_void_test(test_ngtcp2_conn_write_stream_buf_retain_ack_release),
   munit_void_test(test_ngtcp2_conn_writev_datagram),
   munit_void_test(test_ngtcp2_conn_recv_datagram),
@@ -228,21 +235,59 @@ static int null_hp_mask(uint8_t *dest, const ngtcp2_crypto_cipher *hp,
   return 0;
 }
 
-static int null_encrypt_pkt(
-  ngtcp2_buf *pkt, size_t payload_offset, size_t plaintextlen,
-  const ngtcp2_crypto_aead *aead, const ngtcp2_crypto_aead_ctx *aead_ctx,
-  const ngtcp2_buf *aad, const ngtcp2_buf *nonce,
-  const ngtcp2_crypto_cipher *hp, const ngtcp2_crypto_cipher_ctx *hp_ctx,
-  size_t hp_sample_offset, ngtcp2_buf *hp_mask, void *ctx) {
-  uint8_t *payload = pkt->begin + payload_offset;
-  int rv;
-  (void)ctx;
+typedef struct {
+  size_t plainvcnt;
+  const uint8_t *base[NGTCP2_PPE_MAX_PLAINV];
+  size_t len[NGTCP2_PPE_MAX_PLAINV];
+  const ngtcp2_buf *source[NGTCP2_PPE_MAX_PLAINV];
+  ngtcp2_buf_role source_role[NGTCP2_PPE_MAX_PLAINV];
+} test_protect_log;
 
-  rv = null_encrypt(payload, aead, aead_ctx, payload, plaintextlen, nonce->pos,
-                    ngtcp2_buf_len(nonce), aad->pos, ngtcp2_buf_len(aad));
-  if (rv != 0) {
-    return rv;
+static int null_protect_pkt(
+  ngtcp2_buf *pkt, size_t payload_offset, const ngtcp2_crypto_vec *plainv,
+  size_t plainvcnt, const ngtcp2_crypto_aead *aead,
+  const ngtcp2_crypto_aead_ctx *aead_ctx, const ngtcp2_buf *aad,
+  const ngtcp2_buf *nonce, const ngtcp2_crypto_cipher *hp,
+  const ngtcp2_crypto_cipher_ctx *hp_ctx, size_t hp_sample_offset,
+  ngtcp2_buf *hp_mask, void *ctx) {
+  uint8_t *payload = pkt->begin + payload_offset;
+  uint8_t *p;
+  size_t plaintextlen = 0;
+  size_t i;
+  int rv;
+  (void)aead_ctx;
+  (void)nonce;
+  (void)aad;
+
+  if (plainvcnt && plainv == NULL) {
+    return NGTCP2_ERR_BUF_CONTRACT;
   }
+
+  if (ctx) {
+    test_protect_log *log = ctx;
+
+    log->plainvcnt = plainvcnt;
+    for (i = 0; i < plainvcnt && i < NGTCP2_PPE_MAX_PLAINV; ++i) {
+      log->base[i] = plainv[i].base;
+      log->len[i] = plainv[i].len;
+      log->source[i] = plainv[i].source;
+      log->source_role[i] =
+        plainv[i].source ? plainv[i].source->role : NGTCP2_BUF_ROLE_INTERNAL;
+    }
+  }
+
+  p = payload;
+  for (i = 0; i < plainvcnt; ++i) {
+    if (SIZE_MAX - plaintextlen < plainv[i].len) {
+      return NGTCP2_ERR_BUF_CONTRACT;
+    }
+    if (plainv[i].len) {
+      memcpy(p, plainv[i].base, plainv[i].len);
+      p += plainv[i].len;
+      plaintextlen += plainv[i].len;
+    }
+  }
+  memset(p, 0, aead->max_overhead);
 
   pkt->last = payload + plaintextlen + aead->max_overhead;
 
@@ -260,33 +305,35 @@ static int null_encrypt_pkt(
   return 0;
 }
 
-static int null_decrypt_pkt(ngtcp2_buf *pkt, size_t payload_offset,
-                            size_t ciphertextlen,
-                            const ngtcp2_crypto_aead *aead,
-                            const ngtcp2_crypto_aead_ctx *aead_ctx,
-                            const ngtcp2_buf *aad, const ngtcp2_buf *nonce,
-                            void *ctx) {
-  uint8_t *payload = pkt->begin + payload_offset;
+static int null_unprotect_pkt(ngtcp2_buf *plain, const ngtcp2_buf *pkt,
+                              size_t payload_offset, size_t ciphertextlen,
+                              const ngtcp2_crypto_aead *aead,
+                              const ngtcp2_crypto_aead_ctx *aead_ctx,
+                              const ngtcp2_buf *aad, const ngtcp2_buf *nonce,
+                              void *ctx) {
+  const uint8_t *payload = pkt->begin + payload_offset;
   int rv;
   (void)ctx;
 
-  rv = null_decrypt(payload, aead, aead_ctx, payload, ciphertextlen, nonce->pos,
-                    ngtcp2_buf_len(nonce), aad->pos, ngtcp2_buf_len(aad));
+  rv = null_decrypt(plain->pos, aead, aead_ctx, payload, ciphertextlen,
+                    nonce->pos, ngtcp2_buf_len(nonce), aad->pos,
+                    ngtcp2_buf_len(aad));
   if (rv != 0) {
     return rv;
   }
 
-  pkt->last = payload + ciphertextlen - aead->max_overhead;
+  plain->last = plain->pos + ciphertextlen - aead->max_overhead;
 
   return 0;
 }
 
-static int fail_decrypt_pkt(ngtcp2_buf *pkt, size_t payload_offset,
-                            size_t ciphertextlen,
-                            const ngtcp2_crypto_aead *aead,
-                            const ngtcp2_crypto_aead_ctx *aead_ctx,
-                            const ngtcp2_buf *aad, const ngtcp2_buf *nonce,
-                            void *ctx) {
+static int fail_unprotect_pkt(ngtcp2_buf *plain, const ngtcp2_buf *pkt,
+                              size_t payload_offset, size_t ciphertextlen,
+                              const ngtcp2_crypto_aead *aead,
+                              const ngtcp2_crypto_aead_ctx *aead_ctx,
+                              const ngtcp2_buf *aad, const ngtcp2_buf *nonce,
+                              void *ctx) {
+  (void)plain;
   (void)pkt;
   (void)payload_offset;
   (void)ciphertextlen;
@@ -358,16 +405,16 @@ static int null_encrypt_retry(ngtcp2_buf *dest,
 
 static const ngtcp2_crypto_ops null_crypto_ops = {
   .version = 1,
-  .encrypt_pkt = null_encrypt_pkt,
-  .decrypt_pkt = null_decrypt_pkt,
+  .protect_pkt = null_protect_pkt,
+  .unprotect_pkt = null_unprotect_pkt,
   .hp_mask = null_ops_hp_mask,
   .encrypt_retry = null_encrypt_retry,
 };
 
 static const ngtcp2_crypto_ops fail_crypto_ops = {
   .version = 1,
-  .encrypt_pkt = null_encrypt_pkt,
-  .decrypt_pkt = fail_decrypt_pkt,
+  .protect_pkt = null_protect_pkt,
+  .unprotect_pkt = fail_unprotect_pkt,
   .hp_mask = null_ops_hp_mask,
   .encrypt_retry = null_encrypt_retry,
 };
@@ -451,16 +498,15 @@ typedef struct {
   } stream_data;
   struct {
     int count;
-    ngtcp2_buf_origin origin[2];
-    ngtcp2_buf_dir dir[2];
-    ngtcp2_buf_purpose purpose[2];
+    void *origin[2];
+    ngtcp2_buf_role role[2];
     void *owner[2];
     size_t datalen[2];
   } stream_buf;
   struct {
     int count;
-    ngtcp2_buf_origin origin[2];
-    ngtcp2_buf_purpose purpose[2];
+    void *origin[2];
+    ngtcp2_buf_role role[2];
     void *owner[2];
     size_t datalen[2];
   } crypto_buf;
@@ -500,6 +546,12 @@ typedef struct {
   int releasecnt;
 } test_buf_allocator;
 
+typedef struct {
+  test_buf_allocator *allocator;
+  size_t refcount;
+  uint8_t data[];
+} test_buf_owner;
+
 static int retain_buf_owner(void *owner) {
   ++((buf_owner *)owner)->retaincnt;
 
@@ -510,29 +562,49 @@ static void release_buf_owner(void *owner) {
   ++((buf_owner *)owner)->releasecnt;
 }
 
+static int retain_test_buf_owner(void *owner) {
+  ++((test_buf_owner *)owner)->refcount;
+
+  return 0;
+}
+
+static void release_test_buf_owner(void *owner) {
+  test_buf_owner *o = owner;
+
+  assert_size(0, <, o->refcount);
+
+  if (--o->refcount) {
+    return;
+  }
+
+  ++o->allocator->releasecnt;
+  free(o);
+}
+
 static int test_buf_alloc(ngtcp2_buf *out, const ngtcp2_buf_alloc_info *info,
                           void *user_data) {
   test_buf_allocator *allocator = user_data;
-  uint8_t *p = malloc(info->size);
+  test_buf_owner *owner = malloc(sizeof(*owner) + info->size);
 
-  if (p == NULL) {
+  if (owner == NULL) {
     return NGTCP2_ERR_NOMEM;
   }
 
   ++allocator->alloccnt;
 
-  ngtcp2_buf_init(out, p, info->size, NGTCP2_BUF_ORIGIN_LIBRARY, info->dir,
-                  info->purpose, p, NULL, NULL);
+  owner->allocator = allocator;
+  owner->refcount = 1;
+
+  ngtcp2_buf_init(out, owner->data, info->size, info->origin, info->role, owner,
+                  retain_test_buf_owner, release_test_buf_owner);
 
   return 0;
 }
 
 static void test_buf_release(ngtcp2_buf *buf, void *user_data) {
-  test_buf_allocator *allocator = user_data;
+  (void)user_data;
 
-  ++allocator->releasecnt;
-  free(buf->begin);
-  *buf = (ngtcp2_buf){0};
+  ngtcp2_buf_release_owner(buf);
 }
 
 static int test_tx_retain(void *owner) {
@@ -552,14 +624,13 @@ static ngtcp2_ssize write_stream(ngtcp2_conn *conn, ngtcp2_path *path,
   ngtcp2_buf pkt, stream, *pstream = NULL;
   uint8_t empty = 0;
 
-  ngtcp2_buf_init(&pkt, dest, destlen, NGTCP2_BUF_ORIGIN_APPLICATION,
-                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_PACKET_TX, NULL, NULL,
+  ngtcp2_buf_init(&pkt, dest, destlen, ((void *)(uintptr_t)1),
+                  NGTCP2_BUF_ROLE_TX_PACKET, NULL, NULL,
                   NULL);
 
   if (data || datalen) {
     ngtcp2_buf_init(&stream, datalen ? (uint8_t *)data : &empty, datalen,
-                    NGTCP2_BUF_ORIGIN_APPLICATION, NGTCP2_BUF_DIR_TX,
-                    NGTCP2_BUF_PURPOSE_STREAM_TX, datalen ? (void *)data : NULL,
+                    ((void *)(uintptr_t)1), NGTCP2_BUF_ROLE_TX_STREAM, datalen ? (void *)data : NULL,
                     datalen ? test_tx_retain : NULL,
                     datalen ? test_tx_release : NULL);
     stream.last = stream.end;
@@ -629,8 +700,8 @@ static int submit_crypto_data(ngtcp2_conn *conn,
                               const uint8_t *data, size_t datalen) {
   ngtcp2_buf buf;
 
-  ngtcp2_buf_init(&buf, (uint8_t *)data, datalen, NGTCP2_BUF_ORIGIN_BORROWED,
-                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_CRYPTO_TX, NULL, NULL,
+  ngtcp2_buf_init(&buf, (uint8_t *)data, datalen, NULL,
+                  NGTCP2_BUF_ROLE_TX_CONTROL, NULL, NULL,
                   NULL);
   buf.last = buf.end;
 
@@ -761,7 +832,7 @@ static int recv_crypto_data_buf(ngtcp2_conn *conn,
 
   ++ud->crypto_buf.count;
   ud->crypto_buf.origin[idx] = data->origin;
-  ud->crypto_buf.purpose[idx] = data->purpose;
+  ud->crypto_buf.role[idx] = data->role;
   ud->crypto_buf.owner[idx] = data->owner;
   ud->crypto_buf.datalen[idx] = ngtcp2_buf_len(data);
 
@@ -966,8 +1037,7 @@ static int recv_stream_data_buf(ngtcp2_conn *conn, uint32_t flags,
 
   ++ud->stream_buf.count;
   ud->stream_buf.origin[idx] = data->origin;
-  ud->stream_buf.dir[idx] = data->dir;
-  ud->stream_buf.purpose[idx] = data->purpose;
+  ud->stream_buf.role[idx] = data->role;
   ud->stream_buf.owner[idx] = data->owner;
   ud->stream_buf.datalen[idx] = ngtcp2_buf_len(data);
 
@@ -1040,8 +1110,7 @@ static int recv_datagram(ngtcp2_conn *conn, uint32_t flags,
 
   if (ud) {
     assert_int(0, ==,
-               ngtcp2_buf_validate(data, NGTCP2_BUF_DIR_RX,
-                                   NGTCP2_BUF_PURPOSE_PAYLOAD_RX));
+               ngtcp2_buf_validate(data, NGTCP2_BUF_ROLE_RX_DATAGRAM));
     ud->datagram.flags = flags;
     ud->datagram.data = data->pos;
     ud->datagram.datalen = ngtcp2_buf_len(data);
@@ -8120,8 +8189,8 @@ void test_ngtcp2_conn_recv_stream_data_buf(void) {
 
   pktlen = ngtcp2_tpe_write_1rtt(&tpe, rawbuf, sizeof(rawbuf), &fr, 1);
 
-  ngtcp2_buf_init(&pkt, rawbuf, pktlen, NGTCP2_BUF_ORIGIN_APPLICATION,
-                  NGTCP2_BUF_DIR_RX, NGTCP2_BUF_PURPOSE_PACKET_RX, &owner,
+  ngtcp2_buf_init(&pkt, rawbuf, pktlen, ((void *)(uintptr_t)1),
+                  NGTCP2_BUF_ROLE_RX_PACKET, &owner,
                   retain_buf_owner, release_buf_owner);
   pkt.last = pkt.end;
 
@@ -8131,12 +8200,11 @@ void test_ngtcp2_conn_recv_stream_data_buf(void) {
   assert_int(0, ==, rv);
   assert_int(1, ==, ud.stream_buf.count);
   assert_size(911, ==, ud.stream_buf.datalen[0]);
-  assert_int(NGTCP2_BUF_ORIGIN_APPLICATION, ==, ud.stream_buf.origin[0]);
-  assert_int(NGTCP2_BUF_DIR_RX, ==, ud.stream_buf.dir[0]);
-  assert_int(NGTCP2_BUF_PURPOSE_STREAM_RX, ==, ud.stream_buf.purpose[0]);
-  assert_ptr_equal(&owner, ud.stream_buf.owner[0]);
-  assert_int(1, ==, owner.retaincnt);
-  assert_int(1, ==, owner.releasecnt);
+  assert_null(ud.stream_buf.origin[0]);
+  assert_int(NGTCP2_BUF_ROLE_RX_STREAM, ==, ud.stream_buf.role[0]);
+  assert_ptr_not_equal(&owner, ud.stream_buf.owner[0]);
+  assert_int(0, ==, owner.retaincnt);
+  assert_int(0, ==, owner.releasecnt);
 
   ngtcp2_conn_get_buf_stats(conn, &stats);
 
@@ -8207,8 +8275,8 @@ void test_ngtcp2_conn_recv_stream_data_buf_mixed(void) {
 
   pktlen = ngtcp2_tpe_write_1rtt(&tpe, rawbuf, sizeof(rawbuf), fr, 2);
 
-  ngtcp2_buf_init(&pkt, rawbuf, pktlen, NGTCP2_BUF_ORIGIN_APPLICATION,
-                  NGTCP2_BUF_DIR_RX, NGTCP2_BUF_PURPOSE_PACKET_RX, &owner,
+  ngtcp2_buf_init(&pkt, rawbuf, pktlen, ((void *)(uintptr_t)1),
+                  NGTCP2_BUF_ROLE_RX_PACKET, &owner,
                   retain_buf_owner, release_buf_owner);
   pkt.last = pkt.end;
 
@@ -8218,15 +8286,15 @@ void test_ngtcp2_conn_recv_stream_data_buf_mixed(void) {
   assert_int(0, ==, rv);
   assert_int(2, ==, ud.stream_buf.count);
   assert_size(911, ==, ud.stream_buf.datalen[0]);
-  assert_int(NGTCP2_BUF_ORIGIN_APPLICATION, ==, ud.stream_buf.origin[0]);
-  assert_ptr_equal(&owner, ud.stream_buf.owner[0]);
+  assert_null(ud.stream_buf.origin[0]);
+  assert_ptr_not_equal(&owner, ud.stream_buf.owner[0]);
   assert_size(357, ==, ud.stream_buf.datalen[1]);
-  assert_int(NGTCP2_BUF_ORIGIN_LIBRARY, ==, ud.stream_buf.origin[1]);
-  assert_int(NGTCP2_BUF_PURPOSE_STREAM_RX, ==, ud.stream_buf.purpose[1]);
-  assert_int(1, ==, owner.retaincnt);
-  assert_int(1, ==, owner.releasecnt);
-  assert_int(1, ==, allocator.alloccnt);
-  assert_int(1, ==, allocator.releasecnt);
+  assert_null(ud.stream_buf.origin[1]);
+  assert_int(NGTCP2_BUF_ROLE_RX_STREAM, ==, ud.stream_buf.role[1]);
+  assert_int(0, ==, owner.retaincnt);
+  assert_int(0, ==, owner.releasecnt);
+  assert_int(2, ==, allocator.alloccnt);
+  assert_int(2, ==, allocator.releasecnt);
 
   ngtcp2_conn_get_buf_stats(conn, &stats);
 
@@ -8296,8 +8364,8 @@ void test_ngtcp2_conn_recv_stream_data_buf_coalesced(void) {
                                         sizeof(rawbuf) - pktlen, &fr, 1);
   pktlen += second_pktlen;
 
-  ngtcp2_buf_init(&pkt, rawbuf, pktlen, NGTCP2_BUF_ORIGIN_APPLICATION,
-                  NGTCP2_BUF_DIR_RX, NGTCP2_BUF_PURPOSE_PACKET_RX, &owner,
+  ngtcp2_buf_init(&pkt, rawbuf, pktlen, ((void *)(uintptr_t)1),
+                  NGTCP2_BUF_ROLE_RX_PACKET, &owner,
                   retain_buf_owner, release_buf_owner);
   pkt.last = pkt.end;
 
@@ -8307,19 +8375,20 @@ void test_ngtcp2_conn_recv_stream_data_buf_coalesced(void) {
   assert_int(0, ==, rv);
   assert_int(1, ==, ud.stream_buf.count);
   assert_size(426, ==, ud.stream_buf.datalen[0]);
-  assert_int(NGTCP2_BUF_ORIGIN_BORROWED, ==, ud.stream_buf.origin[0]);
-  assert_int(NGTCP2_BUF_DIR_RX, ==, ud.stream_buf.dir[0]);
-  assert_int(NGTCP2_BUF_PURPOSE_STREAM_RX, ==, ud.stream_buf.purpose[0]);
-  assert_null(ud.stream_buf.owner[0]);
+  assert_null(ud.stream_buf.origin[0]);
+  assert_int(NGTCP2_BUF_ROLE_RX_STREAM, ==, ud.stream_buf.role[0]);
+  assert_ptr_not_null(ud.stream_buf.owner[0]);
   assert_int(0, ==, owner.retaincnt);
   assert_int(0, ==, owner.releasecnt);
-  assert_int(1, ==, allocator.alloccnt);
-  assert_int(1, ==, allocator.releasecnt);
+  assert_int(3, ==, allocator.alloccnt);
+  assert_int(3, ==, allocator.releasecnt);
 
   ngtcp2_conn_get_buf_stats(conn, &stats);
 
   assert_uint64(second_pktlen, ==, stats.rx_trailing_copy);
-  assert_uint64(1, ==, stats.library_buf_exposed);
+  assert_uint64(1, ==, stats.app_retain);
+  assert_uint64(1, ==, stats.app_release);
+  assert_uint64(0, ==, stats.library_buf_exposed);
 
   ngtcp2_conn_del(conn);
 }
@@ -8365,8 +8434,8 @@ void test_ngtcp2_conn_recv_stream_data_buf_reordered_retained(void) {
 
   pktlen = ngtcp2_tpe_write_1rtt(&tpe, rawbuf[0], sizeof(rawbuf[0]), &fr, 1);
 
-  ngtcp2_buf_init(&pkt[0], rawbuf[0], pktlen, NGTCP2_BUF_ORIGIN_APPLICATION,
-                  NGTCP2_BUF_DIR_RX, NGTCP2_BUF_PURPOSE_PACKET_RX, &owner[0],
+  ngtcp2_buf_init(&pkt[0], rawbuf[0], pktlen, ((void *)(uintptr_t)1),
+                  NGTCP2_BUF_ROLE_RX_PACKET, &owner[0],
                   retain_buf_owner, release_buf_owner);
   pkt[0].last = pkt[0].end;
 
@@ -8375,7 +8444,7 @@ void test_ngtcp2_conn_recv_stream_data_buf_reordered_retained(void) {
 
   assert_int(0, ==, rv);
   assert_int(0, ==, ud.stream_buf.count);
-  assert_int(1, ==, owner[0].retaincnt);
+  assert_int(0, ==, owner[0].retaincnt);
   assert_int(0, ==, owner[0].releasecnt);
 
   ngtcp2_conn_get_buf_stats(conn, &stats);
@@ -8389,8 +8458,8 @@ void test_ngtcp2_conn_recv_stream_data_buf_reordered_retained(void) {
 
   pktlen = ngtcp2_tpe_write_1rtt(&tpe, rawbuf[1], sizeof(rawbuf[1]), &fr, 1);
 
-  ngtcp2_buf_init(&pkt[1], rawbuf[1], pktlen, NGTCP2_BUF_ORIGIN_APPLICATION,
-                  NGTCP2_BUF_DIR_RX, NGTCP2_BUF_PURPOSE_PACKET_RX, &owner[1],
+  ngtcp2_buf_init(&pkt[1], rawbuf[1], pktlen, ((void *)(uintptr_t)1),
+                  NGTCP2_BUF_ROLE_RX_PACKET, &owner[1],
                   retain_buf_owner, release_buf_owner);
   pkt[1].last = pkt[1].end;
 
@@ -8400,16 +8469,16 @@ void test_ngtcp2_conn_recv_stream_data_buf_reordered_retained(void) {
   assert_int(0, ==, rv);
   assert_int(2, ==, ud.stream_buf.count);
   assert_size(10, ==, ud.stream_buf.datalen[0]);
-  assert_int(NGTCP2_BUF_ORIGIN_APPLICATION, ==, ud.stream_buf.origin[0]);
-  assert_int(NGTCP2_BUF_PURPOSE_STREAM_RX, ==, ud.stream_buf.purpose[0]);
-  assert_ptr_equal(&owner[1], ud.stream_buf.owner[0]);
+  assert_null(ud.stream_buf.origin[0]);
+  assert_int(NGTCP2_BUF_ROLE_RX_STREAM, ==, ud.stream_buf.role[0]);
+  assert_ptr_not_equal(&owner[1], ud.stream_buf.owner[0]);
   assert_size(10, ==, ud.stream_buf.datalen[1]);
-  assert_int(NGTCP2_BUF_ORIGIN_APPLICATION, ==, ud.stream_buf.origin[1]);
-  assert_int(NGTCP2_BUF_PURPOSE_REORDER_RX, ==, ud.stream_buf.purpose[1]);
-  assert_ptr_equal(&owner[0], ud.stream_buf.owner[1]);
-  assert_int(1, ==, owner[0].releasecnt);
-  assert_int(1, ==, owner[1].retaincnt);
-  assert_int(1, ==, owner[1].releasecnt);
+  assert_null(ud.stream_buf.origin[1]);
+  assert_int(NGTCP2_BUF_ROLE_RX_STREAM, ==, ud.stream_buf.role[1]);
+  assert_ptr_not_equal(&owner[0], ud.stream_buf.owner[1]);
+  assert_int(0, ==, owner[0].releasecnt);
+  assert_int(0, ==, owner[1].retaincnt);
+  assert_int(0, ==, owner[1].releasecnt);
 
   ngtcp2_conn_get_buf_stats(conn, &stats);
 
@@ -8472,8 +8541,8 @@ void test_ngtcp2_conn_recv_crypto_data_buf_reordered_copied(void) {
 
   pktlen = ngtcp2_tpe_write_1rtt(&tpe, rawbuf[0], sizeof(rawbuf[0]), &fr, 1);
 
-  ngtcp2_buf_init(&pkt[0], rawbuf[0], pktlen, NGTCP2_BUF_ORIGIN_APPLICATION,
-                  NGTCP2_BUF_DIR_RX, NGTCP2_BUF_PURPOSE_PACKET_RX, NULL, NULL,
+  ngtcp2_buf_init(&pkt[0], rawbuf[0], pktlen, ((void *)(uintptr_t)1),
+                  NGTCP2_BUF_ROLE_RX_PACKET, NULL, NULL,
                   NULL);
   pkt[0].last = pkt[0].end;
 
@@ -8491,8 +8560,8 @@ void test_ngtcp2_conn_recv_crypto_data_buf_reordered_copied(void) {
 
   pktlen = ngtcp2_tpe_write_1rtt(&tpe, rawbuf[1], sizeof(rawbuf[1]), &fr, 1);
 
-  ngtcp2_buf_init(&pkt[1], rawbuf[1], pktlen, NGTCP2_BUF_ORIGIN_APPLICATION,
-                  NGTCP2_BUF_DIR_RX, NGTCP2_BUF_PURPOSE_PACKET_RX, &owner[1],
+  ngtcp2_buf_init(&pkt[1], rawbuf[1], pktlen, ((void *)(uintptr_t)1),
+                  NGTCP2_BUF_ROLE_RX_PACKET, &owner[1],
                   retain_buf_owner, release_buf_owner);
   pkt[1].last = pkt[1].end;
 
@@ -8502,16 +8571,16 @@ void test_ngtcp2_conn_recv_crypto_data_buf_reordered_copied(void) {
   assert_int(0, ==, rv);
   assert_int(2, ==, ud.crypto_buf.count);
   assert_size(10, ==, ud.crypto_buf.datalen[0]);
-  assert_int(NGTCP2_BUF_PURPOSE_CRYPTO_RX, ==, ud.crypto_buf.purpose[0]);
+  assert_int(NGTCP2_BUF_ROLE_RX_CONTROL, ==, ud.crypto_buf.role[0]);
   assert_size(10, ==, ud.crypto_buf.datalen[1]);
-  assert_int(NGTCP2_BUF_ORIGIN_LIBRARY, ==, ud.crypto_buf.origin[1]);
-  assert_int(NGTCP2_BUF_PURPOSE_REORDER_RX, ==, ud.crypto_buf.purpose[1]);
-  assert_int(1, ==, allocator.releasecnt);
+  assert_null(ud.crypto_buf.origin[1]);
+  assert_int(NGTCP2_BUF_ROLE_RX_CONTROL, ==, ud.crypto_buf.role[1]);
+  assert_int(2, ==, allocator.releasecnt);
 
   ngtcp2_conn_get_buf_stats(conn, &stats);
 
   assert_uint64(0, ==, stats.buf_contract_failure);
-  assert_uint64(10, ==, stats.reorder_copy);
+  assert_uint64(0, ==, stats.reorder_copy);
 
   ngtcp2_conn_del(conn);
 }
@@ -9122,6 +9191,514 @@ void test_ngtcp2_conn_pkt_payloadlen(void) {
   ngtcp2_conn_del(conn);
 }
 
+void test_ngtcp2_conn_next_tx_pkt_handoff(void) {
+  ngtcp2_conn *conn;
+  ngtcp2_settings settings;
+  test_buf_allocator allocator = {0};
+  conn_options opts;
+  ngtcp2_tx_pkt pkt = {0};
+  ngtcp2_conn_buf_stats stats;
+  ngtcp2_ssize nwrite;
+  ngtcp2_tstamp t = 0;
+
+  client_default_settings(&settings);
+  settings.buf_allocator = (ngtcp2_buf_allocator){
+    .user_data = &allocator,
+    .alloc = test_buf_alloc,
+    .release = test_buf_release,
+  };
+
+  opts = (conn_options){
+    .settings = &settings,
+  };
+
+  setup_default_client_with_options(&conn, opts);
+
+  nwrite = ngtcp2_conn_next_tx_pkt(conn, &pkt, ++t);
+
+  assert_ptrdiff(0, <, nwrite);
+  assert_int(1, ==, allocator.alloccnt);
+  assert_int(0, ==, allocator.releasecnt);
+  assert_null(pkt.pkt.origin);
+  assert_int(NGTCP2_BUF_ROLE_TX_PACKET, ==, pkt.pkt.role);
+  assert_size((size_t)nwrite, ==, ngtcp2_buf_len(&pkt.pkt));
+  assert_true(pkt.flags & NGTCP2_TX_PKT_FLAG_RELEASE_REQUIRED);
+
+  ngtcp2_conn_get_buf_stats(conn, &stats);
+
+  assert_uint64(1, ==, stats.tx_pkt_handoff_alloc);
+  assert_uint64(0, ==, stats.tx_pkt_handoff_release);
+  assert_uint64(1, ==, stats.tx_pkt_handoff_outstanding);
+
+  ngtcp2_conn_release_tx_pkt(conn, &pkt);
+
+  assert_int(1, ==, allocator.releasecnt);
+  assert_null(pkt.pkt.begin);
+  assert_uint32(NGTCP2_TX_PKT_FLAG_NONE, ==, pkt.flags);
+
+  ngtcp2_conn_get_buf_stats(conn, &stats);
+
+  assert_uint64(1, ==, stats.tx_pkt_handoff_alloc);
+  assert_uint64(1, ==, stats.tx_pkt_handoff_release);
+  assert_uint64(0, ==, stats.tx_pkt_handoff_outstanding);
+
+  ngtcp2_conn_release_tx_pkt(conn, &pkt);
+
+  assert_int(1, ==, allocator.releasecnt);
+
+  ngtcp2_conn_del(conn);
+}
+
+void test_ngtcp2_conn_next_tx_connection_close_pkt_handoff(void) {
+  ngtcp2_conn *conn;
+  ngtcp2_settings settings;
+  test_buf_allocator allocator = {0};
+  conn_options opts;
+  ngtcp2_tx_pkt pkt = {0};
+  ngtcp2_ccerr ccerr;
+  ngtcp2_conn_buf_stats stats;
+  ngtcp2_ssize nwrite;
+  ngtcp2_tstamp t = 0;
+
+  client_default_settings(&settings);
+  settings.buf_allocator = (ngtcp2_buf_allocator){
+    .user_data = &allocator,
+    .alloc = test_buf_alloc,
+    .release = test_buf_release,
+  };
+
+  opts = (conn_options){
+    .settings = &settings,
+  };
+
+  setup_default_client_with_options(&conn, opts);
+
+  ngtcp2_ccerr_default(&ccerr);
+  ngtcp2_ccerr_set_application_error(&ccerr, 0, NULL, 0);
+
+  nwrite =
+    ngtcp2_conn_next_tx_connection_close_pkt(conn, &pkt, &ccerr, ++t);
+
+  assert_ptrdiff(0, <, nwrite);
+  assert_null(pkt.pkt.origin);
+  assert_int(NGTCP2_BUF_ROLE_TX_PACKET, ==, pkt.pkt.role);
+  assert_size((size_t)nwrite, ==, ngtcp2_buf_len(&pkt.pkt));
+  assert_true(pkt.flags & NGTCP2_TX_PKT_FLAG_RELEASE_REQUIRED);
+
+  ngtcp2_conn_get_buf_stats(conn, &stats);
+
+  assert_uint64(1, ==, stats.tx_pkt_handoff_alloc);
+  assert_uint64(1, ==, stats.tx_pkt_handoff_outstanding);
+  assert_true(ngtcp2_conn_in_closing_period(conn));
+
+  ngtcp2_conn_release_tx_pkt(conn, &pkt);
+
+  assert_int(1, ==, allocator.releasecnt);
+
+  ngtcp2_conn_get_buf_stats(conn, &stats);
+
+  assert_uint64(1, ==, stats.tx_pkt_handoff_release);
+  assert_uint64(0, ==, stats.tx_pkt_handoff_outstanding);
+
+  ngtcp2_conn_del(conn);
+}
+
+void test_ngtcp2_conn_stream_buf_submit_direct_vector(void) {
+  ngtcp2_conn *conn;
+  ngtcp2_settings settings;
+  test_buf_allocator allocator = {0};
+  test_protect_log protect_log = {0};
+  conn_options opts;
+  ngtcp2_stream_buf streambuf = {0};
+  ngtcp2_tx_pkt pkt = {0};
+  ngtcp2_ssize nwrite;
+  ngtcp2_tstamp t = 0;
+  int64_t stream_id;
+  uint8_t *stream_data;
+  size_t i;
+  int found_stream_vec = 0;
+  int rv;
+
+  client_default_settings(&settings);
+  settings.buf_allocator = (ngtcp2_buf_allocator){
+    .user_data = &allocator,
+    .alloc = test_buf_alloc,
+    .release = test_buf_release,
+  };
+
+  opts = (conn_options){
+    .settings = &settings,
+    .crypto_ops_ctx = &protect_log,
+  };
+
+  setup_default_client_with_options(&conn, opts);
+
+  nwrite = ngtcp2_conn_next_tx_pkt(conn, &pkt, ++t);
+  if (nwrite > 0) {
+    ngtcp2_conn_release_tx_pkt(conn, &pkt);
+  }
+
+  rv = ngtcp2_conn_open_bidi_stream(conn, &stream_id, NULL);
+
+  assert_int(0, ==, rv);
+
+  rv = ngtcp2_conn_alloc_stream_buf(conn, &streambuf, stream_id, 64,
+                                    NGTCP2_STREAM_BUF_FLAG_NONE, ++t);
+
+  assert_int(0, ==, rv);
+  assert_int(NGTCP2_BUF_ROLE_TX_STREAM, ==, streambuf.payload.role);
+  assert_null(streambuf.payload.origin);
+
+  stream_data = streambuf.payload.pos;
+  memset(stream_data, 0x3f, 64);
+
+  nwrite = ngtcp2_conn_submit_stream_buf(
+    conn, &streambuf, 64, NGTCP2_WRITE_STREAM_FLAG_NONE, ++t);
+
+  assert_ptrdiff(64, ==, nwrite);
+  assert_null(streambuf.payload.begin);
+
+  protect_log = (test_protect_log){0};
+  nwrite = ngtcp2_conn_next_tx_pkt(conn, &pkt, ++t);
+
+  assert_ptrdiff(0, <, nwrite);
+
+  for (i = 0; i < protect_log.plainvcnt; ++i) {
+    if (protect_log.base[i] == stream_data && protect_log.len[i] == 64 &&
+        protect_log.source[i] &&
+        protect_log.source[i]->role == NGTCP2_BUF_ROLE_TX_STREAM) {
+      found_stream_vec = 1;
+      break;
+    }
+  }
+
+  assert_true(found_stream_vec);
+
+  ngtcp2_conn_release_tx_pkt(conn, &pkt);
+  ngtcp2_conn_del(conn);
+}
+
+void test_ngtcp2_conn_stream_buf_submit_ack_release(void) {
+  ngtcp2_conn *conn;
+  ngtcp2_settings settings;
+  test_buf_allocator allocator = {0};
+  conn_options opts;
+  ngtcp2_stream_buf streambuf = {0};
+  ngtcp2_tx_pkt pkt = {0};
+  ngtcp2_frame fr;
+  ngtcp2_tpe tpe;
+  uint8_t ackbuf[2048];
+  ngtcp2_ssize nwrite;
+  size_t pktlen;
+  ngtcp2_tstamp t = 0;
+  int64_t stream_id;
+  int releasecnt_base;
+  int rv;
+
+  client_default_settings(&settings);
+  settings.buf_allocator = (ngtcp2_buf_allocator){
+    .user_data = &allocator,
+    .alloc = test_buf_alloc,
+    .release = test_buf_release,
+  };
+
+  opts = (conn_options){
+    .settings = &settings,
+  };
+
+  setup_default_client_with_options(&conn, opts);
+  ngtcp2_tpe_init_conn(&tpe, conn);
+
+  nwrite = ngtcp2_conn_next_tx_pkt(conn, &pkt, ++t);
+  if (nwrite > 0) {
+    ngtcp2_conn_release_tx_pkt(conn, &pkt);
+  }
+  releasecnt_base = allocator.releasecnt;
+
+  rv = ngtcp2_conn_open_bidi_stream(conn, &stream_id, NULL);
+
+  assert_int(0, ==, rv);
+
+  rv = ngtcp2_conn_alloc_stream_buf(conn, &streambuf, stream_id, 64,
+                                    NGTCP2_STREAM_BUF_FLAG_NONE, ++t);
+
+  assert_int(0, ==, rv);
+
+  memset(streambuf.payload.pos, 0x55, 64);
+
+  nwrite = ngtcp2_conn_submit_stream_buf(
+    conn, &streambuf, 64, NGTCP2_WRITE_STREAM_FLAG_NONE, ++t);
+
+  assert_ptrdiff(64, ==, nwrite);
+  assert_null(streambuf.payload.begin);
+  assert_int(releasecnt_base, ==, allocator.releasecnt);
+
+  nwrite = ngtcp2_conn_next_tx_pkt(conn, &pkt, ++t);
+
+  assert_ptrdiff(0, <, nwrite);
+
+  ngtcp2_conn_release_tx_pkt(conn, &pkt);
+
+  assert_int(releasecnt_base + 1, ==, allocator.releasecnt);
+
+  fr.ack = (ngtcp2_ack){
+    .type = NGTCP2_FRAME_ACK,
+    .largest_ack = conn->pktns.tx.last_pkt_num,
+  };
+
+  pktlen = ngtcp2_tpe_write_1rtt(&tpe, ackbuf, sizeof(ackbuf), &fr, 1);
+  rv = ngtcp2_conn_read_pkt(conn, &null_path.path, NULL, ackbuf, pktlen, ++t);
+
+  assert_int(0, ==, rv);
+  assert_int(releasecnt_base + 3, ==, allocator.releasecnt);
+
+  ngtcp2_conn_del(conn);
+}
+
+void test_ngtcp2_conn_stream_buf_submit_conn_del_release(void) {
+  ngtcp2_conn *conn;
+  ngtcp2_settings settings;
+  test_buf_allocator allocator = {0};
+  conn_options opts;
+  ngtcp2_stream_buf streambuf = {0};
+  ngtcp2_tx_pkt pkt = {0};
+  ngtcp2_ssize nwrite;
+  ngtcp2_tstamp t = 0;
+  int64_t stream_id;
+  int releasecnt_base;
+  int rv;
+
+  client_default_settings(&settings);
+  settings.buf_allocator = (ngtcp2_buf_allocator){
+    .user_data = &allocator,
+    .alloc = test_buf_alloc,
+    .release = test_buf_release,
+  };
+
+  opts = (conn_options){
+    .settings = &settings,
+  };
+
+  setup_default_client_with_options(&conn, opts);
+
+  nwrite = ngtcp2_conn_next_tx_pkt(conn, &pkt, ++t);
+  if (nwrite > 0) {
+    ngtcp2_conn_release_tx_pkt(conn, &pkt);
+  }
+  releasecnt_base = allocator.releasecnt;
+
+  rv = ngtcp2_conn_open_bidi_stream(conn, &stream_id, NULL);
+
+  assert_int(0, ==, rv);
+
+  rv = ngtcp2_conn_alloc_stream_buf(conn, &streambuf, stream_id, 64,
+                                    NGTCP2_STREAM_BUF_FLAG_NONE, ++t);
+
+  assert_int(0, ==, rv);
+
+  memset(streambuf.payload.pos, 0x56, 64);
+
+  nwrite = ngtcp2_conn_submit_stream_buf(
+    conn, &streambuf, 64, NGTCP2_WRITE_STREAM_FLAG_NONE, ++t);
+
+  assert_ptrdiff(64, ==, nwrite);
+  assert_null(streambuf.payload.begin);
+  assert_int(releasecnt_base, ==, allocator.releasecnt);
+
+  nwrite = ngtcp2_conn_next_tx_pkt(conn, &pkt, ++t);
+
+  assert_ptrdiff(0, <, nwrite);
+
+  ngtcp2_conn_release_tx_pkt(conn, &pkt);
+
+  assert_int(releasecnt_base + 1, ==, allocator.releasecnt);
+
+  ngtcp2_conn_del(conn);
+
+  assert_int(releasecnt_base + 2, ==, allocator.releasecnt);
+}
+
+void test_ngtcp2_conn_dgram_buf_submit_direct_vector(void) {
+  ngtcp2_conn *conn;
+  ngtcp2_settings settings;
+  ngtcp2_transport_params remote_params;
+  ngtcp2_callbacks callbacks;
+  test_buf_allocator allocator = {0};
+  test_protect_log protect_log = {0};
+  my_user_data ud = {0};
+  conn_options opts;
+  ngtcp2_dgram_buf dgrambuf = {0};
+  ngtcp2_tx_pkt pkt = {0};
+  ngtcp2_frame fr;
+  ngtcp2_tpe tpe;
+  uint8_t ackbuf[2048];
+  ngtcp2_ssize nwrite;
+  size_t pktlen;
+  ngtcp2_tstamp t = 0;
+  uint8_t *dgram_data;
+  int releasecnt_base;
+  size_t i;
+  int found_dgram_vec = 0;
+  int rv;
+
+  client_default_settings(&settings);
+  settings.buf_allocator = (ngtcp2_buf_allocator){
+    .user_data = &allocator,
+    .alloc = test_buf_alloc,
+    .release = test_buf_release,
+  };
+
+  client_default_remote_transport_params(&remote_params);
+  remote_params.max_datagram_frame_size = 1200;
+
+  client_default_callbacks(&callbacks);
+  callbacks.ack_datagram = ack_datagram;
+
+  opts = (conn_options){
+    .settings = &settings,
+    .remote_params = &remote_params,
+    .callbacks = &callbacks,
+    .user_data = &ud,
+    .crypto_ops_ctx = &protect_log,
+  };
+
+  setup_default_client_with_options(&conn, opts);
+  ngtcp2_tpe_init_conn(&tpe, conn);
+
+  nwrite = ngtcp2_conn_next_tx_pkt(conn, &pkt, ++t);
+  if (nwrite > 0) {
+    ngtcp2_conn_release_tx_pkt(conn, &pkt);
+  }
+  releasecnt_base = allocator.releasecnt;
+
+  rv = ngtcp2_conn_alloc_dgram_buf(conn, &dgrambuf, 32,
+                                   NGTCP2_DGRAM_BUF_FLAG_NONE, ++t);
+
+  assert_int(0, ==, rv);
+  assert_int(NGTCP2_BUF_ROLE_TX_DATAGRAM, ==, dgrambuf.payload.role);
+  assert_null(dgrambuf.payload.origin);
+
+  dgram_data = dgrambuf.payload.pos;
+  memset(dgram_data, 0xa5, 32);
+
+  nwrite = ngtcp2_conn_submit_dgram_buf(
+    conn, &dgrambuf, 32, NGTCP2_DGRAM_BUF_FLAG_NONE, 1000000009, ++t);
+
+  assert_ptrdiff(32, ==, nwrite);
+  assert_null(dgrambuf.payload.begin);
+
+  protect_log = (test_protect_log){0};
+  nwrite = ngtcp2_conn_next_tx_pkt(conn, &pkt, ++t);
+
+  assert_ptrdiff(0, <, nwrite);
+
+  for (i = 0; i < protect_log.plainvcnt; ++i) {
+    if (protect_log.base[i] == dgram_data && protect_log.len[i] == 32 &&
+        protect_log.source_role[i] == NGTCP2_BUF_ROLE_TX_DATAGRAM) {
+      found_dgram_vec = 1;
+      break;
+    }
+  }
+
+  assert_true(found_dgram_vec);
+  assert_int(releasecnt_base + 1, ==, allocator.releasecnt);
+
+  ngtcp2_conn_release_tx_pkt(conn, &pkt);
+
+  assert_int(releasecnt_base + 2, ==, allocator.releasecnt);
+
+  fr.ack = (ngtcp2_ack){
+    .type = NGTCP2_FRAME_ACK,
+    .largest_ack = conn->pktns.tx.last_pkt_num,
+  };
+
+  pktlen = ngtcp2_tpe_write_1rtt(&tpe, ackbuf, sizeof(ackbuf), &fr, 1);
+  rv = ngtcp2_conn_read_pkt(conn, &null_path.path, NULL, ackbuf, pktlen, ++t);
+
+  assert_int(0, ==, rv);
+  assert_uint64(1000000009, ==, ud.datagram.dgram_id);
+
+  ngtcp2_conn_del(conn);
+}
+
+void test_ngtcp2_conn_next_tx_pkts_batch_gso(void) {
+  ngtcp2_conn *conn;
+  ngtcp2_settings settings;
+  ngtcp2_transport_params remote_params;
+  test_buf_allocator allocator = {0};
+  conn_options opts;
+  ngtcp2_dgram_buf dgrambuf[2] = {0};
+  ngtcp2_tx_pkt drain = {0};
+  ngtcp2_tx_pkt pkts[2] = {0};
+  ngtcp2_conn_buf_stats stats;
+  ngtcp2_ssize nwrite;
+  size_t gso_size = 0;
+  ngtcp2_tstamp t = 0;
+  int releasecnt_base;
+  int rv;
+  size_t i;
+
+  client_default_settings(&settings);
+  settings.buf_allocator = (ngtcp2_buf_allocator){
+    .user_data = &allocator,
+    .alloc = test_buf_alloc,
+    .release = test_buf_release,
+  };
+
+  client_default_remote_transport_params(&remote_params);
+  remote_params.max_datagram_frame_size = 1200;
+
+  opts = (conn_options){
+    .settings = &settings,
+    .remote_params = &remote_params,
+  };
+
+  setup_default_client_with_options(&conn, opts);
+
+  nwrite = ngtcp2_conn_next_tx_pkt(conn, &drain, ++t);
+  if (nwrite > 0) {
+    ngtcp2_conn_release_tx_pkt(conn, &drain);
+  }
+  releasecnt_base = allocator.releasecnt;
+
+  for (i = 0; i < 2; ++i) {
+    rv = ngtcp2_conn_alloc_dgram_buf(conn, &dgrambuf[i], 48,
+                                     NGTCP2_DGRAM_BUF_FLAG_NONE, ++t);
+    assert_int(0, ==, rv);
+
+    memset(dgrambuf[i].payload.pos, (int)i, 48);
+
+    nwrite = ngtcp2_conn_submit_dgram_buf(
+      conn, &dgrambuf[i], 48, NGTCP2_DGRAM_BUF_FLAG_NONE, i + 1, ++t);
+
+    assert_ptrdiff(48, ==, nwrite);
+  }
+
+  nwrite = ngtcp2_conn_next_tx_pkts(conn, pkts, 2, &gso_size,
+                                    NGTCP2_TX_PKTS_FLAG_NONE, ++t);
+
+  assert_ptrdiff(2, ==, nwrite);
+  assert_size(0, <, gso_size);
+  assert_size(gso_size, ==, ngtcp2_buf_len(&pkts[0].pkt));
+  assert_size(gso_size, ==, pkts[0].gso_size);
+  assert_size(gso_size, ==, pkts[1].gso_size);
+  assert_int(releasecnt_base + 2, ==, allocator.releasecnt);
+
+  ngtcp2_conn_get_buf_stats(conn, &stats);
+
+  assert_uint64(2, ==, stats.tx_pkt_handoff_outstanding);
+
+  ngtcp2_conn_release_tx_pkt(conn, &pkts[1]);
+  ngtcp2_conn_release_tx_pkt(conn, &pkts[0]);
+
+  ngtcp2_conn_get_buf_stats(conn, &stats);
+
+  assert_uint64(0, ==, stats.tx_pkt_handoff_outstanding);
+  assert_int(releasecnt_base + 4, ==, allocator.releasecnt);
+
+  ngtcp2_conn_del(conn);
+}
+
 void test_ngtcp2_conn_write_stream_buf_retain_ack_release(void) {
   ngtcp2_conn *conn;
   uint8_t buf[1200];
@@ -9165,12 +9742,11 @@ void test_ngtcp2_conn_write_stream_buf_retain_ack_release(void) {
 
   assert_int(0, ==, rv);
 
-  ngtcp2_buf_init(&pkt, buf, sizeof(buf), NGTCP2_BUF_ORIGIN_APPLICATION,
-                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_PACKET_TX, NULL, NULL,
+  ngtcp2_buf_init(&pkt, buf, sizeof(buf), ((void *)(uintptr_t)1),
+                  NGTCP2_BUF_ROLE_TX_PACKET, NULL, NULL,
                   NULL);
   ngtcp2_buf_init(&data, stream, sizeof(stream),
-                  NGTCP2_BUF_ORIGIN_APPLICATION, NGTCP2_BUF_DIR_TX,
-                  NGTCP2_BUF_PURPOSE_STREAM_TX, &owner, retain_buf_owner,
+                  ((void *)(uintptr_t)1), NGTCP2_BUF_ROLE_TX_STREAM, &owner, retain_buf_owner,
                   release_buf_owner);
   data.last = data.end;
 
@@ -9188,8 +9764,8 @@ void test_ngtcp2_conn_write_stream_buf_retain_ack_release(void) {
 
   assert_uint64(1, ==, stats.app_retain);
   assert_uint64(0, ==, stats.app_release);
-  assert_uint64(1, ==, stats.encrypt_inplace_success);
-  assert_uint64(0, ==, stats.encrypt_inplace_failure);
+  assert_uint64(1, ==, stats.encrypt_source_to_dest_success);
+  assert_uint64(0, ==, stats.encrypt_source_to_dest_failure);
 
   it = ngtcp2_rtb_head(&conn->pktns.rtb);
 
@@ -9214,8 +9790,8 @@ void test_ngtcp2_conn_write_stream_buf_retain_ack_release(void) {
 
   assert_uint64(2, ==, stats.app_retain);
   assert_uint64(0, ==, stats.app_release);
-  assert_uint64(1, ==, stats.encrypt_inplace_success);
-  assert_uint64(0, ==, stats.encrypt_inplace_failure);
+  assert_uint64(1, ==, stats.encrypt_source_to_dest_success);
+  assert_uint64(0, ==, stats.encrypt_source_to_dest_failure);
 
   fr.ack = (ngtcp2_ack){
     .type = NGTCP2_FRAME_ACK,
@@ -9234,8 +9810,8 @@ void test_ngtcp2_conn_write_stream_buf_retain_ack_release(void) {
 
   assert_uint64(2, ==, stats.app_retain);
   assert_uint64(1, ==, stats.app_release);
-  assert_uint64(1, ==, stats.encrypt_inplace_success);
-  assert_uint64(0, ==, stats.encrypt_inplace_failure);
+  assert_uint64(1, ==, stats.encrypt_source_to_dest_success);
+  assert_uint64(0, ==, stats.encrypt_source_to_dest_failure);
 
   ngtcp2_conn_del(conn);
 
@@ -17289,8 +17865,7 @@ void test_ngtcp2_conn_submit_crypto_data(void) {
   assert_ptrdiff(0, <, spktlen);
 
   ngtcp2_buf_init(&crypto_tx, (uint8_t *)null_data, 999,
-                  NGTCP2_BUF_ORIGIN_BORROWED, NGTCP2_BUF_DIR_TX,
-                  NGTCP2_BUF_PURPOSE_STREAM_TX, NULL, NULL, NULL);
+                  NULL, NGTCP2_BUF_ROLE_TX_STREAM, NULL, NULL, NULL);
   crypto_tx.last = crypto_tx.end;
 
   rv =
@@ -17335,8 +17910,7 @@ void test_ngtcp2_conn_submit_crypto_data(void) {
   assert_ptrdiff(0, <, spktlen);
 
   ngtcp2_buf_init(&crypto_tx, owned_crypto, sizeof(owned_crypto),
-                  NGTCP2_BUF_ORIGIN_APPLICATION, NGTCP2_BUF_DIR_TX,
-                  NGTCP2_BUF_PURPOSE_CRYPTO_TX, &owner, retain_buf_owner,
+                  ((void *)(uintptr_t)1), NGTCP2_BUF_ROLE_TX_CONTROL, &owner, retain_buf_owner,
                   release_buf_owner);
   crypto_tx.last = crypto_tx.end;
 
@@ -17840,8 +18414,7 @@ static ngtcp2_ssize write_pkt(ngtcp2_conn *conn, ngtcp2_path *path,
   }
 
   ngtcp2_buf_init(&data, (uint8_t *)null_data, destlen,
-                  NGTCP2_BUF_ORIGIN_APPLICATION, NGTCP2_BUF_DIR_TX,
-                  NGTCP2_BUF_PURPOSE_STREAM_TX, (void *)null_data,
+                  ((void *)(uintptr_t)1), NGTCP2_BUF_ROLE_TX_STREAM, (void *)null_data,
                   test_tx_retain, test_tx_release);
   data.last = data.end;
 

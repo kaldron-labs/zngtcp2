@@ -24,6 +24,9 @@
  */
 #include "http3_server_proto_codec.h"
 
+#include <algorithm>
+#include <cstring>
+
 #include "server.h"
 #include "debug.h"
 
@@ -109,10 +112,8 @@ std::expected<void, Error> ProtoCodec::on_app_tx_ready() {
   return setup_httpconn();
 }
 
-ngtcp2_ssize ProtoCodec::write_pkt(ngtcp2_path *path, ngtcp2_pkt_info *pi,
-                                   ngtcp2_buf *dest, ngtcp2_tstamp ts) {
+std::expected<void, Error> ProtoCodec::submit_stream_data(ngtcp2_tstamp ts) {
   std::array<nghttp3_vec, 1> vec;
-  ngtcp2_buf data;
 
   for (;;) {
     int64_t stream_id = -1;
@@ -129,79 +130,90 @@ ngtcp2_ssize ProtoCodec::write_pkt(ngtcp2_path *path, ngtcp2_pkt_info *pi,
           &last_error_,
           nghttp3_err_infer_quic_app_error_code(static_cast<int>(sveccnt)),
           nullptr, 0);
-        return NGTCP2_ERR_CALLBACK_FAILURE;
+        return std::unexpected{Error::HTTP3};
       }
     }
 
-    ngtcp2_ssize ndatalen;
     auto v = vec.data();
     auto vcnt = static_cast<size_t>(sveccnt);
-    ngtcp2_buf *pdata = nullptr;
-    uint8_t empty = 0;
 
-    uint32_t flags = NGTCP2_WRITE_STREAM_FLAG_PADDING;
-    if (fin) {
-      flags |= NGTCP2_WRITE_STREAM_FLAG_FIN;
+    if (stream_id == -1 || (!vcnt && !fin)) {
+      return {};
     }
 
-    if (vcnt) {
-      auto base = v[0].len ? v[0].base : &empty;
-      ngtcp2_buf_init(&data, base, v[0].len, NGTCP2_BUF_ORIGIN_APPLICATION,
-                      NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_STREAM_TX, nullptr,
-                      nullptr, nullptr);
-      data.last = data.end;
-      pdata = &data;
-    }
+    auto payload_cap =
+      vcnt ? std::min(v[0].len,
+                      ngtcp2_conn_get_path_max_tx_udp_payload_size2(conn_))
+           : 0;
 
-    auto nwrite = ngtcp2_conn_write_stream(conn_, path, pi, dest, &ndatalen,
-                                           flags, stream_id, pdata, ts);
-    if (nwrite < 0) {
-      switch (nwrite) {
+    ngtcp2_stream_buf buf;
+    auto rv = ngtcp2_conn_alloc_stream_buf(
+      conn_, &buf, stream_id, payload_cap, NGTCP2_STREAM_BUF_FLAG_NONE, ts);
+    if (rv != 0) {
+      switch (rv) {
       case NGTCP2_ERR_STREAM_DATA_BLOCKED:
-        assert(ndatalen == -1);
         nghttp3_conn_block_stream(httpconn_, stream_id);
         continue;
       case NGTCP2_ERR_STREAM_SHUT_WR:
-        assert(ndatalen == -1);
         nghttp3_conn_shutdown_stream_write(httpconn_, stream_id);
-        continue;
-      case NGTCP2_ERR_WRITE_MORE:
-        assert(ndatalen >= 0);
-        if (auto rv = nghttp3_conn_add_write_offset(httpconn_, stream_id,
-                                                    as_unsigned(ndatalen));
-            rv != 0) {
-          std::println(stderr, "nghttp3_conn_add_write_offset: {}",
-                       nghttp3_strerror(rv));
-          ngtcp2_ccerr_set_application_error(
-            &last_error_, nghttp3_err_infer_quic_app_error_code(rv), nullptr,
-            0);
-          return NGTCP2_ERR_CALLBACK_FAILURE;
-        }
         continue;
       }
 
-      assert(ndatalen == -1);
-
-      std::println(stderr, "ngtcp2_conn_write_stream: {}",
-                   ngtcp2_strerror(static_cast<int>(nwrite)));
-      ngtcp2_ccerr_set_liberr(&last_error_, static_cast<int>(nwrite), nullptr,
-                              0);
-      return NGTCP2_ERR_CALLBACK_FAILURE;
+      std::println(stderr, "ngtcp2_conn_alloc_stream_buf: {}",
+                   ngtcp2_strerror(rv));
+      ngtcp2_ccerr_set_liberr(&last_error_, rv, nullptr, 0);
+      return std::unexpected{Error::QUIC};
     }
 
-    if (ndatalen >= 0) {
+    if (payload_cap) {
+      memcpy(buf.payload.pos, v[0].base, payload_cap);
+      buf.payload.last = buf.payload.pos + payload_cap;
+    }
+
+    auto naccepted = ngtcp2_conn_submit_stream_buf(
+      conn_, &buf, payload_cap, fin && payload_cap == (vcnt ? v[0].len : 0)
+                                    ? NGTCP2_WRITE_STREAM_FLAG_FIN
+                                    : NGTCP2_WRITE_STREAM_FLAG_NONE,
+      ts);
+    if (naccepted < 0) {
+      ngtcp2_conn_cancel_stream_buf(conn_, &buf);
+
+      switch (naccepted) {
+      case NGTCP2_ERR_STREAM_DATA_BLOCKED:
+        nghttp3_conn_block_stream(httpconn_, stream_id);
+        continue;
+      case NGTCP2_ERR_STREAM_SHUT_WR:
+        nghttp3_conn_shutdown_stream_write(httpconn_, stream_id);
+        continue;
+      }
+
+      std::println(stderr, "ngtcp2_conn_submit_stream_buf: {}",
+                   ngtcp2_strerror(static_cast<int>(naccepted)));
+      ngtcp2_ccerr_set_liberr(&last_error_, static_cast<int>(naccepted),
+                              nullptr, 0);
+      return std::unexpected{Error::QUIC};
+    }
+
+    if (naccepted == 0 && !(fin && payload_cap == 0)) {
+      ngtcp2_conn_cancel_stream_buf(conn_, &buf);
+      return {};
+    }
+
+    ngtcp2_conn_cancel_stream_buf(conn_, &buf);
+
+    if (naccepted > 0) {
       if (auto rv = nghttp3_conn_add_write_offset(httpconn_, stream_id,
-                                                  as_unsigned(ndatalen));
+                                                  as_unsigned(naccepted));
           rv != 0) {
         std::println(stderr, "nghttp3_conn_add_write_offset: {}",
                      nghttp3_strerror(rv));
         ngtcp2_ccerr_set_application_error(
           &last_error_, nghttp3_err_infer_quic_app_error_code(rv), nullptr, 0);
-        return NGTCP2_ERR_CALLBACK_FAILURE;
+        return std::unexpected{Error::HTTP3};
       }
     }
 
-    return nwrite;
+    return {};
   }
 }
 

@@ -56,14 +56,6 @@
 #include "ngtcp2_ratelim.h"
 
 #undef ngtcp2_conn_read_pkt
-#undef ngtcp2_conn_write_pkt
-#undef ngtcp2_conn_write_datagram
-#undef ngtcp2_conn_writev_datagram
-#undef ngtcp2_conn_write_connection_close
-
-#define NGTCP2_WRITE_DATAGRAM_FLAG_NONE 0x00U
-#define NGTCP2_WRITE_DATAGRAM_FLAG_MORE 0x01U
-#define NGTCP2_WRITE_DATAGRAM_FLAG_PADDING 0x02U
 
 int ngtcp2_conn_read_pkt_legacy_versioned(ngtcp2_conn *conn,
                                           const ngtcp2_path *path,
@@ -75,49 +67,6 @@ int ngtcp2_conn_read_pkt_legacy_versioned(ngtcp2_conn *conn,
 #define ngtcp2_conn_read_pkt(CONN, PATH, PI, PKT, PKTLEN, TS)                  \
   ngtcp2_conn_read_pkt_legacy_versioned(                                       \
     (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (PKT), (PKTLEN), (TS))
-
-ngtcp2_ssize ngtcp2_conn_write_pkt_legacy_versioned(
-  ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
-  ngtcp2_pkt_info *pi, uint8_t *dest, size_t destlen, ngtcp2_tstamp ts);
-
-#define ngtcp2_conn_write_pkt(CONN, PATH, PI, DEST, DESTLEN, TS)               \
-  ngtcp2_conn_write_pkt_legacy_versioned(                                      \
-    (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (DEST), (DESTLEN), (TS))
-
-ngtcp2_ssize ngtcp2_conn_write_datagram_legacy_versioned(
-  ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
-  ngtcp2_pkt_info *pi, uint8_t *dest, size_t destlen, int *paccepted,
-  uint32_t flags, uint64_t dgram_id, const uint8_t *data, size_t datalen,
-  ngtcp2_tstamp ts);
-
-#define ngtcp2_conn_write_datagram(CONN, PATH, PI, DEST, DESTLEN, PACCEPTED,   \
-                                   FLAGS, DGRAM_ID, DATA, DATALEN, TS)         \
-  ngtcp2_conn_write_datagram_legacy_versioned(                                 \
-    (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (DEST), (DESTLEN),          \
-    (PACCEPTED), (FLAGS), (DGRAM_ID), (DATA), (DATALEN), (TS))
-
-ngtcp2_ssize ngtcp2_conn_writev_datagram_legacy_versioned(
-  ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
-  ngtcp2_pkt_info *pi, uint8_t *dest, size_t destlen, int *paccepted,
-  uint32_t flags, uint64_t dgram_id, const ngtcp2_vec *datav, size_t datavcnt,
-  ngtcp2_tstamp ts);
-
-#define ngtcp2_conn_writev_datagram(CONN, PATH, PI, DEST, DESTLEN, PACCEPTED,  \
-                                    FLAGS, DGRAM_ID, DATAV, DATAVCNT, TS)      \
-  ngtcp2_conn_writev_datagram_legacy_versioned(                                \
-    (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (DEST), (DESTLEN),          \
-    (PACCEPTED), (FLAGS), (DGRAM_ID), (DATAV), (DATAVCNT), (TS))
-
-ngtcp2_ssize ngtcp2_conn_write_connection_close_legacy_versioned(
-  ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
-  ngtcp2_pkt_info *pi, uint8_t *dest, size_t destlen, const ngtcp2_ccerr *ccerr,
-  ngtcp2_tstamp ts);
-
-#define ngtcp2_conn_write_connection_close(CONN, PATH, PI, DEST, DESTLEN,      \
-                                           CCERR, TS)                          \
-  ngtcp2_conn_write_connection_close_legacy_versioned(                         \
-    (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (DEST), (DESTLEN), (CCERR), \
-    (TS))
 
 typedef enum {
   /* Client specific handshake states */
@@ -248,8 +197,8 @@ void ngtcp2_path_challenge_entry_init(ngtcp2_path_challenge_entry *pcent,
 /* NGTCP2_CONN_FLAG_KEY_UPDATE_INITIATOR is set when the local
    endpoint has initiated key update. */
 #define NGTCP2_CONN_FLAG_KEY_UPDATE_INITIATOR 0x10000U
-/* NGTCP2_CONN_FLAG_AGGREGATE_PKTS is set when a write API is called
-   inside the callback invoked by ngtcp2_conn_write_aggregate_pkt. */
+/* NGTCP2_CONN_FLAG_AGGREGATE_PKTS is set while producing a GSO-compatible
+   packet handoff batch. */
 #define NGTCP2_CONN_FLAG_AGGREGATE_PKTS 0x20000U
 /* NGTCP2_CONN_FLAG_CRUMBLE_INITIAL_CRYPTO, if set, crumbles an
    Initial CRYPTO frame into pieces as a countermeasure against Deep
@@ -377,6 +326,14 @@ ngtcp2_static_ringbuf_def(path_history, 4, sizeof(ngtcp2_path_history_entry))
 
 ngtcp2_objalloc_decl(strm, ngtcp2_strm, oplent)
 
+typedef struct ngtcp2_tx_dgram {
+  struct ngtcp2_tx_dgram *next;
+  ngtcp2_buf payload;
+  ngtcp2_vec datav;
+  uint64_t dgram_id;
+  uint32_t flags;
+} ngtcp2_tx_dgram;
+
 struct ngtcp2_conn {
   ngtcp2_objalloc frc_objalloc;
   ngtcp2_objalloc rtb_entry_objalloc;
@@ -385,6 +342,7 @@ struct ngtcp2_conn {
   ngtcp2_callbacks callbacks;
   ngtcp2_buf_allocator buf_allocator;
   ngtcp2_conn_buf_stats buf_stats;
+  uint64_t tx_pkt_handoff_outstanding;
   ngtcp2_pkt_buf_ctx *rx_pkt_buf_ctx;
   /* rcid is a connection ID present in Initial or 0-RTT packet from
      client as destination connection ID.  Server uses this field to
@@ -480,6 +438,12 @@ struct ngtcp2_conn {
          etc. */
       ngtcp2_duration compensation;
     } pacing;
+
+    struct {
+      ngtcp2_tx_dgram *head;
+      ngtcp2_tx_dgram *tail;
+      size_t len;
+    } dgramq;
   } tx;
 
   struct {
@@ -743,9 +707,10 @@ typedef struct ngtcp2_vmsg_datagram {
   /* paccepted is the pointer to the variable which, if it is not
      NULL, is assigned nonzero if data is written to a packet. */
   int *paccepted;
-  /* flags is bitwise OR of zero or more of
-     NGTCP2_WRITE_DATAGRAM_FLAG_*. */
+  /* flags is bitwise OR of internal DATAGRAM write flags. */
   uint32_t flags;
+  /* txbuf is non-NULL if data points into a retained TX_DATAGRAM buffer. */
+  const ngtcp2_buf *txbuf;
 } ngtcp2_vmsg_datagram;
 
 typedef struct ngtcp2_vmsg {
@@ -865,33 +830,6 @@ int ngtcp2_conn_tx_strmq_push(ngtcp2_conn *conn, ngtcp2_strm *strm);
  */
 ngtcp2_tstamp ngtcp2_conn_internal_expiry(const ngtcp2_conn *conn);
 
-ngtcp2_ssize ngtcp2_conn_write_vmsg(ngtcp2_conn *conn, ngtcp2_path *path,
-                                    int pkt_info_version, ngtcp2_pkt_info *pi,
-                                    uint8_t *dest, size_t destlen,
-                                    uint8_t wflags, ngtcp2_vmsg *vmsg,
-                                    ngtcp2_tstamp ts);
-
-/*
- * ngtcp2_conn_write_single_frame_pkt writes a packet which contains
- * |fr| frame only in the buffer pointed by |dest| whose length if
- * |destlen|.  |type| is a long packet type to send.  If |type| is 0,
- * Short packet is used.  |dcid| is used as a destination connection
- * ID.  |flags| is zero or more of NGTCP2_WRITE_PKT_FLAG_*.  Only
- * NGTCP2_WRITE_PKT_FLAG_REQUIRE_PADDING is recognized.
- *
- * The packet written by this function will not be retransmitted.
- *
- * This function returns the number of bytes written in |dest| if it
- * succeeds, or one of the following negative error codes:
- *
- * NGTCP2_ERR_CALLBACK_FAILURE
- *     User-defined callback function failed.
- */
-ngtcp2_ssize ngtcp2_conn_write_single_frame_pkt(
-  ngtcp2_conn *conn, ngtcp2_pkt_info *pi, uint8_t *dest, size_t destlen,
-  uint8_t type, uint8_t flags, const ngtcp2_cid *dcid, ngtcp2_frame *fr,
-  uint16_t rtb_entry_flags, const ngtcp2_path *path, ngtcp2_tstamp ts);
-
 /*
  * ngtcp2_conn_commit_local_transport_params commits the local
  * transport parameters, which is currently set to
@@ -926,8 +864,7 @@ uint64_t ngtcp2_conn_tx_strmq_first_cycle(const ngtcp2_conn *conn);
  *
  * `ngtcp2_conn_ack_delay_expiry` returns the expiry time point of
  * delayed protected ACK.  One should call
- * `ngtcp2_conn_cancel_expired_ack_delay_timer` and
- * `ngtcp2_conn_write_pkt` when it
+ * `ngtcp2_conn_cancel_expired_ack_delay_timer` and produce a TX handoff when it
  * expires.  It returns UINT64_MAX if there is no expiry.
  */
 ngtcp2_tstamp ngtcp2_conn_ack_delay_expiry(const ngtcp2_conn *conn);
@@ -947,9 +884,8 @@ void ngtcp2_conn_cancel_expired_ack_delay_timer(ngtcp2_conn *conn,
  *
  * `ngtcp2_conn_loss_detection_expiry` returns the expiry time point
  * of loss detection timer.  One should call
- * `ngtcp2_conn_on_loss_detection_timer` and `ngtcp2_conn_write_pkt`
- * when it expires.  It returns
- * UINT64_MAX if loss detection timer is not armed.
+ * `ngtcp2_conn_on_loss_detection_timer` and produce a TX handoff when it
+ * expires.  It returns UINT64_MAX if loss detection timer is not armed.
  */
 ngtcp2_tstamp ngtcp2_conn_loss_detection_expiry(const ngtcp2_conn *conn);
 
@@ -976,94 +912,6 @@ ngtcp2_duration ngtcp2_conn_compute_pto(const ngtcp2_conn *conn,
 uint32_t
 ngtcp2_conn_server_negotiate_version(ngtcp2_conn *conn,
                                      const ngtcp2_version_info *version_info);
-
-/**
- * @function
- *
- * `ngtcp2_conn_write_connection_close_pkt` writes a packet which
- * contains a CONNECTION_CLOSE frame (type 0x1C) in the buffer pointed
- * by |dest| whose capacity is |datalen|.
- *
- * If |path| is not ``NULL``, this function stores the network path
- * with which the packet should be sent.  Each addr field must point
- * to the buffer which should be at least ``sizeof(struct
- * sockaddr_storage)`` bytes long.  The assignment might not be done
- * if nothing is written to |dest|.
- *
- * If |pi| is not ``NULL``, this function stores packet metadata in it
- * if it succeeds.  The metadata includes ECN markings.
- *
- * This function must not be called from inside the callback
- * functions.
- *
- * At the moment, successful call to this function makes connection
- * close.  We may change this behaviour in the future to allow
- * graceful shutdown.
- *
- * This function returns the number of bytes written in |dest| if it
- * succeeds, or one of the following negative error codes:
- *
- * :macro:`NGTCP2_ERR_NOMEM`
- *     Out of memory
- * :macro:`NGTCP2_ERR_NOBUF`
- *     Buffer is too small
- * :macro:`NGTCP2_ERR_INVALID_STATE`
- *     The current state does not allow sending CONNECTION_CLOSE.
- * :macro:`NGTCP2_ERR_PKT_NUM_EXHAUSTED`
- *     Packet number is exhausted, and cannot send any more packet.
- * :macro:`NGTCP2_ERR_CALLBACK_FAILURE`
- *     User callback failed
- */
-ngtcp2_ssize ngtcp2_conn_write_connection_close_pkt(
-  ngtcp2_conn *conn, ngtcp2_path *path, ngtcp2_pkt_info *pi, uint8_t *dest,
-  size_t destlen, uint64_t error_code, const uint8_t *reason, size_t reasonlen,
-  ngtcp2_tstamp ts);
-
-/**
- * @function
- *
- * `ngtcp2_conn_write_application_close_pkt` writes a packet which
- * contains a CONNECTION_CLOSE frame (type 0x1D) in the buffer pointed
- * by |dest| whose capacity is |datalen|.
- *
- * If |path| is not ``NULL``, this function stores the network path
- * with which the packet should be sent.  Each addr field must point
- * to the buffer which should be at least ``sizeof(struct
- * sockaddr_storage)`` bytes long.  The assignment might not be done
- * if nothing is written to |dest|.
- *
- * If |pi| is not ``NULL``, this function stores packet metadata in it
- * if it succeeds.  The metadata includes ECN markings.
- *
- * If handshake has not been confirmed yet, CONNECTION_CLOSE (type
- * 0x1C) with error code :macro:`NGTCP2_APPLICATION_ERROR` is written
- * instead.
- *
- * This function must not be called from inside the callback
- * functions.
- *
- * At the moment, successful call to this function makes connection
- * close.  We may change this behaviour in the future to allow
- * graceful shutdown.
- *
- * This function returns the number of bytes written in |dest| if it
- * succeeds, or one of the following negative error codes:
- *
- * :macro:`NGTCP2_ERR_NOMEM`
- *     Out of memory
- * :macro:`NGTCP2_ERR_NOBUF`
- *     Buffer is too small
- * :macro:`NGTCP2_ERR_INVALID_STATE`
- *     The current state does not allow sending CONNECTION_CLOSE.
- * :macro:`NGTCP2_ERR_PKT_NUM_EXHAUSTED`
- *     Packet number is exhausted, and cannot send any more packet.
- * :macro:`NGTCP2_ERR_CALLBACK_FAILURE`
- *     User callback failed
- */
-ngtcp2_ssize ngtcp2_conn_write_application_close_pkt(
-  ngtcp2_conn *conn, ngtcp2_path *path, ngtcp2_pkt_info *pi, uint8_t *dest,
-  size_t destlen, uint64_t app_error_code, const uint8_t *reason,
-  size_t reasonlen, ngtcp2_tstamp ts);
 
 int ngtcp2_conn_start_pmtud(ngtcp2_conn *conn);
 

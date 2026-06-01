@@ -220,10 +220,13 @@ Read and write packets
 ----------------------
 
 `ngtcp2_conn_read_pkt()` processes the incoming QUIC packets.  In
-order to write QUIC packets, call `ngtcp2_conn_write_stream()` or
-`ngtcp2_conn_write_pkt()`.  The destination packet buffer capacity
-should be at least :member:`ngtcp2_settings.max_tx_udp_payload_size`,
-and must be at least 1200 bytes.
+order to write QUIC packets, submit application payload buffers and
+pull protected packet handoffs with `ngtcp2_conn_next_tx_pkt()` or
+`ngtcp2_conn_next_tx_pkts()`.  The library allocates packet buffers
+through the configured buffer allocator and returns
+``NGTCP2_BUF_ROLE_TX_PACKET`` handoff objects to the application.  The
+application sends the packet bytes and releases each handoff with
+`ngtcp2_conn_release_tx_pkt()`.
 
 In order to send stream data, the application has to first open a
 stream.  In earliest, clients can open streams after installing 1RTT
@@ -245,15 +248,17 @@ handshake completion.
 
 Use `ngtcp2_conn_open_bidi_stream()` to open bidirectional
 stream.  For unidirectional stream, call
-`ngtcp2_conn_open_uni_stream()`.  Call `ngtcp2_conn_write_stream()`
-to send stream data.
+`ngtcp2_conn_open_uni_stream()`.  Call
+`ngtcp2_conn_alloc_stream_buf()` to allocate an uninitialized
+``TX_STREAM`` payload buffer, fill the submitted bytes, and call
+`ngtcp2_conn_submit_stream_buf()` to transfer custody of those bytes
+to the library.
 
 An application should pace sending packets.
 `ngtcp2_conn_get_send_quantum2()` returns the number of bytes that can
-be sent without packet spacing.  After one or more calls of
-`ngtcp2_conn_write_stream()`, call
-`ngtcp2_conn_update_pkt_tx_time()` to set the timer when the next
-packet should be sent.  The timer is integrated into
+be sent without packet spacing.  After sending one or more packet
+handoffs, call `ngtcp2_conn_update_pkt_tx_time()` to set the timer
+when the next packet should be sent.  The timer is integrated into
 `ngtcp2_conn_get_expiry2()`.
 
 Aggregate packets for GSO
@@ -264,15 +269,14 @@ expensive than sending TCP packets.  To workaround this, some
 platforms offer a function, like GSO in Linux, that accepts multiple
 UDP datagrams in 1 system call, and saves the overhead.
 
-To build such a train of packets, an application needs to make
-multiple calls to `ngtcp2_conn_write_stream()` or packet-writing variants.  To
-make things simpler, ngtcp2 offers
-`ngtcp2_conn_write_aggregate_pkt()`, which conveniently aggregates
-packets suitable for sending in GSO.  It also enforces pacing
-automatically by calling `ngtcp2_conn_update_pkt_tx_time()`
-internally.  Please note that `ngtcp2_conn_write_aggregate_pkt()`
-requires the buffer of at least
-`ngtcp2_conn_get_path_max_tx_udp_payload_size2()` bytes long.
+To build such a train of packets, call
+`ngtcp2_conn_next_tx_pkts()` with an array of
+:type:`ngtcp2_tx_pkt`.  The function fills individually owned packet
+handoffs and reports a nonzero GSO segment size when the returned
+batch is compatible with UDP GSO.  A non-GSO-compatible batch can
+still be sent with one UDP send per handoff or a ``sendmmsg`` style
+loop.  After sending the batch, release every packet handoff and call
+`ngtcp2_conn_update_pkt_tx_time()`.
 
 Outgoing UDP datagram payload size
 ----------------------------------
@@ -293,7 +297,9 @@ Any incoming UDP datagram should be first processed by
 than 20 bytes which is the maximum length defined in QUIC v1.  If the
 function returns :macro:`NGTCP2_ERR_VERSION_NEGOTIATION`, server
 should send Version Negotiation packet.  Use
-`ngtcp2_pkt_write_version_negotiation()` for this purpose.  If
+`ngtcp2_pkt_next_tx_version_negotiation_pkt()` for this purpose and
+release the returned :type:`ngtcp2_tx_pkt` with
+`ngtcp2_tx_pkt_release()` after the UDP send completes.  If
 `ngtcp2_pkt_decode_version_cid()` succeeds, then check whether the UDP
 datagram belongs to any existing connection by looking up connection
 tables by Destination Connection ID (refer to the next section to know
@@ -303,8 +309,8 @@ belongs to an existing connection, pass the UDP datagram to
 connection, it should be passed to `ngtcp2_accept()`.  If it returns a
 negative error code, just drop the packet to the floor and take no
 action, or send Stateless Reset packet (use
-`ngtcp2_pkt_write_stateless_reset2()` to create Stateless Reset
-packet).  Otherwise, the UDP datagram is acceptable as a new
+`ngtcp2_pkt_next_tx_stateless_reset_pkt()` to create a handoff).
+Otherwise, the UDP datagram is acceptable as a new
 connection.  Create :type:`ngtcp2_conn` object and pass the UDP
 datagram to `ngtcp2_conn_read_pkt()`.
 
@@ -364,10 +370,10 @@ Closing streams
 ---------------
 
 The send-side stream is closed when you call
-`ngtcp2_conn_write_stream` with :macro:`NGTCP2_WRITE_STREAM_FLAG_FIN`
-flag set, and all data are acknowledged.  The receive-side stream is
-closed when a local endpoint receives fin from a remote endpoint, and
-all data are received.  And then
+`ngtcp2_conn_submit_stream_buf()` with
+:macro:`NGTCP2_WRITE_STREAM_FLAG_FIN` flag set, and all data are
+acknowledged.  The receive-side stream is closed when a local endpoint
+receives fin from a remote endpoint, and all data are received.  And then
 :member:`ngtcp2_callbacks.stream_close` is invoked.
 
 Application can close stream abruptly by calling
@@ -379,10 +385,12 @@ side of a stream.
 Stream data ownership
 ---------------------
 
-Stream data passed to :type:`ngtcp2_conn` must be held by application
-until :member:`ngtcp2_callbacks.acked_stream_data_offset` callbacks is
-invoked, telling that the those data are acknowledged by the remote
-endpoint and no longer used by the library.
+Stream data is written into zngtcp2-issued ``TX_STREAM`` buffers.
+Submitting accepted bytes transfers custody to the library.  The
+application must not modify submitted bytes, and it does not need to
+keep its own copy alive for retransmission.  The library releases the
+retained payload after ACK accounting, retransmission cleanup, stream
+teardown, connection close, or connection deletion.
 
 Timers
 ------
@@ -399,18 +407,14 @@ is :type:`ngtcp2_duration` which is also nanosecond resolution.
 `ngtcp2_conn_get_expiry2()` tells an application when timer fires.
 When it fires, call `ngtcp2_conn_handle_expiry()`.  If it returns
 :macro:`NGTCP2_ERR_IDLE_CLOSE`, it means that an idle timer has fired
-for this particular connection.  In this case, drop the connection
-without calling `ngtcp2_conn_write_connection_close()`.  If it returns
-any of the other negative error codes, close the connection by sending
-the terminal packet produced by
-`ngtcp2_conn_write_connection_close()`.  Otherwise, schedule
-`ngtcp2_conn_write_stream()` call.  An application may call any
-number of additional `ngtcp2_conn_read_pkt()` and
-`ngtcp2_conn_handle_expiry()` before calling
-`ngtcp2_conn_write_stream()`.  After calling
-`ngtcp2_conn_write_stream()`, new expiry is set.  The application
-should call `ngtcp2_conn_get_expiry2()` to get a new deadline and set
-the timer.
+for this particular connection.  In this case, drop the connection.
+If it returns any of the other negative error codes, close the
+connection and drain pending packet handoffs.  Otherwise, submit
+application payload buffers as needed and pull packet handoffs.  An
+application may call any number of additional `ngtcp2_conn_read_pkt()`
+and `ngtcp2_conn_handle_expiry()` before pulling packets.  After
+sending packets, new expiry is set.  The application should call
+`ngtcp2_conn_get_expiry2()` to get a new deadline and set the timer.
 
 Please note that :type:`ngtcp2_tstamp` of value ``UINT64_MAX`` is
 treated as an invalid timestamp.  Do not pass ``UINT64_MAX`` to any
@@ -429,45 +433,42 @@ after a new path is validated (thus reachability is established).
 Closing connection abruptly
 ---------------------------
 
-In order to close QUIC connection abruptly, call
-`ngtcp2_conn_write_connection_close()` and get a terminal packet.
-After the call, the connection enters the closing state.
+In order to close QUIC connection abruptly, set the connection close
+error state and drain the protected packet handoff produced by the
+connection close path.  After the terminal packet is produced, the
+connection enters the closing state.
 
 The closing and draining state
 ------------------------------
 
-After the successful call of `ngtcp2_conn_write_connection_close()`,
-the connection enters the closing state.  When
-`ngtcp2_conn_read_pkt()` returns :macro:`NGTCP2_ERR_DRAINING`, the
-connection has entered the draining state.  In these states,
-`ngtcp2_conn_write_stream()` and `ngtcp2_conn_read_pkt()` return an
-error (either :macro:`NGTCP2_ERR_CLOSING` or
-:macro:`NGTCP2_ERR_DRAINING` depending on the state).
-`ngtcp2_conn_write_connection_close()` returns 0 in these states.  If
-an application needs to send a packet containing CONNECTION_CLOSE
-frame in the closing state, resend the packet produced by the first
-call of `ngtcp2_conn_write_connection_close()`.  Therefore, after a
-connection has entered one of these states, the application can
-discard :type:`ngtcp2_conn` object.  The closing and draining state
-should persist at least 3 times the current PTO.
+After the terminal close packet is produced, the connection enters the
+closing state.  When `ngtcp2_conn_read_pkt()` returns
+:macro:`NGTCP2_ERR_DRAINING`, the connection has entered the draining
+state.  In these states, application payload submission and
+`ngtcp2_conn_read_pkt()` return an error (either
+:macro:`NGTCP2_ERR_CLOSING` or :macro:`NGTCP2_ERR_DRAINING` depending
+on the state).  If an application needs to send a packet containing
+CONNECTION_CLOSE frame in the closing state, resend the retained
+terminal handoff.  Therefore, after a connection has entered one of
+these states, the application can discard :type:`ngtcp2_conn` object.
+The closing and draining state should persist at least 3 times the
+current PTO.
 
 Error handling in general
 -------------------------
 
 In general, when error is returned from the ngtcp2 library function,
-call `ngtcp2_conn_write_connection_close()` to get terminal packet.
-If the successful call of the function creates non-empty packet, the
-QUIC connection enters the closing state.  Calling
-`ngtcp2_conn_read_pkt` or `ngtcp2_conn_write_stream` after getting a
-negative error code is undefined except for the errors that are
-defined as transitional.  See below and their documentation.
+close the connection and drain the terminal packet handoff if one is
+produced.  After a negative error code, calling `ngtcp2_conn_read_pkt`
+or submitting new application payload is undefined except for the
+errors that are defined as transitional.  See below and their
+documentation.
 
 If :macro:`NGTCP2_ERR_DROP_CONN` is returned from
 `ngtcp2_conn_read_pkt`, a connection should be dropped without calling
-`ngtcp2_conn_write_connection_close()`.  Similarly, if
-:macro:`NGTCP2_ERR_IDLE_CLOSE` is returned from
-`ngtcp2_conn_handle_expiry`, a connection should be dropped without
-calling `ngtcp2_conn_write_connection_close()`.  If
+the close packet path.  Similarly, if :macro:`NGTCP2_ERR_IDLE_CLOSE`
+is returned from `ngtcp2_conn_handle_expiry`, a connection should be
+dropped without the close packet path.  If
 :macro:`NGTCP2_ERR_DRAINING` is returned from `ngtcp2_conn_read_pkt`,
 a connection has entered the draining state, and no further packet
 transmission is allowed.

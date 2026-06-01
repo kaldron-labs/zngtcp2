@@ -31,6 +31,25 @@
 
 #include <zngtcp2/zngtcp2.h>
 
+ngtcp2_ssize ngtcp2_pkt_write_stateless_reset(
+  ngtcp2_buf *dest, const uint8_t *stateless_reset_token, const uint8_t *rand,
+  size_t randlen);
+
+ngtcp2_ssize ngtcp2_pkt_write_stateless_reset2(
+  ngtcp2_buf *dest, const ngtcp2_stateless_reset_token *token,
+  const uint8_t *rand, size_t randlen);
+
+ngtcp2_ssize ngtcp2_pkt_write_version_negotiation(
+  ngtcp2_buf *dest, uint8_t unused_random, const uint8_t *dcid,
+  size_t dcidlen, const uint8_t *scid, size_t scidlen, const uint32_t *sv,
+  size_t nsv);
+
+ngtcp2_ssize ngtcp2_pkt_write_retry(
+  ngtcp2_buf *dest, uint32_t version, const ngtcp2_cid *dcid,
+  const ngtcp2_cid *scid, const ngtcp2_cid *odcid, const uint8_t *token,
+  size_t tokenlen, const ngtcp2_crypto_ops *ops, void *ops_ctx,
+  const ngtcp2_crypto_aead *aead, const ngtcp2_crypto_aead_ctx *aead_ctx);
+
 /* QUIC header macros */
 #define NGTCP2_HEADER_FORM_BIT 0x80U
 #define NGTCP2_FIXED_BIT_MASK 0x40U
@@ -348,6 +367,10 @@ typedef struct ngtcp2_datagram {
   /* data is a pointer to ngtcp2_vec array that stores data.  If
      datacnt == 0, this field may be NULL.*/
   ngtcp2_vec *data;
+  /* txbuf_present is nonzero if txbuf carries retained TX_DATAGRAM
+     plaintext for direct vector packet protection. */
+  int txbuf_present;
+  ngtcp2_buf txbuf;
 } ngtcp2_datagram;
 
 typedef union ngtcp2_frame {

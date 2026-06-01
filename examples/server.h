@@ -197,17 +197,12 @@ public:
 
   void write_qlog(const void *data, size_t datalen);
 
-  void on_send_blocked(const ngtcp2_path &path, unsigned int ecn,
-                       std::span<const uint8_t> data, size_t gso_size);
+  void on_send_blocked(ngtcp2_tx_pkt &pkt);
   void start_wev_endpoint(const Endpoint &ep);
-  std::expected<void, Error> send_packet(const ngtcp2_path &path,
-                                         unsigned int ecn,
-                                         std::span<const uint8_t> data,
-                                         size_t gso_size);
+  std::expected<void, Error> send_tx_pkt_or_blocked(ngtcp2_tx_pkt &pkt);
   void send_blocked_packet();
-
-  ngtcp2_ssize write_pkt(ngtcp2_path *path, ngtcp2_pkt_info *pi,
-                         ngtcp2_buf *dest, ngtcp2_tstamp ts);
+  void release_blocked_tx_pkts();
+  void release_conn_close_pkt();
 
   std::expected<void, Error> on_app_tx_ready();
 
@@ -222,10 +217,11 @@ private:
   ngtcp2_cid scid_{};
   std::unique_ptr<ProtoCodec> proto_codec_;
   std::unordered_map<int64_t, std::unique_ptr<Stream>> streams_;
-  // conn_closebuf_ contains a packet which contains CONNECTION_CLOSE.
+  // conn_closepkt_ contains a packet which contains CONNECTION_CLOSE.
   // This packet is repeatedly sent as a response to the incoming
   // packet in draining period.
-  std::unique_ptr<Buffer> conn_closebuf_;
+  ngtcp2_tx_pkt conn_closepkt_{};
+  bool conn_closepkt_present_{};
   // nkey_update_ is the number of key update occurred.
   size_t nkey_update_{};
   bool no_gso_;
@@ -238,17 +234,8 @@ private:
 
   struct {
     bool send_blocked;
-    // blocked field is effective only when send_blocked is true.
-    struct {
-      const Endpoint *endpoint;
-      Address local_addr;
-      Address remote_addr;
-      unsigned int ecn;
-      std::span<const uint8_t> data;
-      size_t gso_size;
-    } blocked;
+    std::deque<ngtcp2_tx_pkt> blocked_pkts;
   } tx_{};
-  std::array<uint8_t, 64_k> txbuf_;
 };
 
 class Server {

@@ -31,6 +31,31 @@
 
 #include <zngtcp2/ngtcp2_crypto.h>
 
+ngtcp2_ssize ngtcp2_pkt_write_connection_close(
+  ngtcp2_buf *dest, uint32_t version, const ngtcp2_cid *dcid,
+  const ngtcp2_cid *scid, uint64_t error_code, const uint8_t *reason,
+  size_t reasonlen, const ngtcp2_crypto_aead *aead,
+  const ngtcp2_crypto_aead_ctx *aead_ctx, const uint8_t *iv,
+  const ngtcp2_crypto_ops *ops, void *ops_ctx, const ngtcp2_crypto_cipher *hp,
+  const ngtcp2_crypto_cipher_ctx *hp_ctx);
+
+ngtcp2_ssize ngtcp2_pkt_write_retry(
+  ngtcp2_buf *dest, uint32_t version, const ngtcp2_cid *dcid,
+  const ngtcp2_cid *scid, const ngtcp2_cid *odcid, const uint8_t *token,
+  size_t tokenlen, const ngtcp2_crypto_ops *ops, void *ops_ctx,
+  const ngtcp2_crypto_aead *aead, const ngtcp2_crypto_aead_ctx *aead_ctx);
+
+ngtcp2_ssize ngtcp2_crypto_write_connection_close(
+  ngtcp2_buf *dest, uint32_t version, const ngtcp2_cid *dcid,
+  const ngtcp2_cid *scid, uint64_t error_code, const uint8_t *reason,
+  size_t reasonlen);
+
+ngtcp2_ssize ngtcp2_crypto_write_retry(ngtcp2_buf *dest, uint32_t version,
+                                       const ngtcp2_cid *dcid,
+                                       const ngtcp2_cid *scid,
+                                       const ngtcp2_cid *odcid,
+                                       const uint8_t *token, size_t tokenlen);
+
 /* Maximum key usage (encryption) limits */
 #define NGTCP2_CRYPTO_MAX_ENCRYPTION_AES_GCM (1ULL << 23)
 #define NGTCP2_CRYPTO_MAX_ENCRYPTION_CHACHA20_POLY1305 (1ULL << 62)

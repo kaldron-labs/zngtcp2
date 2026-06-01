@@ -39,6 +39,8 @@
 #include <zpicotls.h>
 #include <zpicotls/openssl.h>
 
+#include "../shared.h"
+
 typedef struct zpicotls_test_crypto {
   ngtcp2_crypto_aead aead;
   ngtcp2_crypto_aead_ctx enc_ctx;
@@ -52,8 +54,9 @@ static void init_crypto(zpicotls_test_crypto *crypto) {
   size_t noncelen;
   ptls_cipher_context_t *hp_ctx;
 
-  crypto->aead.native_handle = (void *)&ptls_openssl_aes128gcm;
-  crypto->aead.max_overhead = ptls_openssl_aes128gcm.tag_size;
+  memset(crypto, 0, sizeof(*crypto));
+
+  ngtcp2_crypto_aead_init(&crypto->aead, (void *)&ptls_openssl_aes128gcm);
   noncelen = ngtcp2_crypto_packet_protection_ivlen(&crypto->aead);
 
   assert_int(0, ==,
@@ -100,10 +103,12 @@ void test_zpicotls_crypto_ops_packet_roundtrip(void) {
   uint8_t pktbuf[128];
   uint8_t nonce[PTLS_MAX_IV_SIZE] = {0};
   uint8_t plaintext[32];
+  uint8_t rxplainbuf[32];
   uint8_t mask[NGTCP2_HP_SAMPLELEN] = {0};
   uint8_t expected_mask[NGTCP2_HP_SAMPLELEN] = {0};
   ngtcp2_buf pkt, aadbuf, noncebuf, hp_maskbuf;
-  ngtcp2_buf samplebuf, maskbuf;
+  ngtcp2_buf samplebuf, maskbuf, rxplain;
+  ngtcp2_crypto_vec plainv;
   size_t payload_offset = 8;
   size_t plaintextlen = sizeof(plaintext);
   size_t aadlen = payload_offset;
@@ -119,28 +124,31 @@ void test_zpicotls_crypto_ops_packet_roundtrip(void) {
     pktbuf[i] = (uint8_t)(0x40 + i);
   }
   for (i = 0; i < plaintextlen; ++i) {
-    pktbuf[payload_offset + i] = (uint8_t)(0xa0 + i);
+    plaintext[i] = (uint8_t)(0xa0 + i);
   }
-  memcpy(plaintext, pktbuf + payload_offset, plaintextlen);
 
-  ngtcp2_buf_init(&pkt, pktbuf, sizeof(pktbuf), NGTCP2_BUF_ORIGIN_APPLICATION,
-                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_PACKET_TX, NULL, NULL,
+  ngtcp2_buf_init(&pkt, pktbuf, sizeof(pktbuf), ((void *)(uintptr_t)1),
+                  NGTCP2_BUF_ROLE_TX_PACKET, NULL, NULL,
                   NULL);
   pkt.last = pkt.pos + payload_offset + plaintextlen;
-  ngtcp2_buf_init(&aadbuf, pktbuf, aadlen, NGTCP2_BUF_ORIGIN_BORROWED,
-                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_PACKET_TX, NULL, NULL,
+  ngtcp2_buf_init(&aadbuf, pktbuf, aadlen, NULL,
+                  NGTCP2_BUF_ROLE_TX_PACKET, NULL, NULL,
                   NULL);
   aadbuf.last = aadbuf.end;
-  ngtcp2_buf_init(&noncebuf, nonce, noncelen, NGTCP2_BUF_ORIGIN_LIBRARY,
-                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_SCRATCH, NULL, NULL,
+  ngtcp2_buf_init(&noncebuf, nonce, noncelen, NULL,
+                  NGTCP2_BUF_ROLE_INTERNAL, NULL, NULL,
                   NULL);
   noncebuf.last = noncebuf.end;
-  ngtcp2_buf_init(&hp_maskbuf, mask, sizeof(mask), NGTCP2_BUF_ORIGIN_LIBRARY,
-                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_SCRATCH, NULL, NULL,
+  ngtcp2_buf_init(&hp_maskbuf, mask, sizeof(mask), NULL,
+                  NGTCP2_BUF_ROLE_INTERNAL, NULL, NULL,
                   NULL);
+  plainv = (ngtcp2_crypto_vec){
+    .base = plaintext,
+    .len = plaintextlen,
+  };
 
   assert_int(0, ==,
-             ops->encrypt_pkt(&pkt, payload_offset, plaintextlen, &crypto.aead,
+             ops->protect_pkt(&pkt, payload_offset, &plainv, 1, &crypto.aead,
                               &crypto.enc_ctx, &aadbuf, &noncebuf, &crypto.hp,
                               &crypto.hp_ctx, payload_offset + 4, &hp_maskbuf,
                               NULL));
@@ -151,34 +159,32 @@ void test_zpicotls_crypto_ops_packet_roundtrip(void) {
   assert_false(is_zero(mask, NGTCP2_HP_MASKLEN));
 
   ngtcp2_buf_init(&samplebuf, pktbuf + payload_offset + 4,
-                  NGTCP2_HP_SAMPLELEN, NGTCP2_BUF_ORIGIN_BORROWED,
-                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_PACKET_TX, NULL, NULL,
+                  NGTCP2_HP_SAMPLELEN, NULL,
+                  NGTCP2_BUF_ROLE_TX_PACKET, NULL, NULL,
                   NULL);
   samplebuf.last = samplebuf.end;
   ngtcp2_buf_init(&maskbuf, expected_mask, sizeof(expected_mask),
-                  NGTCP2_BUF_ORIGIN_LIBRARY, NGTCP2_BUF_DIR_TX,
-                  NGTCP2_BUF_PURPOSE_SCRATCH, NULL, NULL, NULL);
+                  NULL, NGTCP2_BUF_ROLE_INTERNAL, NULL, NULL, NULL);
 
   assert_int(0, ==,
              ops->hp_mask(&maskbuf, &crypto.hp, &crypto.hp_ctx, &samplebuf,
                           NULL));
   assert_memory_equal(NGTCP2_HP_MASKLEN, expected_mask, mask);
 
-  pkt.dir = NGTCP2_BUF_DIR_RX;
-  pkt.purpose = NGTCP2_BUF_PURPOSE_PACKET_RX;
-  ngtcp2_buf_init(&aadbuf, pktbuf, aadlen, NGTCP2_BUF_ORIGIN_BORROWED,
-                  NGTCP2_BUF_DIR_RX, NGTCP2_BUF_PURPOSE_PACKET_RX, NULL, NULL,
+  pkt.role = NGTCP2_BUF_ROLE_RX_PACKET;
+  ngtcp2_buf_init(&rxplain, rxplainbuf, sizeof(rxplainbuf), NULL,
+                  NGTCP2_BUF_ROLE_RX_STREAM, NULL, NULL, NULL);
+  ngtcp2_buf_init(&aadbuf, pktbuf, aadlen, NULL,
+                  NGTCP2_BUF_ROLE_RX_PACKET, NULL, NULL,
                   NULL);
   aadbuf.last = aadbuf.end;
-  noncebuf.dir = NGTCP2_BUF_DIR_RX;
-
   assert_int(0, ==,
-             ops->decrypt_pkt(&pkt, payload_offset,
+             ops->unprotect_pkt(&rxplain, &pkt, payload_offset,
                               plaintextlen + crypto.aead.max_overhead,
                               &crypto.aead, &crypto.dec_ctx, &aadbuf,
                               &noncebuf, NULL));
-  assert_ptr_equal(pktbuf + payload_offset + plaintextlen, pkt.last);
-  assert_memory_equal(plaintextlen, plaintext, pktbuf + payload_offset);
+  assert_ptr_equal(rxplainbuf + plaintextlen, rxplain.last);
+  assert_memory_equal(plaintextlen, plaintext, rxplainbuf);
 
   free_crypto(&crypto);
 }
@@ -187,8 +193,11 @@ void test_zpicotls_crypto_ops_packet_contract(void) {
   const ngtcp2_crypto_ops *ops = ngtcp2_crypto_zpicotls_get_crypto_ops();
   zpicotls_test_crypto crypto;
   uint8_t pktbuf[64] = {0};
+  uint8_t plaintext[16] = {0};
+  uint8_t rxplainbuf[16] = {0};
   uint8_t nonce[PTLS_MAX_IV_SIZE] = {0};
-  ngtcp2_buf pkt, aadbuf, noncebuf;
+  ngtcp2_buf pkt, aadbuf, noncebuf, rxplain;
+  ngtcp2_crypto_vec plainv;
   size_t payload_offset = 8;
   size_t plaintextlen = 16;
   size_t aadlen = payload_offset;
@@ -196,44 +205,50 @@ void test_zpicotls_crypto_ops_packet_contract(void) {
 
   init_crypto(&crypto);
   noncelen = ngtcp2_crypto_packet_protection_ivlen(&crypto.aead);
-  ngtcp2_buf_init(&aadbuf, pktbuf, aadlen, NGTCP2_BUF_ORIGIN_BORROWED,
-                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_PACKET_TX, NULL, NULL,
+  ngtcp2_buf_init(&aadbuf, pktbuf, aadlen, NULL,
+                  NGTCP2_BUF_ROLE_TX_PACKET, NULL, NULL,
                   NULL);
   aadbuf.last = aadbuf.end;
-  ngtcp2_buf_init(&noncebuf, nonce, noncelen, NGTCP2_BUF_ORIGIN_LIBRARY,
-                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_SCRATCH, NULL, NULL,
+  ngtcp2_buf_init(&noncebuf, nonce, noncelen, NULL,
+                  NGTCP2_BUF_ROLE_INTERNAL, NULL, NULL,
                   NULL);
   noncebuf.last = noncebuf.end;
+  plainv = (ngtcp2_crypto_vec){
+    .base = plaintext,
+    .len = plaintextlen,
+  };
 
-  ngtcp2_buf_init(&pkt, pktbuf, sizeof(pktbuf), NGTCP2_BUF_ORIGIN_BORROWED,
-                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_PACKET_TX, NULL, NULL,
+  ngtcp2_buf_init(&pkt, pktbuf, sizeof(pktbuf), NULL,
+                  NGTCP2_BUF_ROLE_TX_PACKET, NULL, NULL,
                   NULL);
   pkt.last = pkt.pos + payload_offset + plaintextlen;
-  assert_int(NGTCP2_ERR_BUF_CONTRACT, ==,
-             ops->encrypt_pkt(&pkt, payload_offset, plaintextlen, &crypto.aead,
+  assert_int(0, ==,
+             ops->protect_pkt(&pkt, payload_offset, &plainv, 1, &crypto.aead,
                               &crypto.enc_ctx, &aadbuf, &noncebuf, NULL, NULL,
                               0, NULL, NULL));
 
-  ngtcp2_buf_init(&pkt, pktbuf, sizeof(pktbuf), NGTCP2_BUF_ORIGIN_APPLICATION,
-                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_CRYPTO_TX, NULL, NULL,
+  ngtcp2_buf_init(&pkt, pktbuf, sizeof(pktbuf), ((void *)(uintptr_t)1),
+                  NGTCP2_BUF_ROLE_TX_CONTROL, NULL, NULL,
                   NULL);
   pkt.last = pkt.pos + payload_offset + plaintextlen;
   assert_int(NGTCP2_ERR_BUF_CONTRACT, ==,
-             ops->encrypt_pkt(&pkt, payload_offset, plaintextlen, &crypto.aead,
+             ops->protect_pkt(&pkt, payload_offset, &plainv, 1, &crypto.aead,
                               &crypto.enc_ctx, &aadbuf, &noncebuf, NULL, NULL,
                               0, NULL, NULL));
 
-  ngtcp2_buf_init(&pkt, pktbuf, sizeof(pktbuf), NGTCP2_BUF_ORIGIN_BORROWED,
-                  NGTCP2_BUF_DIR_RX, NGTCP2_BUF_PURPOSE_PACKET_RX, NULL, NULL,
+  ngtcp2_buf_init(&pkt, pktbuf, sizeof(pktbuf), NULL,
+                  NGTCP2_BUF_ROLE_RX_PACKET, NULL, NULL,
                   NULL);
   pkt.last = pkt.pos + payload_offset + plaintextlen + crypto.aead.max_overhead;
-  ngtcp2_buf_init(&aadbuf, pktbuf, aadlen, NGTCP2_BUF_ORIGIN_BORROWED,
-                  NGTCP2_BUF_DIR_RX, NGTCP2_BUF_PURPOSE_PACKET_RX, NULL, NULL,
+  ngtcp2_buf_init(&aadbuf, pktbuf, aadlen, NULL,
+                  NGTCP2_BUF_ROLE_RX_PACKET, NULL, NULL,
                   NULL);
   aadbuf.last = aadbuf.end;
-  noncebuf.dir = NGTCP2_BUF_DIR_RX;
+  ngtcp2_buf_init(&rxplain, rxplainbuf, sizeof(rxplainbuf), NULL,
+                  NGTCP2_BUF_ROLE_RX_STREAM, NULL, NULL, NULL);
+  noncebuf.role = NGTCP2_BUF_ROLE_TX_CONTROL;
   assert_int(NGTCP2_ERR_BUF_CONTRACT, ==,
-             ops->decrypt_pkt(&pkt, payload_offset,
+             ops->unprotect_pkt(&rxplain, &pkt, payload_offset,
                               plaintextlen + crypto.aead.max_overhead,
                               &crypto.aead, &crypto.dec_ctx, &aadbuf,
                               &noncebuf, NULL));
@@ -256,11 +271,10 @@ void test_zpicotls_hp_mask_op(void) {
   }
 
   ngtcp2_buf_init(&samplebuf, sample, sizeof(sample),
-                  NGTCP2_BUF_ORIGIN_BORROWED, NGTCP2_BUF_DIR_RX,
-                  NGTCP2_BUF_PURPOSE_PACKET_RX, NULL, NULL, NULL);
+                  NULL, NGTCP2_BUF_ROLE_RX_PACKET, NULL, NULL, NULL);
   samplebuf.last = samplebuf.end;
-  ngtcp2_buf_init(&maskbuf, mask, sizeof(mask), NGTCP2_BUF_ORIGIN_LIBRARY,
-                  NGTCP2_BUF_DIR_RX, NGTCP2_BUF_PURPOSE_SCRATCH, NULL, NULL,
+  ngtcp2_buf_init(&maskbuf, mask, sizeof(mask), NULL,
+                  NGTCP2_BUF_ROLE_INTERNAL, NULL, NULL,
                   NULL);
 
   assert_int(0, ==,
@@ -268,7 +282,7 @@ void test_zpicotls_hp_mask_op(void) {
                           NULL));
   assert_false(is_zero(mask, NGTCP2_HP_MASKLEN));
 
-  samplebuf.purpose = NGTCP2_BUF_PURPOSE_STREAM_RX;
+  samplebuf.role = NGTCP2_BUF_ROLE_RX_STREAM;
   assert_int(NGTCP2_ERR_BUF_CONTRACT, ==,
              ops->hp_mask(&maskbuf, &crypto.hp, &crypto.hp_ctx, &samplebuf,
                           NULL));

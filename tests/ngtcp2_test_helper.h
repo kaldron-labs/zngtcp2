@@ -33,6 +33,104 @@
 
 #include "ngtcp2_conn.h"
 
+#define NGTCP2_WRITE_DATAGRAM_FLAG_NONE 0x00U
+#define NGTCP2_WRITE_DATAGRAM_FLAG_MORE 0x01U
+#define NGTCP2_WRITE_DATAGRAM_FLAG_PADDING 0x02U
+
+ngtcp2_ssize ngtcp2_conn_write_pkt_legacy_versioned(
+  ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
+  ngtcp2_pkt_info *pi, uint8_t *dest, size_t destlen, ngtcp2_tstamp ts);
+
+ngtcp2_ssize ngtcp2_conn_write_pkt_versioned(ngtcp2_conn *conn,
+                                             ngtcp2_path *path,
+                                             int pkt_info_version,
+                                             ngtcp2_pkt_info *pi,
+                                             ngtcp2_buf *dest,
+                                             ngtcp2_tstamp ts);
+
+#define ngtcp2_conn_write_pkt(CONN, PATH, PI, DEST, DESTLEN, TS)               \
+  ngtcp2_conn_write_pkt_legacy_versioned(                                      \
+    (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (DEST), (DESTLEN), (TS))
+
+ngtcp2_ssize ngtcp2_conn_write_datagram_legacy_versioned(
+  ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
+  ngtcp2_pkt_info *pi, uint8_t *dest, size_t destlen, int *paccepted,
+  uint32_t flags, uint64_t dgram_id, const uint8_t *data, size_t datalen,
+  ngtcp2_tstamp ts);
+
+#define ngtcp2_conn_write_datagram(CONN, PATH, PI, DEST, DESTLEN, PACCEPTED,   \
+                                   FLAGS, DGRAM_ID, DATA, DATALEN, TS)         \
+  ngtcp2_conn_write_datagram_legacy_versioned(                                 \
+    (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (DEST), (DESTLEN),          \
+    (PACCEPTED), (FLAGS), (DGRAM_ID), (DATA), (DATALEN), (TS))
+
+ngtcp2_ssize ngtcp2_conn_writev_datagram_legacy_versioned(
+  ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
+  ngtcp2_pkt_info *pi, uint8_t *dest, size_t destlen, int *paccepted,
+  uint32_t flags, uint64_t dgram_id, const ngtcp2_vec *datav, size_t datavcnt,
+  ngtcp2_tstamp ts);
+
+#define ngtcp2_conn_writev_datagram(CONN, PATH, PI, DEST, DESTLEN, PACCEPTED,  \
+                                    FLAGS, DGRAM_ID, DATAV, DATAVCNT, TS)      \
+  ngtcp2_conn_writev_datagram_legacy_versioned(                                \
+    (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (DEST), (DESTLEN),          \
+    (PACCEPTED), (FLAGS), (DGRAM_ID), (DATAV), (DATAVCNT), (TS))
+
+ngtcp2_ssize ngtcp2_conn_write_connection_close_legacy_versioned(
+  ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
+  ngtcp2_pkt_info *pi, uint8_t *dest, size_t destlen, const ngtcp2_ccerr *ccerr,
+  ngtcp2_tstamp ts);
+
+ngtcp2_ssize ngtcp2_conn_write_stream_versioned(
+  ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
+  ngtcp2_pkt_info *pi, ngtcp2_buf *dest, ngtcp2_ssize *pdatalen, uint32_t flags,
+  int64_t stream_id, const ngtcp2_buf *data, ngtcp2_tstamp ts);
+
+ngtcp2_ssize ngtcp2_conn_write_connection_close_versioned(
+  ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
+  ngtcp2_pkt_info *pi, ngtcp2_buf *dest, const ngtcp2_ccerr *ccerr,
+  ngtcp2_tstamp ts);
+
+typedef ngtcp2_ssize (*ngtcp2_write_pkt)(ngtcp2_conn *conn, ngtcp2_path *path,
+                                         ngtcp2_pkt_info *pi, ngtcp2_buf *dest,
+                                         ngtcp2_tstamp ts, void *user_data);
+
+ngtcp2_ssize ngtcp2_conn_write_aggregate_pkt_versioned(
+  ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
+  ngtcp2_pkt_info *pi, ngtcp2_buf *buf, size_t *pgsolen,
+  ngtcp2_write_pkt write_pkt, ngtcp2_tstamp ts);
+
+ngtcp2_ssize ngtcp2_conn_write_aggregate_pkt2_versioned(
+  ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
+  ngtcp2_pkt_info *pi, ngtcp2_buf *buf, size_t *pgsolen,
+  ngtcp2_write_pkt write_pkt, size_t num_pkts, ngtcp2_tstamp ts);
+
+#define ngtcp2_conn_write_connection_close(CONN, PATH, PI, DEST, DESTLEN,      \
+                                           CCERR, TS)                          \
+  ngtcp2_conn_write_connection_close_legacy_versioned(                         \
+    (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (DEST), (DESTLEN), (CCERR), \
+    (TS))
+
+#define ngtcp2_conn_write_aggregate_pkt(CONN, PATH, PI, BUF, PGSOLEN,          \
+                                        WRITE_PKT, TS)                         \
+  ngtcp2_conn_write_aggregate_pkt_versioned(                                   \
+    (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (BUF), (PGSOLEN),           \
+    (WRITE_PKT), (TS))
+
+#define ngtcp2_conn_write_aggregate_pkt2(CONN, PATH, PI, BUF, PGSOLEN,         \
+                                         WRITE_PKT, NUM_PKTS, TS)              \
+  ngtcp2_conn_write_aggregate_pkt2_versioned(                                  \
+    (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (BUF), (PGSOLEN),           \
+    (WRITE_PKT), (NUM_PKTS), (TS))
+
+ngtcp2_ssize ngtcp2_pkt_write_connection_close(
+  ngtcp2_buf *dest, uint32_t version, const ngtcp2_cid *dcid,
+  const ngtcp2_cid *scid, uint64_t error_code, const uint8_t *reason,
+  size_t reasonlen, const ngtcp2_crypto_aead *aead,
+  const ngtcp2_crypto_aead_ctx *aead_ctx, const uint8_t *iv,
+  const ngtcp2_crypto_ops *ops, void *ops_ctx, const ngtcp2_crypto_cipher *hp,
+  const ngtcp2_crypto_cipher_ctx *hp_ctx);
+
 /*
  * NGTCP2_APP_ERRxx is an application error code solely used in test
  * code.

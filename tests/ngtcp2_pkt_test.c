@@ -67,8 +67,10 @@ static const MunitTest tests[] = {
   munit_void_test(test_ngtcp2_pkt_validate_ack),
   munit_void_test(test_ngtcp2_pkt_write_stateless_reset),
   munit_void_test(test_ngtcp2_pkt_write_stateless_reset2),
+  munit_void_test(test_ngtcp2_pkt_next_tx_stateless_reset_pkt),
   munit_void_test(test_ngtcp2_pkt_write_retry),
   munit_void_test(test_ngtcp2_pkt_write_version_negotiation),
+  munit_void_test(test_ngtcp2_pkt_next_tx_version_negotiation_pkt),
   munit_void_test(test_ngtcp2_pkt_stream_max_datalen),
   munit_void_test(test_ngtcp2_pkt_split_vec_rand),
   munit_void_test(test_ngtcp2_pkt_split_vec_at),
@@ -2040,6 +2042,33 @@ void test_ngtcp2_pkt_write_stateless_reset2(void) {
   assert_ptrdiff(NGTCP2_ERR_NOBUF, ==, spktlen);
 }
 
+void test_ngtcp2_pkt_next_tx_stateless_reset_pkt(void) {
+  ngtcp2_buf_allocator allocator;
+  ngtcp2_tx_pkt tx_pkt = {0};
+  ngtcp2_ssize spktlen;
+  static const ngtcp2_stateless_reset_token token =
+    make_stateless_reset_token();
+  static const uint8_t rand[256] = {0xDE, 0xAD, 0xF0, 0x0D};
+
+  ngtcp2_buf_allocator_default(&allocator, ngtcp2_mem_default());
+
+  spktlen = ngtcp2_pkt_next_tx_stateless_reset_pkt(
+    &tx_pkt, &allocator, 256, NULL, NULL, &token, rand, sizeof(rand));
+
+  assert_ptrdiff(256, ==, spktlen);
+  assert_size((size_t)spktlen, ==, ngtcp2_buf_len(&tx_pkt.pkt));
+  assert_ptr_equal(NULL, tx_pkt.pkt.origin);
+  assert_enum(ngtcp2_buf_role, NGTCP2_BUF_ROLE_TX_PACKET, ==,
+              tx_pkt.pkt.role);
+  assert_true(tx_pkt.flags & NGTCP2_TX_PKT_FLAG_RELEASE_REQUIRED);
+  assert_uint8(0, ==, (*tx_pkt.pkt.pos & NGTCP2_HEADER_FORM_BIT));
+  assert_true(*tx_pkt.pkt.pos & NGTCP2_FIXED_BIT_MASK);
+
+  ngtcp2_tx_pkt_release(&allocator, &tx_pkt);
+
+  assert_uint32(NGTCP2_TX_PKT_FLAG_NONE, ==, tx_pkt.flags);
+}
+
 void test_ngtcp2_pkt_write_retry(void) {
   uint8_t buf[256];
   ngtcp2_buf pkt;
@@ -2140,6 +2169,44 @@ void test_ngtcp2_pkt_write_version_negotiation(void) {
 
     assert_uint32(sv[i], ==, v);
   }
+}
+
+void test_ngtcp2_pkt_next_tx_version_negotiation_pkt(void) {
+  ngtcp2_buf_allocator allocator;
+  ngtcp2_tx_pkt tx_pkt = {0};
+  ngtcp2_ssize spktlen;
+  static const uint32_t sv[] = {0xF1F2F3F4, 0x1F2F3F4F};
+  static const ngtcp2_cid dcid = make_dcid();
+  static const ngtcp2_cid scid = make_scid();
+  ngtcp2_pkt_hd hd;
+  ngtcp2_ssize nread;
+
+  ngtcp2_buf_allocator_default(&allocator, ngtcp2_mem_default());
+
+  spktlen = ngtcp2_pkt_next_tx_version_negotiation_pkt(
+    &tx_pkt, &allocator, 256, NULL, NULL, 133, dcid.data, dcid.datalen,
+    scid.data, scid.datalen, sv, ngtcp2_arraylen(sv));
+
+  assert_ptrdiff((ngtcp2_ssize)(1 + 4 + 1 + dcid.datalen + 1 + scid.datalen +
+                                ngtcp2_arraylen(sv) * 4),
+                 ==, spktlen);
+  assert_size((size_t)spktlen, ==, ngtcp2_buf_len(&tx_pkt.pkt));
+  assert_ptr_equal(NULL, tx_pkt.pkt.origin);
+  assert_enum(ngtcp2_buf_role, NGTCP2_BUF_ROLE_TX_PACKET, ==,
+              tx_pkt.pkt.role);
+  assert_uint8((0xC0U | 133), ==, *tx_pkt.pkt.pos);
+
+  nread = ngtcp2_pkt_decode_hd_long(&hd, tx_pkt.pkt.pos,
+                                    ngtcp2_buf_len(&tx_pkt.pkt));
+
+  assert_ptrdiff(0, <, nread);
+  assert_uint8(NGTCP2_PKT_VERSION_NEGOTIATION, ==, hd.type);
+  assert_true(ngtcp2_cid_eq(&dcid, &hd.dcid));
+  assert_true(ngtcp2_cid_eq(&scid, &hd.scid));
+
+  ngtcp2_tx_pkt_release(&allocator, &tx_pkt);
+
+  assert_uint32(NGTCP2_TX_PKT_FLAG_NONE, ==, tx_pkt.flags);
 }
 
 void test_ngtcp2_pkt_stream_max_datalen(void) {

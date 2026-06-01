@@ -113,9 +113,7 @@ public:
   std::span<const uint8_t>
   send_packet(const Endpoint &ep, const ngtcp2_addr &remote_addr,
               unsigned int ecn, std::span<const uint8_t> data, size_t gso_size);
-  std::expected<void, Error>
-  send_packet_or_blocked(const ngtcp2_path &path, unsigned int ecn,
-                         std::span<const uint8_t> data, size_t gso_size);
+  std::expected<void, Error> send_tx_pkt_or_blocked(ngtcp2_tx_pkt &pkt);
   std::expected<void, Error> on_stream_close(int64_t stream_id,
                                              uint64_t app_error_code);
   void on_extend_max_streams();
@@ -151,12 +149,10 @@ public:
   std::expected<void, Error> extend_max_stream_data(int64_t stream_id,
                                                     uint64_t max_data);
 
-  void on_send_blocked(const ngtcp2_path &path, unsigned int ecn,
-                       std::span<const uint8_t> data, size_t gso_size);
+  void on_send_blocked(ngtcp2_tx_pkt &pkt);
   void start_wev_endpoint(const Endpoint &ep);
   void send_blocked_packet();
-  ngtcp2_ssize write_pkt(ngtcp2_path *path, ngtcp2_pkt_info *pi,
-                         ngtcp2_buf *dest, ngtcp2_tstamp ts);
+  void release_blocked_tx_pkts();
 
   const std::vector<uint32_t> &get_offered_versions() const;
 
@@ -201,16 +197,8 @@ private:
 
   struct {
     bool send_blocked;
-    // blocked field is effective only when send_blocked is true.
-    struct {
-      const Endpoint *endpoint;
-      Address remote_addr;
-      unsigned int ecn;
-      std::span<const uint8_t> data;
-      size_t gso_size;
-    } blocked;
+    std::deque<ngtcp2_tx_pkt> blocked_pkts;
   } tx_{};
-  std::array<uint8_t, 64_k> txbuf_;
 };
 
 #endif // !defined(CLIENT_H)

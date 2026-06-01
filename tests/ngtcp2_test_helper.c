@@ -111,22 +111,40 @@ static int null_hp_mask(uint8_t *dest, const ngtcp2_crypto_cipher *hp,
   return 0;
 }
 
-static int null_encrypt_pkt(
-  ngtcp2_buf *pkt, size_t payload_offset, size_t plaintextlen,
-  const ngtcp2_crypto_aead *aead, const ngtcp2_crypto_aead_ctx *aead_ctx,
-  const ngtcp2_buf *aad, const ngtcp2_buf *nonce,
-  const ngtcp2_crypto_cipher *hp, const ngtcp2_crypto_cipher_ctx *hp_ctx,
-  size_t hp_sample_offset, ngtcp2_buf *hp_mask, void *ctx) {
+static int null_protect_pkt(
+  ngtcp2_buf *pkt, size_t payload_offset, const ngtcp2_crypto_vec *plainv,
+  size_t plainvcnt, const ngtcp2_crypto_aead *aead,
+  const ngtcp2_crypto_aead_ctx *aead_ctx, const ngtcp2_buf *aad,
+  const ngtcp2_buf *nonce, const ngtcp2_crypto_cipher *hp,
+  const ngtcp2_crypto_cipher_ctx *hp_ctx, size_t hp_sample_offset,
+  ngtcp2_buf *hp_mask, void *ctx) {
   uint8_t *payload = pkt->begin + payload_offset;
+  uint8_t *p;
+  size_t plaintextlen = 0;
+  size_t i;
   int rv;
 
   (void)ctx;
+  (void)aead_ctx;
+  (void)nonce;
+  (void)aad;
 
-  rv = null_encrypt(payload, aead, aead_ctx, payload, plaintextlen, nonce->pos,
-                    ngtcp2_buf_len(nonce), aad->pos, ngtcp2_buf_len(aad));
-  if (rv != 0) {
-    return rv;
+  if (plainvcnt && plainv == NULL) {
+    return NGTCP2_ERR_BUF_CONTRACT;
   }
+
+  p = payload;
+  for (i = 0; i < plainvcnt; ++i) {
+    if (SIZE_MAX - plaintextlen < plainv[i].len) {
+      return NGTCP2_ERR_BUF_CONTRACT;
+    }
+    if (plainv[i].len) {
+      memcpy(p, plainv[i].base, plainv[i].len);
+      p += plainv[i].len;
+      plaintextlen += plainv[i].len;
+    }
+  }
+  memset(p, 0, aead->max_overhead);
 
   pkt->last = payload + plaintextlen + aead->max_overhead;
 
@@ -169,7 +187,7 @@ static int null_ops_hp_mask(ngtcp2_buf *dest, const ngtcp2_crypto_cipher *hp,
 
 static const ngtcp2_crypto_ops null_crypto_ops = {
   .version = 1,
-  .encrypt_pkt = null_encrypt_pkt,
+  .protect_pkt = null_protect_pkt,
   .hp_mask = null_ops_hp_mask,
 };
 
@@ -305,8 +323,8 @@ size_t rtb_entry_length(const ngtcp2_rtb_entry *ent) {
 ngtcp2_buf ngtcp2_t_make_packet_tx_buf(uint8_t *buf, size_t len) {
   ngtcp2_buf dest;
 
-  ngtcp2_buf_init(&dest, buf, len, NGTCP2_BUF_ORIGIN_APPLICATION,
-                  NGTCP2_BUF_DIR_TX, NGTCP2_BUF_PURPOSE_PACKET_TX, NULL, NULL,
+  ngtcp2_buf_init(&dest, buf, len, ((void *)(uintptr_t)1),
+                  NGTCP2_BUF_ROLE_TX_PACKET, NULL, NULL,
                   NULL);
 
   return dest;
